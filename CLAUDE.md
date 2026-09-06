@@ -1,0 +1,217 @@
+# Gastos compartidos — guia para Claude Code
+
+## Como trabajar en este repo
+
+Este proyecto es, ademas de una app real, el vehiculo de aprendizaje de Java +
+Spring Boot de su autor (viene de Node/Express/MySQL y React Native). Eso cambia
+las reglas del juego:
+
+1. **Ir por sesiones.** Cerrar cada sesion con algo corriendo y probado antes de
+   avanzar a la siguiente. No adelantar trabajo de sesiones futuras.
+2. **Explicar antes de generar.** Cuando aparezca un concepto de Java o Spring
+   por primera vez, explicarlo brevemente. No dar por sentado que se conoce.
+3. **Discutir los trade-offs antes de implementar.** Si una decision de diseno
+   tiene alternativas reales, plantearlas con su costo y recomendar una, en vez
+   de elegir en silencio.
+4. **Prioridad: que el autor pueda explicar el codigo en una entrevista tecnica**,
+   por encima de terminar rapido.
+
+Lo que el autor ya sabe y no hace falta explicar: arquitectura por capas, APIs
+REST, modelado relacional, SQL, idempotencia, outbox, colas, rate limiting,
+locks condicionales en base (`UPDATE ... WHERE`), React Native + TypeScript, git.
+
+### Dos cosas que las maneja el autor, no Claude
+
+**Git.** El autor commitea y pushea siempre el. **No correr `git commit` ni
+`git push`.** En su lugar, cerrar la tarea entregandole el texto listo para
+copiar y pegar: un bloque con el `git add` y otro con el `git commit`.
+**Sin trailer de `Co-Authored-By` ni ninguna mencion a Claude en el mensaje.**
+
+**La base de datos.** **No ejecutar nada contra la base sin pedirle permiso
+antes.** Aplica a migraciones y tambien a `INSERT`, `UPDATE`, `DELETE` y
+`TRUNCATE`, incluso en la base local de desarrollo. Consultas de solo lectura
+para diagnosticar estan bien; ante la duda, preguntar. Proponer el SQL y esperar
+el si.
+
+## Que es la app
+
+Registro de gastos **personal primero, de pareja despues**. Cada gasto se marca
+como **hormiga** (evitable) o no, y el numero principal de la app es cuanto suma
+lo evitable en el mes. Ademas, un gasto puede ser personal o compartido, y en
+ese caso el sistema calcula quien le debe a quien.
+
+> Este encuadre salio de la entrevista con la usuaria real, no de una suposicion.
+> Ver **`docs/entrevista-usuaria.md`**, que es la fuente de verdad de las
+> decisiones de producto. Leerlo antes de proponer features.
+
+MVP (nada mas que esto): auth de dos usuarios de un mismo grupo, cargar gasto,
+listar gastos del mes con filtros, totales del mes (incluido el total hormiga),
+y saldo actual.
+
+Fuera de alcance por ahora: metas, gastos recurrentes, graficos, export,
+multi-moneda, adjuntos, push, tercer usuario en el grupo, etiquetas genericas,
+importar movimientos de Mercado Pago.
+
+**Presupuestos quedan descartados**, y no solo por alcance: la usuaria tiene
+ingresos irregulares (es freelance) y gastos que no puede evitar, asi que un
+tope fijo mensual no le sirve. No proponerlos.
+
+### El requisito duro: la carga tiene que ser rapidisima
+
+La usuaria abandono un intento anterior (Excel) porque anotar era incomodo en el
+celular, y dijo explicitamente que prefiere olvidarse un gasto antes que anotar
+lento. Carga parada en el mostrador, esperando el pedido.
+
+**Tres campos y nada mas: categoria, monto, descripcion** (mas el toggle de
+hormiga). Cada campo extra que se le agregue al formulario se paga en abandono.
+
+## Stack
+
+| Pieza    | Tecnologia                                    | Estado |
+|----------|-----------------------------------------------|--------|
+| Backend  | Java 21 + Spring Boot 4.1.1 + PostgreSQL 17   | en curso |
+| DB local | Docker Compose (`docker compose up -d`)       | en curso |
+| Mobile   | Expo + React Native + TypeScript              | pendiente |
+| Web      | React + Vite + TypeScript + Tailwind          | pendiente |
+| Deploy   | Railway o Render + Postgres gestionado        | pendiente |
+
+Build con el **Maven wrapper** (`./mvnw`, `mvnw.cmd`): no hace falta instalar
+Maven, el script baja la version que el proyecto declara.
+
+> Nota: el plan original decia Spring Boot 3, pero 3.x ya salio de soporte y
+> Initializr solo ofrece 4.x. Vamos con 4.1.1. Impacto practico: mucha
+> documentacion y muchos tutoriales de internet siguen siendo de Boot 3.
+> Diferencias visibles: el starter web ahora es `spring-boot-starter-webmvc`
+> (antes `spring-boot-starter-web`) y los starters de test estan separados por
+> modulo (antes uno solo, `spring-boot-starter-test`). Las anotaciones del dia
+> a dia (`@Entity`, `@RestController`, `@Service`, `@Repository`, Spring Data
+> JPA) no cambiaron.
+
+## Decisiones de diseno tomadas
+
+### Montos: `BigDecimal` / `NUMERIC(12,2)`
+Nunca `double`: el punto flotante binario no representa `0.10` exacto. El costo
+de `BigDecimal` es que la aritmetica es por metodos (`.add()`, `.multiply()`) y
+toda division obliga a elegir `RoundingMode` explicito. Ojo con `equals()`, que
+compara escala (`2.0` != `2.00`); para comparar valor va `compareTo()`.
+
+### Reparto: resuelto al escribir, no al leer
+`Gasto` guarda `monto` y `montoPagador` (cuanto de ese gasto le toca a quien
+pago). La deuda que genera el gasto es `monto - montoPagador`, sin ninguna
+division en lectura. El porcentaje 50/50 es un input de UI que se traduce a
+`montoPagador` al crear el gasto.
+
+Motivo: un gasto de $10.01 al 50/50 son $5.005 por persona y alguien se come el
+centavo. Guardando el reparto resuelto, esa decision se toma una sola vez, al
+escribir, y queda congelada en la fila. Con un porcentaje se recalcularia en
+cada lectura del saldo.
+
+Camino de migracion si algun dia entra un tercer integrante: mover
+`montoPagador` a una tabla `participacion(gasto_id, usuario_id, monto)`.
+
+### `tipo` (PERSONAL / COMPARTIDO) se guarda explicito
+No es derivable de los montos: un gasto COMPARTIDO donde el pagador cubre el
+100% tiene los mismos numeros que uno PERSONAL, pero significa otra cosa.
+
+### Gasto hormiga: `boolean esHormiga` en `Gasto`
+La feature central de la app. Un gasto hormiga es el que, mirado en frio, podria
+no haberse hecho.
+
+**No es un monto chico ni una categoria.** El mismo Uber por el mismo monto es
+necesario si fue por seguridad y hormiga si fue por comodidad. Es un juicio que
+solo puede emitir quien carga el gasto, en el momento de cargarlo, asi que no
+puede vivir en la categoria ni deducirse del monto.
+
+Se eligio un booleano y no un sistema de etiquetas genericas porque la usuaria
+pidio **un** total, y un selector de etiquetas es mas lento que un toggle -- lo
+que choca de frente con el requisito de velocidad de carga. Tampoco un enum de
+tres estados, porque obligaria a decidir en cada carga.
+
+Camino de migracion si algun dia quiere mas etiquetas: el booleano pasa a ser una
+fila de una tabla `etiqueta`, igual que `montoPagador` pasaria a `participacion`.
+
+### Dos secciones, y `tipo` gobierna la visibilidad
+La usuaria pidio "una seccion personal y una de pareja". Eso mapea directo sobre
+`TipoGasto`, que asi deja de ser una prolijidad y pasa a ser el eje del producto:
+**el mismo campo define en que seccion aparece el gasto y quien puede verlo.**
+
+Regla: **un gasto PERSONAL lo ve solo su dueno; uno COMPARTIDO lo ven los dos.**
+
+El motivo es concreto: quiere que los regalos que compra sigan siendo sorpresa.
+No es un pedido de privacidad general -- dijo que compartir no le incomoda.
+
+Consecuencia para la sesion 2: `GET /gastos` necesita saber **quien pregunta**, y
+la autenticacion recien llega en la sesion 4. Se resuelve con una costura: una
+abstraccion chica tipo `UsuarioActual` que en la sesion 2 lea un header y en la 4
+lea el JWT, sin tocar el servicio. Discutirlo al abrir la sesion 2.
+
+No tienen economia compartida (ingresos separados). El encuadre de la seccion de
+pareja es **"quien le debe a quien"**, no "nuestra plata".
+
+### `descripcion` es obligatoria
+La usuaria la eligio como uno de sus tres campos: "algo que me recuerde el
+momento". Es lo que le permite distinguir despues el gasto evitable del que no lo
+era. No es decorativa.
+
+### Concurrencia: bloqueo optimista con `@Version`
+`Gasto` tiene un campo `@Version`. Hibernate agrega `AND version = ?` a cada
+UPDATE. Si los dos integrantes editan el mismo gasto a la vez, la segunda
+escritura falla en vez de pisar la primera en silencio.
+
+### Schema: `ddl-auto=update` por ahora
+Comodo para desarrollar. **Migrar a Flyway antes del deploy (sesion 5).**
+
+### Pendiente de decidir
+- **Saldo calculado al vuelo vs materializado** (sesion 3). Nota: como el reparto
+  ya viene resuelto en la fila, calcularlo al vuelo es un `SUM` sobre el indice
+  `idx_gasto_grupo_fecha`. Para dos personas, materializar probablemente sea
+  sobreingenieria — pero se discute con numeros cuando lleguemos. El mismo
+  trade-off aplica al total hormiga del mes, asi que son dos agregados con una
+  sola discusion.
+- **Categorias del seed** (sesion 2). Las que nombro la usuaria son: cafe, uber,
+  comida, ropa, regalos. No coinciden con las que veniamos asumiendo (comida,
+  transporte, servicios, ocio, salud, otros). Usar **sus** palabras: dijo "uber",
+  no "transporte".
+- **Como se resuelve "quien pregunta" en la sesion 2**, antes de que exista el
+  JWT de la sesion 4. Ver la decision de visibilidad mas arriba.
+- **El default 50/50 del reparto puede no ser lo justo para ellos**, porque tienen
+  ingresos diferentes y separados. Es una conversacion entre ellos, no una
+  decision tecnica.
+
+## Estructura
+
+```
+/backend      Spring Boot
+  src/main/java/com/gastoscompartidos/
+    modelo/       entidades JPA
+    repositorio/  (sesion 2)
+    servicio/     (sesion 2)
+    controlador/  (sesion 2)
+/mobile       Expo (sesion 6)
+/web          React + Vite (despues del MVP)
+docker-compose.yml   Postgres local
+```
+
+Nombres de dominio en espanol (Gasto, Usuario, Grupo, Categoria), consistente
+con el lenguaje del producto.
+
+## Plan por sesiones
+
+- [x] **1 — Modelo de datos y setup.** Proyecto Spring Boot, entidades JPA,
+      Postgres local con Docker.
+- [ ] **2 — CRUD de gastos.** Controlador, servicio, repositorio, validaciones,
+      seed de categorias. Probar con Postman/Insomnia.
+- [ ] **3 — El saldo.** Discusion al vuelo vs materializado, implementacion, y
+      al menos dos tests JUnit sobre esta logica.
+- [ ] **4 — Autenticacion.** Login con JWT.
+- [ ] **5 — Deploy.** Railway o Render + Postgres gestionado + Flyway + env vars.
+- [ ] **6 — App Expo minima.** Contra la API deployada, no localhost.
+- [ ] **7 — Build EAS y TestFlight.**
+
+## Comandos
+
+```bash
+docker compose up -d          # levantar Postgres
+cd backend && ./mvnw spring-boot:run   # levantar la API
+cd backend && ./mvnw test              # correr los tests
+```

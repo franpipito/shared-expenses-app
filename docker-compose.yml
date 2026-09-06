@@ -1,0 +1,24 @@
+# Postgres local para desarrollo.
+# Levantar:  docker compose up -d
+# Apagar:    docker compose down        (los datos sobreviven, viven en el volumen)
+# Borrar:    docker compose down -v     (elimina el volumen y con el los datos)
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: gastos-postgres
+    environment:
+      POSTGRES_DB: gastos
+      POSTGRES_USER: gastos
+      POSTGRES_PASSWORD: gastos_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gastos -d gastos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
