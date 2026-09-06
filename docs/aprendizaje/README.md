@@ -13,12 +13,12 @@ que es el filtro real: si no puedo explicar eso en voz alta, no lo entendí.
 | Tema | Estado |
 |---|---|
 | [Docker](docker.md) | ✅ |
-| Maven y el wrapper | pendiente |
-| JPA e Hibernate: el mapeo objeto-relacional | pendiente |
+| [JPA e Hibernate](jpa-hibernate.md) | ✅ |
+| [`BigDecimal` y el dinero en Java](bigdecimal.md) | ✅ |
 | Spring Boot: cómo arranca y qué es la autoconfiguración | pendiente |
-| `BigDecimal` y el dinero en Java | pendiente |
+| Maven y el wrapper | pendiente |
 | PostgreSQL: lo que usamos | pendiente |
-| Testing con JUnit | pendiente |
+| Testing con JUnit | pendiente (después de la sesión 3) |
 | React web y TypeScript | pendiente (etapa web) |
 
 ## Cómo leer esto
