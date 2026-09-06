@@ -168,12 +168,14 @@ Comodo para desarrollar. **Migrar a Flyway antes del deploy (sesion 5).**
   sobreingenieria — pero se discute con numeros cuando lleguemos. El mismo
   trade-off aplica al total hormiga del mes, asi que son dos agregados con una
   sola discusion.
-- **Categorias del seed** (sesion 2). Las que nombro la usuaria son: cafe, uber,
-  comida, ropa, regalos. No coinciden con las que veniamos asumiendo (comida,
-  transporte, servicios, ocio, salud, otros). Usar **sus** palabras: dijo "uber",
-  no "transporte".
-- **Como se resuelve "quien pregunta" en la sesion 2**, antes de que exista el
-  JWT de la sesion 4. Ver la decision de visibilidad mas arriba.
+- **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
+  cliente lo manda, se verifica; si no, gana la ultima escritura. Conviene
+  volverlo obligatorio cuando la app mobile este armada y sepamos que siempre lo
+  reenvia.
+- **`password_hash` viaja de la base a la app en cada listado de gastos**, porque
+  el `join fetch g.pagadoPor` trae la entidad Usuario entera. No sale por la API
+  (el DTO no lo incluye), pero es dato sensible moviendose sin necesidad. Se
+  arregla con una proyeccion o marcando el campo como lazy. No es urgente.
 - **El default 50/50 del reparto puede no ser lo justo para ellos**, porque tienen
   ingresos diferentes y separados. Es una conversacion entre ellos, no una
   decision tecnica.
@@ -184,12 +186,18 @@ Comodo para desarrollar. **Migrar a Flyway antes del deploy (sesion 5).**
 /backend      Spring Boot
   src/main/java/com/gastoscompartidos/
     modelo/       entidades JPA
-    repositorio/  (sesion 2)
-    servicio/     (sesion 2)
-    controlador/  (sesion 2)
+    repositorio/  interfaces de Spring Data
+    servicio/     logica de negocio, unico lugar con reglas
+    controlador/  endpoints REST, finitos: reciben, delegan, devuelven
+    dto/          records de entrada y salida. La API NUNCA expone entidades
+    seguridad/    UsuarioActual (la costura que en la sesion 4 pasa a JWT)
+    error/        excepciones de dominio + @RestControllerAdvice
 /mobile       Expo (sesion 6)
 /web          React + Vite (despues del MVP)
-docker-compose.yml   Postgres local
+docker-compose.yml       Postgres local
+scripts/
+  seed-desarrollo.sql    categorias, grupo y usuarios de prueba
+  smoke-test.ps1         29 chequeos de la API contra el backend corriendo
 ```
 
 Nombres de dominio en espanol (Gasto, Usuario, Grupo, Categoria), consistente
@@ -199,10 +207,14 @@ con el lenguaje del producto.
 
 - [x] **1 — Modelo de datos y setup.** Proyecto Spring Boot, entidades JPA,
       Postgres local con Docker.
-- [ ] **2 — CRUD de gastos.** Controlador, servicio, repositorio, validaciones,
-      seed de categorias. Probar con Postman/Insomnia.
-- [ ] **3 — El saldo.** Discusion al vuelo vs materializado, implementacion, y
-      al menos dos tests JUnit sobre esta logica.
+- [x] **2 — CRUD de gastos.** `GET /categorias`, `POST/GET/PUT/DELETE /gastos`
+      con filtros por mes, categoria y pagador. Validaciones en tres capas,
+      regla de visibilidad dentro del WHERE, y el reparto calculado en el
+      backend. Verificado con `scripts/smoke-test.ps1` (29 chequeos en verde).
+- [ ] **3 — Los agregados: resumen y saldo.** `GET /gastos/resumen?mes=` (total
+      del mes, por categoria, por persona y **total hormiga**) y `GET /saldo`.
+      Los dos comparten la discusion al vuelo vs materializado, asi que se
+      hacen juntos. Mas los primeros tests JUnit de verdad sobre esta logica.
 - [ ] **4 — Autenticacion.** Login con JWT.
 - [ ] **5 — Deploy.** Railway o Render + Postgres gestionado + Flyway + env vars.
 - [ ] **6 — App Expo minima.** Contra la API deployada, no localhost.
@@ -210,8 +222,26 @@ con el lenguaje del producto.
 
 ## Comandos
 
-```bash
-docker compose up -d          # levantar Postgres
-cd backend && ./mvnw spring-boot:run   # levantar la API
-cd backend && ./mvnw test              # correr los tests
+> **El autor trabaja en PowerShell 5.1 en Windows.** Ahi NO funcionan `&&`,
+> `||`, ni `<` para redirigir entrada, ni los operadores `?:` y `??`. Darle
+> siempre los comandos en sintaxis compatible: `;` para encadenar,
+> `Get-Content archivo | comando` en vez de `comando < archivo`, y `.\mvnw.cmd`
+> en vez de `./mvnw`. Ojo tambien con `curl`, que en PowerShell es un alias de
+> `Invoke-WebRequest`: para el curl de verdad va `curl.exe`.
+
+```powershell
+# Levantar Postgres
+docker compose up -d
+
+# Cargar los datos de desarrollo (categorias, grupo y usuarios de prueba)
+Get-Content scripts/seed-desarrollo.sql | docker exec -i gastos-postgres psql -U gastos -d gastos
+
+# Levantar la API
+cd backend; .\mvnw.cmd spring-boot:run
+
+# Correr los tests
+cd backend; .\mvnw.cmd test
+
+# Consola de Postgres
+docker exec -it gastos-postgres psql -U gastos -d gastos
 ```
