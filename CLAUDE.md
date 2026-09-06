@@ -65,6 +65,41 @@ lento. Carga parada en el mostrador, esperando el pedido.
 **Tres campos y nada mas: categoria, monto, descripcion** (mas el toggle de
 hormiga). Cada campo extra que se le agregue al formulario se paga en abandono.
 
+### Las nutrias: el diferencial de producto
+
+Toda la identidad visual de la app son **nutrias**, porque a la usuaria le
+encantan. No es decoracion: es la razon emocional por la que va a abrir la app
+un martes cualquiera, y por lo tanto es el antidoto directo al riesgo numero uno
+del proyecto, que es el abandono.
+
+**La nutria tiene estado de animo**, y refleja como viene la economia del mes:
+contenta cuando las cosas van bien, y molesta o preocupada cuando se acumulan
+los gastos hormiga.
+
+**Restriccion dura sobre la regla de animo:** NO puede depender de un umbral
+absoluto de plata. La usuaria es freelance con ingresos irregulares y ya dijo
+que un tope mensual fijo no le sirve (respuesta 14 de la entrevista). El animo
+tiene que salir de una medida **relativa**: la proporcion de gasto hormiga sobre
+el total del mes, o la comparacion contra el mes anterior. Las dos son
+independientes de cuanto entro ese mes.
+
+La regla vive en el **backend**, por el mismo motivo que la regla del centavo:
+mobile y web tienen que mostrar la misma nutria, y hay que poder ajustar los
+umbrales sin redeployar las apps.
+
+**Pendiente de definir (sesion 3):** cual es exactamente la regla, cuantos
+estados de animo hay, y por lo tanto que datos tiene que devolver
+`GET /gastos/resumen` para alimentarla.
+
+**Pendiente de conversar:** que tan dura es la nutria enojada. Es una app de
+finanzas para alguien que ya se siente mal cuando se queda sin plata antes de
+cobrar; una app que la haga sentir culpable se desinstala. "Preocupada" y
+"orgullosa cuando mejoras" suele sostener mas el uso que "enojada". Decision de
+Franco, que conoce a la usuaria.
+
+**Compromiso pendiente:** cuando arranque la etapa de front, entregarle a Franco
+un prompt para v0.dev (Vercel) que genere el mockup con las nutrias.
+
 ## Stack
 
 | Pieza    | Tecnologia                                    | Estado |
@@ -161,13 +196,62 @@ escritura falla en vez de pisar la primera en silencio.
 ### Schema: `ddl-auto=update` por ahora
 Comodo para desarrollar. **Migrar a Flyway antes del deploy (sesion 5).**
 
+### Los agregados se calculan al vuelo, no se materializan
+El saldo y el resumen no se guardan en ningun lado: son un `SUM` sobre el indice
+`idx_gasto_grupo_fecha` en cada consulta.
+
+Los numeros que cerraron la discusion: dos personas, ~15.000 filas despues de
+cinco anios, ~3 ms por consulta, ~40 lecturas por dia. **0,12 segundos de trabajo
+de base por dia** es todo el problema que materializar vendria a resolver.
+
+A cambio, materializar costaria mantener deltas correctos en tres caminos de
+escritura (alta, edicion, baja), donde un error corrompe el saldo para siempre y
+en silencio; y necesitaria un job de reconciliacion cuya unica funcion seria
+recalcular al vuelo para verificar que la optimizacion no mintio.
+
+Nota que vale para una entrevista: **la opcion al vuelo es barata por la decision
+de la sesion 1.** Como `montoPagador` ya viene resuelto en la fila, el saldo es un
+`SUM` puro, sin division ni logica por fila. Con un porcentaje guardado, el
+agregado tendria aritmetica por fila y el caso para materializar seria mas fuerte.
+
+Cuando reverlo: si el grupo creciera mucho, si hubiera una pantalla de historico
+que pida el saldo de todos los meses de una, o si las lecturas pasaran a miles
+por segundo. Nada de eso esta cerca.
+
+### El saldo es del mes, no historico
+`GET /saldo` cubre solo el mes pedido. El alcance original decia "saldo actual"
+sobre toda la historia, pero **no hay forma de saldar la cuenta**: sin una entidad
+de liquidacion, un saldo historico solo crece y a los pocos meses es un numero
+grande que no representa nada real.
+
+Acotarlo al mes lo mantiene chico y accionable, al costo de asumir que se
+arreglan mes a mes. Si algun dia quieren llevar la cuenta en serio, la solucion es
+una entidad `Liquidacion(grupo, de, para, monto, fecha)` y `saldo = deudas - pagos`.
+
+### El animo de la nutria: tendencia, tres estados
+`CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
+
+Compara el gasto hormiga del **tramo transcurrido** del mes contra el **mismo
+tramo** del mes anterior (6 dias contra 6 dias, no 6 contra 31). Baja de 10% o mas
+-> CONTENTA; sube 10% o mas -> PREOCUPADA; en el medio -> TRANQUILA. Cero hormiga
+-> CONTENTA. Sin datos del mes anterior -> TRANQUILA: la nutria no juzga el primer
+mes de uso.
+
+Es una medida relativa porque los ingresos son irregulares, y es contra el pasado
+y no contra una meta porque el objetivo declarado de la usuaria es **bajar**, no
+estar debajo de una linea. La banda de +-10% evita que cambie de humor por ruido.
+
+La logica vive en `CalculadorDeAnimo` y `Periodo`, dos clases puras sin Spring ni
+base, para que se puedan testear barato. Son el 100% de la cobertura de tests.
+
+### Hay un `Clock` inyectable, y tiene zona horaria
+`BackendApplication` declara un bean `Clock` en vez de usar `LocalDate.now()`
+suelto. Dos motivos: un test puede fijar "hoy", y **el corte de mes depende de la
+zona**. Un gasto cargado 21:00 del 30 de septiembre en Buenos Aires ya es 1 de
+octubre en UTC, y Railway y Render corren en UTC. Configurable por
+`app.zona-horaria`, default `America/Argentina/Buenos_Aires`.
+
 ### Pendiente de decidir
-- **Saldo calculado al vuelo vs materializado** (sesion 3). Nota: como el reparto
-  ya viene resuelto en la fila, calcularlo al vuelo es un `SUM` sobre el indice
-  `idx_gasto_grupo_fecha`. Para dos personas, materializar probablemente sea
-  sobreingenieria — pero se discute con numeros cuando lleguemos. El mismo
-  trade-off aplica al total hormiga del mes, asi que son dos agregados con una
-  sola discusion.
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
   cliente lo manda, se verifica; si no, gana la ultima escritura. Conviene
   volverlo obligatorio cuando la app mobile este armada y sepamos que siempre lo
@@ -211,10 +295,11 @@ con el lenguaje del producto.
       con filtros por mes, categoria y pagador. Validaciones en tres capas,
       regla de visibilidad dentro del WHERE, y el reparto calculado en el
       backend. Verificado con `scripts/smoke-test.ps1` (29 chequeos en verde).
-- [ ] **3 — Los agregados: resumen y saldo.** `GET /gastos/resumen?mes=` (total
-      del mes, por categoria, por persona y **total hormiga**) y `GET /saldo`.
-      Los dos comparten la discusion al vuelo vs materializado, asi que se
-      hacen juntos. Mas los primeros tests JUnit de verdad sobre esta logica.
+- [x] **3 — Los agregados: resumen y saldo.** `GET /gastos/resumen?mes=` (seccion
+      personal: mi parte del mes, por categoria, total hormiga y el animo de la
+      nutria) y `GET /saldo?mes=` (seccion pareja). Calculados al vuelo. Mas 15
+      tests unitarios puros sobre `Periodo` y `CalculadorDeAnimo`, y el smoke
+      test extendido a 44 chequeos.
 - [ ] **4 — Autenticacion.** Login con JWT.
 - [ ] **5 — Deploy.** Railway o Render + Postgres gestionado + Flyway + env vars.
 - [ ] **6 — App Expo minima.** Contra la API deployada, no localhost.

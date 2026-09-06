@@ -16,7 +16,7 @@ $franco = @{ "X-Usuario-Id" = "1" }
 $ella   = @{ "X-Usuario-Id" = "2" }
 
 # ids de categoria del seed
-$CAFE = 1; $COMIDA = 3
+$CAFE = 1; $UBER = 2; $COMIDA = 3
 
 $fallos = 0
 
@@ -187,7 +187,57 @@ Chequear ($sinFlag.esHormiga -eq $false) "omitir esHormiga no rompe el parseo y 
 Invoke-RestMethod -Uri "$base/gastos/$($sinFlag.id)" -Method Delete -Headers $franco | Out-Null
 
 # ---------------------------------------------------------------------------
-Titulo "7. Edicion y bloqueo optimista"
+Titulo "7. Resumen y saldo"
+
+# Un tercer gasto para que los numeros no sean triviales:
+# Franco paga un uber compartido de 1000 al 50/50, marcado como hormiga.
+$uber = Crear $franco @{
+    monto = 1000; categoriaId = $UBER; fecha = "2026-09-06"
+    descripcion = "uber a lo de mi vieja"; tipo = "COMPARTIDO"
+    porcentajePagador = 50; esHormiga = $true
+}
+
+# Estado en este punto:
+#   personal de Ella   3008.00  hormiga   (pago Ella)
+#   cafe compartido      10.01            (pago Franco, su parte 5.01)
+#   uber compartido    1000.00  hormiga   (pago Franco, su parte 500.00)
+#
+# Parte de Franco = 5.01 + 500.00 = 505.01, de la cual 500.00 es hormiga.
+# El personal de Ella no lo ve, y aunque lo viera su parte seria cero.
+$resumenFranco = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $franco
+Chequear ($resumenFranco.total -eq 505.01)        "el total de Franco es su parte, no el total del grupo"
+Chequear ($resumenFranco.totalHormiga -eq 500.00) "el hormiga de Franco es solo el uber"
+
+# Parte de Ella = 3008.00 + 5.00 + 500.00 = 3513.00, de la cual 3508.00 es hormiga.
+$resumenElla = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $ella
+Chequear ($resumenElla.total -eq 3513.00)         "el total de Ella incluye su parte de los compartidos"
+Chequear ($resumenElla.totalHormiga -eq 3508.00)  "el hormiga de Ella suma su personal y su parte del uber"
+Chequear ($resumenElla.animo -eq "TRANQUILA")     "sin datos del mes anterior la nutria no juzga"
+
+$cats = $resumenElla.porCategoria
+Chequear (($cats | Measure-Object).Count -eq 3)   "el desglose trae las tres categorias"
+Chequear ($cats[0].total -ge $cats[1].total)      "el desglose viene ordenado de mayor a menor"
+
+# Saldo: Franco pago los dos compartidos, asi que Ella le debe 5.00 + 500.00.
+$saldoFranco = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $franco
+Chequear ($saldoFranco.monto -eq 505.00)          "Ella le debe 505.00 a Franco"
+Chequear ($saldoFranco.deudorNombre -eq "Ella")   "el deudor es Ella"
+Chequear ($saldoFranco.aFavorMio -eq 505.00)      "visto por Franco, el saldo es positivo"
+
+# El mismo saldo visto del otro lado tiene que dar lo mismo, con el signo dado vuelta.
+$saldoElla = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $ella
+Chequear ($saldoElla.monto -eq 505.00)            "los dos ven el mismo monto"
+Chequear ($saldoElla.aFavorMio -eq -505.00)       "visto por Ella, el saldo es negativo"
+
+# Un mes sin gastos: todo en cero, y sin deudor ni acreedor.
+$saldoVacio = Invoke-RestMethod -Uri "$base/saldo?mes=2026-01" -Headers $franco
+Chequear ($saldoVacio.monto -eq 0)                "un mes sin gastos da saldo cero"
+Chequear ($null -eq $saldoVacio.deudorId)         "sin deuda no hay deudor"
+
+Invoke-RestMethod -Uri "$base/gastos/$($uber.id)" -Method Delete -Headers $franco | Out-Null
+
+# ---------------------------------------------------------------------------
+Titulo "8. Edicion y bloqueo optimista"
 
 $editado = Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method Put -Headers $franco `
     -ContentType "application/json" -Body (@{
@@ -208,7 +258,7 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method 
     409 "editar con una version vieja da 409 Conflict"
 
 # ---------------------------------------------------------------------------
-Titulo "8. Limpieza"
+Titulo "9. Limpieza"
 
 Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method Delete -Headers $franco | Out-Null
 Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Method Delete -Headers $ella | Out-Null

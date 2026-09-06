@@ -138,6 +138,21 @@ public class Gasto {
         return monto.subtract(montoPagador);
     }
 
+    /**
+     * Cuanto de este gasto le corresponde a un integrante: lo que consumio, no
+     * lo que puso de su bolsillo.
+     *
+     * Es la base del resumen personal. Si pagaste vos, tu parte es montoPagador;
+     * si pago el otro, tu parte es lo que le debes.
+     *
+     * Propiedad util que cae sola: en un gasto PERSONAL del OTRO, tu parte da
+     * cero (monto - monto = 0). O sea que los gastos privados ajenos no ensucian
+     * tus totales aunque la consulta los trajera.
+     */
+    public BigDecimal parteDe(Long usuarioId) {
+        return pagadoPor.getId().equals(usuarioId) ? montoPagador : deudaGenerada();
+    }
+
     /** Se ejecuta justo antes del INSERT. */
     @PrePersist
     void alCrear() {

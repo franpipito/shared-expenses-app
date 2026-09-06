@@ -3,6 +3,7 @@ package com.gastoscompartidos.repositorio;
 import com.gastoscompartidos.modelo.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UsuarioRepositorio extends JpaRepository<Usuario, Long> {
@@ -13,4 +14,7 @@ public interface UsuarioRepositorio extends JpaRepository<Usuario, Long> {
      * Lo va a usar el login en la sesion 4.
      */
     Optional<Usuario> findByEmail(String email);
+
+    /** Los integrantes de un grupo. Hoy son siempre dos. */
+    List<Usuario> findByGrupoIdOrderById(Long grupoId);
 }
