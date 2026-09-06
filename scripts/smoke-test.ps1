@@ -2,18 +2,20 @@
 #
 # Requiere:
 #   - la app corriendo en localhost:8080
-#   - el seed cargado (scripts/seed-desarrollo.sql), con Franco=1 y Ella=2
+#   - las categorias cargadas (scripts/seed-desarrollo.sql)
 #
 # Correr desde la raiz del repo:
 #   .\scripts\smoke-test.ps1
 #
-# Crea gastos de prueba y los BORRA al final.
+# Los usuarios los crea el propio script contra /auth/registro la primera vez, y
+# despues entra por /auth/login. Los gastos de prueba los BORRA al final; los
+# usuarios quedan, que es lo que permite volver a correrlo sin limpiar nada.
 
 $ErrorActionPreference = "Stop"
 
-$base   = "http://localhost:8080"
-$franco = @{ "X-Usuario-Id" = "1" }
-$ella   = @{ "X-Usuario-Id" = "2" }
+$base     = "http://localhost:8080"
+$CODIGO   = "nutrias"          # app.registro.codigo-invitacion
+$PASSWORD = "gastos-dev-2026"
 
 # ids de categoria del seed
 $CAFE = 1; $UBER = 2; $COMIDA = 3
@@ -85,6 +87,85 @@ function EsperarRegla($bloque, $textoEsperado, $texto) {
     }
 }
 
+function Registrar($nombre, $email, $password, $codigo) {
+    $body = @{ nombre = $nombre; email = $email; password = $password
+               codigoInvitacion = $codigo } | ConvertTo-Json
+    return Invoke-RestMethod -Uri "$base/auth/registro" -Method Post `
+        -ContentType "application/json" -Body $body
+}
+
+function Entrar($email, $password) {
+    $body = @{ email = $email; password = $password } | ConvertTo-Json
+    return Invoke-RestMethod -Uri "$base/auth/login" -Method Post `
+        -ContentType "application/json" -Body $body
+}
+
+# Registra si no existe, y si ya existe entra. Asi el script se puede correr
+# muchas veces seguidas sin tener que limpiar usuarios entre corridas.
+#
+# El catch mira POR QUE fallo el registro. Un catch a secas que cayera siempre al
+# login esconde el error real: si el registro falla por otra cosa, lo que ves es
+# un "email o contrasena incorrectos" que no tiene nada que ver con la causa.
+function RegistrarOEntrar($nombre, $email, $password) {
+    try {
+        return Registrar $nombre $email $password $CODIGO
+    } catch {
+        $cuerpo = CuerpoDelError $_
+        if ($cuerpo -match "ya esta registrado") {
+            return Entrar $email $password
+        }
+        throw "No se pudo registrar a $nombre, y NO es porque ya exista. El backend dijo: $cuerpo"
+    }
+}
+
+# ---------------------------------------------------------------------------
+Titulo "0. Autenticacion"
+
+$sesionFranco = RegistrarOEntrar "Franco" "franco@local" $PASSWORD
+$sesionElla   = RegistrarOEntrar "Ella"   "ella@local"   $PASSWORD
+
+# A partir de aca, en vez del header X-Usuario-Id de la sesion 2 va el token.
+$franco = @{ Authorization = "Bearer $($sesionFranco.token)" }
+$ella   = @{ Authorization = "Bearer $($sesionElla.token)" }
+$FRANCO_ID = $sesionFranco.usuario.id
+$ELLA_ID   = $sesionElla.usuario.id
+
+Chequear ($sesionFranco.token.Length -gt 50)      "el registro/login devuelve un token"
+Chequear ($sesionFranco.usuario.nombre -eq "Franco") "y devuelve el usuario, sin una segunda llamada"
+Chequear ($null -eq $sesionFranco.usuario.email)  "el usuario de la respuesta no expone el email"
+Chequear ($sesionFranco.token.Split('.').Count -eq 3) "el token tiene las tres partes de un JWT"
+Chequear ($FRANCO_ID -ne $ELLA_ID)                "son dos usuarios distintos"
+
+EsperarCodigo { Entrar "franco@local" "contrasena-incorrecta" } `
+    401 "contrasena incorrecta da 401"
+
+# El MISMO mensaje que el anterior: si dijera "ese email no existe", el login
+# seria un verificador de que cuentas estan registradas.
+$errorEmailInexistente = $null
+try { Entrar "nadie@local" $PASSWORD } catch { $errorEmailInexistente = CuerpoDelError $_ }
+$errorPasswordMala = $null
+try { Entrar "franco@local" "otra-cosa" } catch { $errorPasswordMala = CuerpoDelError $_ }
+Chequear ($errorEmailInexistente -eq $errorPasswordMala) `
+    "email inexistente y contrasena mala dan el mismo error, sin filtrar cuales existen"
+
+EsperarRegla { Registrar "Intruso" "intruso@local" $PASSWORD "codigo-equivocado" } `
+    "codigo de invitacion" "sin el codigo de invitacion no se puede registrar"
+
+EsperarRegla { Registrar "Franco" "franco@local" $PASSWORD $CODIGO } `
+    "ya esta registrado" "no se puede registrar dos veces el mismo email"
+
+EsperarRegla { Registrar "Tercero" "tercero@local" $PASSWORD $CODIGO } `
+    "grupo ya esta completo" "un tercer integrante se rechaza"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
+    -Headers @{ Authorization = "Bearer esto.no.es-un-token" } } `
+    401 "un token invalido da 401"
+
+# El header viejo de la sesion 2 ya no autentica nada.
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
+    -Headers @{ "X-Usuario-Id" = "1" } } `
+    401 "el header X-Usuario-Id ya no sirve"
+
 # ---------------------------------------------------------------------------
 Titulo "1. Ella carga un gasto PERSONAL marcado como hormiga"
 
@@ -143,7 +224,7 @@ Titulo "5. Filtros"
 $soloCafe = Invoke-RestMethod -Uri "$base/gastos?mes=2026-09&categoria=$CAFE" -Headers $ella
 Chequear (($soloCafe | Measure-Object).Count -eq 1) "filtro por categoria deja 1"
 
-$soloFranco = Invoke-RestMethod -Uri "$base/gastos?mes=2026-09&pagadoPor=1" -Headers $ella
+$soloFranco = Invoke-RestMethod -Uri "$base/gastos?mes=2026-09&pagadoPor=$FRANCO_ID" -Headers $ella
 Chequear (($soloFranco | Measure-Object).Count -eq 1) "filtro por pagador deja 1"
 
 $otroMes = Invoke-RestMethod -Uri "$base/gastos?mes=2026-01" -Headers $ella
@@ -174,11 +255,11 @@ EsperarRegla { Crear $franco @{ monto = 100; categoriaId = 999; fecha = "2026-09
     "No existe la categoria" "categoria inexistente rechazada por el servicio"
 
 EsperarRegla { Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"
-                                descripcion = "x"; tipo = "PERSONAL"; pagadoPorId = 2 } } `
+                                descripcion = "x"; tipo = "PERSONAL"; pagadoPorId = $ELLA_ID } } `
     "solo lo puede cargar quien lo pago" "no se puede cargar un personal a nombre de otro"
 
 EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" } `
-    401 "sin header X-Usuario-Id da 401"
+    401 "una request sin token da 401"
 
 # Sin esHormiga en el cuerpo: tiene que crearse igual, con esHormiga=false.
 $sinFlag = Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"

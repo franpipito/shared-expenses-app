@@ -3,12 +3,25 @@ package com.gastoscompartidos;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 
 import java.time.Clock;
 import java.time.ZoneId;
 
-@SpringBootApplication
+/**
+ * Se excluye UserDetailsServiceAutoConfiguration a proposito.
+ *
+ * Spring Boot, al ver spring-boot-starter-security sin ningun UserDetailsService
+ * definido, crea un usuario "user" en memoria con una contrasena aleatoria y la
+ * imprime en el log en CADA arranque.
+ *
+ * En esta app no se usa para nada: la autenticacion es enteramente el FiltroJwt,
+ * y no hay formLogin ni httpBasic que puedan consumir ese usuario. Dejarlo solo
+ * ensucia los logs con una contrasena que no sirve y hace pensar a quien lea el
+ * arranque que forma parte del diseno.
+ */
+@SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 public class BackendApplication {
 
 	public static void main(String[] args) {

@@ -87,9 +87,10 @@ La regla vive en el **backend**, por el mismo motivo que la regla del centavo:
 mobile y web tienen que mostrar la misma nutria, y hay que poder ajustar los
 umbrales sin redeployar las apps.
 
-**Pendiente de definir (sesion 3):** cual es exactamente la regla, cuantos
-estados de animo hay, y por lo tanto que datos tiene que devolver
-`GET /gastos/resumen` para alimentarla.
+**Definido en la sesion 3:** son **tres** estados (`CONTENTA` / `TRANQUILA` /
+`PREOCUPADA`) y la regla es de tendencia contra el mismo tramo del mes anterior.
+Ver "El animo de la nutria" mas abajo. Tres estados = tres ilustraciones para el
+mockup.
 
 **Pendiente de conversar:** que tan dura es la nutria enojada. Es una app de
 finanzas para alguien que ya se siente mal cuando se queda sin plata antes de
@@ -175,13 +176,56 @@ Regla: **un gasto PERSONAL lo ve solo su dueno; uno COMPARTIDO lo ven los dos.**
 El motivo es concreto: quiere que los regalos que compra sigan siendo sorpresa.
 No es un pedido de privacidad general -- dijo que compartir no le incomoda.
 
-Consecuencia para la sesion 2: `GET /gastos` necesita saber **quien pregunta**, y
-la autenticacion recien llega en la sesion 4. Se resuelve con una costura: una
-abstraccion chica tipo `UsuarioActual` que en la sesion 2 lea un header y en la 4
-lea el JWT, sin tocar el servicio. Discutirlo al abrir la sesion 2.
+Quien pregunta se resuelve con la interfaz `UsuarioActual`. En la sesion 2 la
+implementaba un lector de headers; en la 4 pasa a leer el JWT. **Cambiar de una a
+otra no toco ni un servicio ni un controlador**, que era el punto de la costura.
 
 No tienen economia compartida (ingresos separados). El encuadre de la seccion de
 pareja es **"quien le debe a quien"**, no "nuestra plata".
+
+### Autenticacion: Spring Security + filtro JWT propio
+Spring Security arma la cadena de filtros y aporta BCrypt; el parseo y la
+validacion del token los hace `FiltroJwt`, escrito a mano, para poder seguir el
+recorrido de una request autenticada linea por linea.
+
+**El token lleva solo el id del usuario y la expiracion.** Es un identificador,
+no un portador de permisos: el nombre y el grupo se leen de la base en cada
+request, asi que no hay copias que queden viejas.
+
+Cosas que conviene tener presentes:
+
+- **Un JWT no esconde nada.** Las tres partes son base64, no encriptacion.
+  Cualquiera puede leer el payload; lo que garantiza la firma es que nadie lo
+  modifico.
+- **Un token emitido no se puede revocar.** No hay estado en el servidor. Con
+  30 dias de vida, un token filtrado sirve 30 dias. Es el precio de haber evitado
+  el refresh token, y es defendible para dos personas, pero es una decision de
+  seguridad y no un detalle de configuracion.
+- **`FiltroJwt` no carga el `Usuario`, solo su id.** Si lo cargara, la entidad
+  quedaria detached (el filtro corre fuera de toda transaccion) y el primer
+  `getGrupo()` explotaria con `LazyInitializationException`.
+- **`FiltroJwt` NO lleva `@Component`**, se instancia a mano en
+  `ConfiguracionSeguridad`. Como bean, Spring Boot lo registraria tambien en la
+  cadena de filtros del servlet y correria dos veces por request, en silencio.
+- **El login tarda siempre lo mismo.** Verifica contra un hash senuelo cuando el
+  email no existe, para que la diferencia de tiempo no delate que cuentas estan
+  registradas. Y los dos casos devuelven el mismo mensaje.
+- **`UserDetailsServiceAutoConfiguration` esta excluida** en
+  `BackendApplication`. Si no, Boot crea un usuario en memoria e imprime su
+  contrasena en cada arranque, sin que nada la use. Ojo que en Boot 4 la clase
+  esta en `org.springframework.boot.security.autoconfigure`, no donde dice
+  internet.
+
+### Registro cerrado con codigo de invitacion
+`POST /auth/registro` exige un codigo que sale de `CODIGO_INVITACION`. El backend
+va a estar publico, y sin eso cualquiera que encuentre la URL se crearia una
+cuenta.
+
+El primero que se registra crea el grupo; el segundo se suma; **un tercero se
+rechaza**, porque el modelo de reparto asume dos integrantes.
+
+Los usuarios ya NO se siembran por SQL: los crea la API, que es lo unico que sabe
+hashear con BCrypt.
 
 ### `descripcion` es obligatoria
 La usuaria la eligio como uno de sus tres campos: "algo que me recuerde el
@@ -274,14 +318,14 @@ octubre en UTC, y Railway y Render corren en UTC. Configurable por
     servicio/     logica de negocio, unico lugar con reglas
     controlador/  endpoints REST, finitos: reciben, delegan, devuelven
     dto/          records de entrada y salida. La API NUNCA expone entidades
-    seguridad/    UsuarioActual (la costura que en la sesion 4 pasa a JWT)
+    seguridad/    JWT, filtro, config de Spring Security y UsuarioActual
     error/        excepciones de dominio + @RestControllerAdvice
 /mobile       Expo (sesion 6)
 /web          React + Vite (despues del MVP)
 docker-compose.yml       Postgres local
 scripts/
-  seed-desarrollo.sql    categorias, grupo y usuarios de prueba
-  smoke-test.ps1         29 chequeos de la API contra el backend corriendo
+  seed-desarrollo.sql    solo categorias (los usuarios los crea /auth/registro)
+  smoke-test.ps1         57 chequeos de la API contra el backend corriendo
 ```
 
 Nombres de dominio en espanol (Gasto, Usuario, Grupo, Categoria), consistente
@@ -300,7 +344,10 @@ con el lenguaje del producto.
       nutria) y `GET /saldo?mes=` (seccion pareja). Calculados al vuelo. Mas 15
       tests unitarios puros sobre `Periodo` y `CalculadorDeAnimo`, y el smoke
       test extendido a 44 chequeos.
-- [ ] **4 — Autenticacion.** Login con JWT.
+- [x] **4 — Autenticacion.** Spring Security + FiltroJwt propio, BCrypt,
+      registro cerrado con codigo de invitacion. UsuarioActualPorHeader se
+      reemplazo por UsuarioActualPorJwt sin tocar ningun servicio ni
+      controlador. Smoke test extendido a 57 chequeos.
 - [ ] **5 — Deploy.** Railway o Render + Postgres gestionado + Flyway + env vars.
 - [ ] **6 — App Expo minima.** Contra la API deployada, no localhost.
 - [ ] **7 — Build EAS y TestFlight.**
@@ -318,7 +365,7 @@ con el lenguaje del producto.
 # Levantar Postgres
 docker compose up -d
 
-# Cargar los datos de desarrollo (categorias, grupo y usuarios de prueba)
+# Cargar las categorias (los usuarios se crean con POST /auth/registro)
 Get-Content scripts/seed-desarrollo.sql | docker exec -i gastos-postgres psql -U gastos -d gastos
 
 # Levantar la API
