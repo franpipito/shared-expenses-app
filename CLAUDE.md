@@ -35,6 +35,10 @@ el si.
 
 ## Que es la app
 
+**Se llama MiNutria.** Los dos usuarios son **Viole** (la usuaria de la
+entrevista) y **Franco** (el autor). Usar esos nombres en todo lo que sea copy,
+mockups o datos de ejemplo, nunca placeholders genericos.
+
 Registro de gastos **personal primero, de pareja despues**. Cada gasto se marca
 como **hormiga** (evitable) o no, y el numero principal de la app es cuanto suma
 lo evitable en el mes. Ademas, un gasto puede ser personal o compartido, y en
@@ -98,8 +102,35 @@ cobrar; una app que la haga sentir culpable se desinstala. "Preocupada" y
 "orgullosa cuando mejoras" suele sostener mas el uso que "enojada". Decision de
 Franco, que conoce a la usuaria.
 
-**Compromiso pendiente:** cuando arranque la etapa de front, entregarle a Franco
-un prompt para v0.dev (Vercel) que genere el mockup con las nutrias.
+### Direccion visual, decidida sobre mockups reales
+
+Se generaron dos mockups (v0/Vercel y Lovable) y **los evaluo Viole**. Su
+veredicto, que es el que manda:
+
+- **Las nutrias de Lovable.** Ilustraciones con personalidad y consistentes: una
+  flotando de espaldas en el agua, una parada, una preocupada, y **dos juntas**
+  para la seccion de pareja. Las de Vercel salieron genericas y ni parecian
+  nutrias.
+- **La tipografia y la estructura de Vercel.** Serif de alto contraste para
+  titulos y numeros, etiqueta en versalitas arriba de cada pantalla, saludo
+  personal en el header, boton de accion ancho abajo. Se ve disenado y no
+  templateado.
+- **Dos nutrias que sean ellos**, no una sola.
+
+Pareja tipografica elegida: **Fraunces** (display, numeros y titulos) +
+**Nunito Sans** (cuerpo). Paleta: crema de fondo, teal tranquilo, ambar para el
+numero protagonista, terracota para la accion principal.
+
+**Lo que Lovable acerto y hay que conservar si o si:** el numero grande es el
+total hormiga (no el total del mes), la comparacion dice "los primeros 6 dias de
+agosto" y no "el mes pasado", y **la marca de hormiga se ve en cada gasto de la
+lista** -- los dos ubers de $4.000, uno marcado y el otro no. Vercel perdio esa
+distincion, que es literalmente el producto.
+
+**Lo que hay que corregir en cualquier iteracion:** las categorias son las
+nuestras (cafe, uber, comida, ropa, regalos, otros), los nombres son Viole y
+Franco, y las pastillas de contenta/tranquila/preocupada son un control del
+mockup, no un elemento de la app: el animo lo decide el backend.
 
 ## Stack
 
@@ -237,8 +268,65 @@ era. No es decorativa.
 UPDATE. Si los dos integrantes editan el mismo gasto a la vez, la segunda
 escritura falla en vez de pisar la primera en silencio.
 
-### Schema: `ddl-auto=update` por ahora
-Comodo para desarrollar. **Migrar a Flyway antes del deploy (sesion 5).**
+### Schema: Flyway, no `ddl-auto`
+Las migraciones viven en `backend/src/main/resources/db/migration` y corren al
+arrancar. Flyway guarda un checksum de cada archivo: **una migracion ya aplicada
+no se edita nunca**, porque la app se niega a arrancar si cambia. Para corregir
+algo se escribe una version nueva.
+
+`ddl-auto=validate`: Hibernate ya no toca el esquema, solo verifica al arrancar
+que las entidades coincidan con las tablas. Si alguien agrega un campo a una
+entidad y se olvida la migracion, la app no arranca en vez de romperse en la
+primera consulta que use esa columna.
+
+**OJO EN BOOT 4:** hace falta `spring-boot-starter-flyway`, NO `flyway-core`
+suelto. Cada integracion vive en su propio modulo, y con la libreria sola la app
+levanta sin decir una palabra sobre Flyway y falla despues por tablas que no
+existen. En Boot 3 alcanzaba con `flyway-core`, y por eso todo internet lo dice
+asi.
+
+### Endurecimiento previo al deploy
+- **Rate limiting** en `/auth/login` y `/auth/registro` (`LimitadorDeIntentos`,
+  en memoria). Dos umbrales distintos a proposito: **5 por cuenta, 20 por IP**.
+  Viole y Franco comparten wifi, asi que con el mismo limite ella olvidandose la
+  contrasena cinco veces lo dejaria a el afuera. El de cuenta es el que protege
+  de verdad: para atacar a alguien hay que mandar SU email, y eso no se puede
+  falsear. El mapa tiene tope de claves, si no el limitador seria un vector de
+  denegacion de servicio.
+- **Politica de contrasenas** (`PoliticaDeContrasenas`): minimo 12 caracteres y
+  **ninguna regla de composicion**, siguiendo NIST SP 800-63B. Exigir mayuscula,
+  numero y simbolo empuja a la gente hacia "Password1!". Rechaza las comunes,
+  las de pocos caracteres distintos, y las que contienen el nombre o el email de
+  la propia persona.
+- **Revocacion de tokens**: `usuario.token_version` viaja como claim `tv` en el
+  JWT y se compara contra la base en cada request. `POST /auth/cerrar-sesiones`
+  lo incrementa. Un token con firma valida y sin expirar se rechaza igual si su
+  generacion quedo vieja. Es el boton de "perdi el celular", y es por usuario.
+- **Perfil `produccion`**: activa `application-produccion.properties` (apaga el
+  log de SQL, sin stacktrace ni mensaje interno en los errores) y
+  `ValidacionDeConfiguracion`, que **impide arrancar** con el secreto o el codigo
+  de invitacion de desarrollo. Verificado corriendo la imagen: sin `JWT_SECRETO`
+  el contenedor sale con codigo 1.
+- **Postgres local escucha solo en 127.0.0.1**, no en todas las interfaces.
+
+### Lo que NO aplica a esta arquitectura
+Aparece seguido en checklists genericos de seguridad y conviene saber por que no
+va:
+
+- **"API keys expuestas en el frontend"**: no hay ninguna API key. Eso es del
+  mundo Supabase/Firebase, donde el navegador habla directo con la base usando
+  una clave publica de la app. Aca el cliente solo guarda un JWT que esa persona
+  se gano logueandose.
+- **RLS (Row Level Security)**: Supabase lo necesita porque el cliente hace las
+  consultas. Aca nadie mas que el backend se conecta a Postgres, y el control
+  equivalente son los `WHERE` de los repositorios, que si estan. Agregarlo
+  defenderia contra inyeccion SQL (no hay: cero concatenacion en las consultas) o
+  contra una app comprometida, que se conectaria con el mismo usuario de base que
+  RLS usaria.
+
+Donde SI aplica la idea de "credencial en el cliente": **como guarda el token la
+app mobile**. `AsyncStorage` no esta cifrado; va `expo-secure-store`, que usa el
+Keychain. Pendiente para la sesion 6.
 
 ### Los agregados se calculan al vuelo, no se materializan
 El saldo y el resumen no se guardan en ningun lado: son un `SUM` sobre el indice
@@ -365,8 +453,8 @@ con el lenguaje del producto.
 # Levantar Postgres
 docker compose up -d
 
-# Cargar las categorias (los usuarios se crean con POST /auth/registro)
-Get-Content scripts/seed-desarrollo.sql | docker exec -i gastos-postgres psql -U gastos -d gastos
+# Las categorias las crea Flyway (V2). Los usuarios, POST /auth/registro.
+# No hay script de seed que correr.
 
 # Levantar la API
 cd backend; .\mvnw.cmd spring-boot:run

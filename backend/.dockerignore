@@ -1,0 +1,13 @@
+# Lo que NO se manda al build de Docker.
+#
+# Todo lo que este aca deja de viajar al daemon y deja de poder invalidar la
+# cache de capas. target/ es el caso importante: son cientos de megas de clases
+# compiladas localmente que el build va a regenerar igual.
+
+target/
+.git/
+.gitignore
+.idea/
+*.iml
+.vscode/
+HELP.md

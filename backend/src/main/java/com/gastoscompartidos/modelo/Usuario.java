@@ -27,6 +27,17 @@ public class Usuario {
     private String passwordHash;
 
     /**
+     * Numero de generacion de los tokens de este usuario.
+     *
+     * Cada JWT emitido lleva adentro el valor que tenia esta columna en ese
+     * momento, y cada request lo compara contra el actual. Subirle uno invalida
+     * al instante todos los tokens emitidos antes: es la forma de recuperar la
+     * capacidad de revocar sin dejar de ser stateless.
+     */
+    @Column(name = "token_version", nullable = false)
+    private long tokenVersion = 0L;
+
+    /**
      * FetchType.LAZY: al traer un Usuario, NO se trae el Grupo hasta que alguien
      * llame a getGrupo(). Por defecto @ManyToOne es EAGER, que dispara un JOIN
      * en cada consulta aunque no se use. LAZY es casi siempre lo que uno quiere.
@@ -72,6 +83,15 @@ public class Usuario {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public long getTokenVersion() {
+        return tokenVersion;
+    }
+
+    /** Deja fuera a todos los tokens ya emitidos para este usuario. */
+    public void invalidarSesiones() {
+        this.tokenVersion++;
     }
 
     public Grupo getGrupo() {

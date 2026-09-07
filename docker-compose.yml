@@ -11,7 +11,12 @@ services:
       POSTGRES_USER: gastos
       POSTGRES_PASSWORD: gastos_local
     ports:
-      - "5432:5432"
+      # 127.0.0.1 adelante, y no solo "5432:5432", que publica el puerto en
+      # TODAS las interfaces de red. Con el binding abierto, cualquiera en la
+      # misma red (un wifi de cafe, por ejemplo) puede conectarse a esta base
+      # con el usuario y la contrasena que estan ahi abajo, a la vista en el
+      # repo. Asi solo escucha en tu propia maquina.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -57,12 +57,13 @@ public class FiltroJwt extends OncePerRequestFilter {
         if (header != null && header.startsWith(PREFIJO)) {
             String token = header.substring(PREFIJO.length()).trim();
 
-            tokens.usuarioDe(token).ifPresent(usuarioId -> {
-                // El "principal" es el id. Sin roles: en esta app todos los
-                // usuarios autenticados pueden lo mismo, y los permisos reales
-                // (que gasto podes ver) los resuelve el WHERE del repositorio.
+            tokens.identidadDe(token).ifPresent(identidad -> {
+                // El "principal" es quien decis ser mas la generacion del token.
+                // Sin roles: en esta app todos los usuarios autenticados pueden
+                // lo mismo, y los permisos reales (que gasto podes ver) los
+                // resuelve el WHERE del repositorio.
                 var autenticacion = new UsernamePasswordAuthenticationToken(
-                        usuarioId, null, List.of());
+                        identidad, null, List.of());
                 SecurityContextHolder.getContext().setAuthentication(autenticacion);
             });
         }

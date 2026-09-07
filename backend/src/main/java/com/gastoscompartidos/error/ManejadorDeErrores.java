@@ -1,5 +1,6 @@
 package com.gastoscompartidos.error;
 
+import com.gastoscompartidos.seguridad.DemasiadosIntentosException;
 import com.gastoscompartidos.seguridad.NoAutenticadoException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -40,6 +41,16 @@ public class ManejadorDeErrores {
     @ExceptionHandler(ReglaDeNegocioException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorRespuesta reglaDeNegocio(ReglaDeNegocioException e) {
+        return ErrorRespuesta.de(e.getMessage());
+    }
+
+    /**
+     * 429 y no 401: la diferencia le importa al cliente. Un 401 significa
+     * "probá de nuevo con otra contrasena"; un 429 significa "pará, esperá".
+     */
+    @ExceptionHandler(DemasiadosIntentosException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    public ErrorRespuesta demasiadosIntentos(DemasiadosIntentosException e) {
         return ErrorRespuesta.de(e.getMessage());
     }
 

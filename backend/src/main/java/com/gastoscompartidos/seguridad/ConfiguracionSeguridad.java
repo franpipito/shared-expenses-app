@@ -51,6 +51,12 @@ public class ConfiguracionSeguridad {
 
                 .authorizeHttpRequests(rutas -> rutas
                         .requestMatchers("/auth/**").permitAll()
+                        // Railway consulta este endpoint para saber si el
+                        // contenedor esta listo antes de mandarle trafico, y lo
+                        // hace sin token. Devuelve solo {"status":"UP"}:
+                        // show-details=never en application.properties evita que
+                        // publique el estado de la base y las demas piezas.
+                        .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
 
                 // Spring Security corta ANTES de que exista un controlador, asi

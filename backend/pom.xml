@@ -48,6 +48,32 @@
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
 
+		<!-- Endpoint de salud, que es lo que Railway consulta para saber si el
+		     contenedor esta vivo antes de mandarle trafico. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Migraciones versionadas.
+		     OJO: tiene que ser el STARTER de Spring Boot, no flyway-core suelto.
+		     En Boot 4 cada integracion vive en su propio modulo
+		     (spring-boot-flyway), y flyway-core por si solo te da la libreria
+		     pero NO la autoconfiguracion que corre las migraciones al arrancar.
+		     El sintoma es traicionero: la app levanta, no dice una palabra sobre
+		     Flyway, y falla mas adelante por tablas que no existen.
+		     En Boot 3 alcanzaba con flyway-core, y por eso todo internet lo dice
+		     asi. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<!-- Desde Flyway 10, el soporte de cada motor va aparte. -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
 		<!--
 			jjwt viene partido en tres a proposito: tu codigo compila solo contra
 			la API, y la implementacion entra en runtime. Asi no podes usar sin

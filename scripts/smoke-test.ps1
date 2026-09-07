@@ -166,6 +166,47 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
     -Headers @{ "X-Usuario-Id" = "1" } } `
     401 "el header X-Usuario-Id ya no sirve"
 
+# --- politica de contrasenas ---
+EsperarRegla { Registrar "Corta" "corta@local" "Abc123!x" $CODIGO } `
+    "al menos 12" "una contrasena de menos de 12 caracteres se rechaza"
+
+EsperarRegla { Registrar "Comun" "comun@local" "123456789012" $CODIGO } `
+    "demasiado comun" "una contrasena comun se rechaza aunque sea larga"
+
+EsperarRegla { Registrar "Homonimo" "homonimo@local" "homonimo-del-sur" $CODIGO } `
+    "no puede contener tu email" "no se puede usar el propio email como contrasena"
+
+# --- limite de intentos ---
+# Contra un email inexistente A PROPOSITO: si machacaramos franco@local,
+# quedaria bloqueado 15 minutos y las corridas siguientes del script fallarian.
+# El limite por IP es mucho mas alto (20), asi que estos 6 fallos no dejan
+# afuera al resto de los chequeos.
+1..5 | ForEach-Object {
+    try { Entrar "fuerzabruta@local" "intento-numero-$_" } catch { }
+}
+EsperarCodigo { Entrar "fuerzabruta@local" "otro-intento-mas" } `
+    429 "al sexto intento fallido contra la misma cuenta responde 429"
+
+# --- revocacion de tokens ---
+# El caso "perdi el celular": el token viejo tiene firma valida y no expiro,
+# pero igual queda afuera porque su generacion quedo vieja.
+$tokenViejoDeFranco = $sesionFranco.token
+$sesionNueva = Invoke-RestMethod -Uri "$base/auth/cerrar-sesiones" -Method Post -Headers $franco
+Chequear ($sesionNueva.token -ne $tokenViejoDeFranco) "cerrar-sesiones devuelve un token nuevo"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
+    -Headers @{ Authorization = "Bearer $tokenViejoDeFranco" } } `
+    401 "el token anterior queda invalidado aunque no haya expirado"
+
+# El resto del script sigue con el token nuevo.
+$franco = @{ Authorization = "Bearer $($sesionNueva.token)" }
+$categorias = Invoke-RestMethod -Uri "$base/categorias" -Headers $franco
+Chequear (($categorias | Measure-Object).Count -eq 6) "el token nuevo funciona"
+
+# Y el de Ella no se toca: cerrar sesiones es por usuario, no global.
+$catsElla = Invoke-RestMethod -Uri "$base/categorias" -Headers $ella
+Chequear (($catsElla | Measure-Object).Count -eq 6) "la sesion de Ella no se vio afectada"
+
 # ---------------------------------------------------------------------------
 Titulo "1. Ella carga un gasto PERSONAL marcado como hormiga"
 

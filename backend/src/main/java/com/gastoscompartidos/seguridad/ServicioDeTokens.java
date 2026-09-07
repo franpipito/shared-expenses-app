@@ -68,10 +68,14 @@ public class ServicioDeTokens {
      * apenas cambien y no habria forma de refrescarla hasta que expire el token.
      * Con solo el id, cada request lee el estado actual de la base.
      */
-    public String emitirPara(Long usuarioId) {
+    public String emitirPara(Long usuarioId, long tokenVersion) {
         Instant ahora = Instant.now(reloj);
         return Jwts.builder()
                 .subject(String.valueOf(usuarioId))
+                // La generacion de tokens del usuario. Es lo que permite
+                // revocar: si en la base ese numero sube, este token queda
+                // fuera aunque siga sin expirar y con la firma valida.
+                .claim("tv", tokenVersion)
                 .issuedAt(Date.from(ahora))
                 .expiration(Date.from(ahora.plus(duracion)))
                 .signWith(clave)
@@ -85,7 +89,7 @@ public class ServicioDeTokens {
      * cuando alguien prueba con basura. Por eso devuelve Optional y no lanza:
      * quien llama decide que hacer, y el filtro simplemente no autentica.
      */
-    public Optional<Long> usuarioDe(String token) {
+    public Optional<IdentidadDelToken> identidadDe(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(clave)   // aca se chequea la firma
@@ -94,7 +98,14 @@ public class ServicioDeTokens {
                     .parseSignedClaims(token)
                     .getPayload();       // y aca ya se verifico tambien la expiracion
 
-            return Optional.of(Long.valueOf(claims.getSubject()));
+            // Un token viejo, emitido antes de que existiera el claim, se trata
+            // como generacion 0.
+            long tokenVersion = claims.get("tv", Number.class) == null
+                    ? 0L
+                    : claims.get("tv", Number.class).longValue();
+
+            return Optional.of(new IdentidadDelToken(
+                    Long.valueOf(claims.getSubject()), tokenVersion));
         } catch (JwtException | IllegalArgumentException e) {
             // Firma invalida, token expirado, malformado, algoritmo distinto al
             // esperado... todos terminan aca y todos significan lo mismo: no
