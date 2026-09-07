@@ -102,7 +102,16 @@ cobrar; una app que la haga sentir culpable se desinstala. "Preocupada" y
 "orgullosa cuando mejoras" suele sostener mas el uso que "enojada". Decision de
 Franco, que conoce a la usuaria.
 
-### Direccion visual, decidida sobre mockups reales
+### Direccion visual: `docs/diseno.md`
+Los colores (en oklch), las tipografias, las cuatro nutrias y **la estructura de
+carpetas de cada stack** viven ahi. Dos reglas que conviene tener presentes sin
+abrir el archivo:
+
+- **El ambar es del gasto hormiga y de nada mas.** Si decora botones o titulos,
+  deja de significar algo, y significar algo es todo su trabajo.
+- **En React y React Native no se organiza por capas sino por features.** MVC
+  agrupa por tipo de archivo, lo que en React obliga a abrir tres carpetas para
+  tocar una pantalla. El backend si es MVC por capas y no cambia.
 
 Se generaron dos mockups (v0/Vercel y Lovable) y **los evaluo Viole**. Su
 veredicto, que es el que manda:
