@@ -140,7 +140,7 @@ mockup, no un elemento de la app: el animo lo decide el backend.
 | DB local | Docker Compose (`docker compose up -d`)       | en curso |
 | Mobile   | Expo + React Native + TypeScript              | pendiente |
 | Web      | React + Vite + TypeScript + Tailwind          | pendiente |
-| Deploy   | Railway o Render + Postgres gestionado        | pendiente |
+| Deploy   | Railway (Docker) + Postgres gestionado        | listo |
 
 Build con el **Maven wrapper** (`./mvnw`, `mvnw.cmd`): no hace falta instalar
 Maven, el script baja la version que el proyecto declara.
@@ -436,7 +436,12 @@ con el lenguaje del producto.
       registro cerrado con codigo de invitacion. UsuarioActualPorHeader se
       reemplazo por UsuarioActualPorJwt sin tocar ningun servicio ni
       controlador. Smoke test extendido a 57 chequeos.
-- [ ] **5 — Deploy.** Railway o Render + Postgres gestionado + Flyway + env vars.
+- [x] **5 — Deploy.** Railway con el Dockerfile multi-stage, Postgres gestionado
+      y Flyway aplicando las migraciones al arrancar. Verificado contra el
+      dominio publico: `/actuator/health` en UP y sin `components`, login con
+      JWT, alta de gasto, resumen con el animo de la nutria, y baja. El bean
+      `Clock` quedo probado en serio: el contenedor corre en UTC y el corte de
+      mes igual cayo en la fecha de Buenos Aires. Ver **`docs/deploy.md`**.
 - [ ] **6 — App Expo minima.** Contra la API deployada, no localhost.
 - [ ] **7 — Build EAS y TestFlight.**
 

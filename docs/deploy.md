@@ -32,11 +32,24 @@ Elegí también un código de invitación nuevo, distinto de `nutrias`.
 
 1. En Railway, **New Project → Deploy from GitHub repo** y elegí
    `shared-expenses-app`.
-2. En el servicio creado, **Settings → Root Directory**: poné `backend`.
-   Sin esto Railway busca el Dockerfile en la raíz del repo y no lo encuentra.
-3. **Settings → Health Check Path**: `/actuator/health`.
-   Railway consulta ahí antes de mandar tráfico al contenedor nuevo. Sin health
-   check, un deploy roto recibe requests igual.
+
+> **OJO, acá se traba todo el mundo.** Un proyecto de Railway es un contenedor
+> de servicios: el backend va a ser uno y Postgres otro. La configuración de
+> build vive en **cada servicio**, NO en Project Settings.
+>
+> Si abriste Project Settings y ves *Usage, Environments, Members, Tokens…*,
+> estás en el lugar equivocado y Root Directory no va a aparecer nunca.
+>
+> Para llegar al lugar correcto: **primer ícono de la barra lateral izquierda**
+> (el de nodos conectados) → click en la tarjeta del servicio → pestaña
+> **Settings** de ese panel.
+
+2. En **Settings del servicio → sección Source → Root Directory**: poné
+   `backend`. Sin esto Railway busca el Dockerfile en la raíz del repo, no lo
+   encuentra, e intenta adivinar cómo construir el proyecto.
+3. En **Settings del servicio → sección Deploy → Health Check Path**:
+   `/actuator/health`. Railway consulta ahí antes de mandar tráfico al
+   contenedor nuevo. Sin health check, un deploy roto recibe requests igual.
 
 ## 3. Agregar Postgres
 
@@ -133,16 +146,46 @@ la zona horaria del contenedor no afecta a la app. Los cortes de mes usan el bea
 `Instant`, que no depende de zona. Logs en UTC es además la práctica habitual
 cuando el servidor puede estar en cualquier lado.
 
+## 6. Pausar el servicio entre sesiones
+
+Railway no tiene plan gratuito permanente: el credito inicial se consume mientras
+el contenedor corre, aunque nadie lo use. Hasta que la app este en el celular de
+Viole (sesion 7) no hace falta que este prendido las 24 horas.
+
+**Settings del servicio → Pause / Remove.** Se despierta con un redeploy y las
+variables quedan guardadas. Postgres se puede dejar online: su costo es mucho
+menor y ahi vive el estado.
+
 ## Si algo falla
 
 | Síntoma | Causa probable |
 |---|---|
 | El build no encuentra el Dockerfile | Falta **Root Directory = `backend`** |
+| El build dice `BUILD SUCCESS` pero el health check falla once veces con `service unavailable` | El build NO es el problema: el contenedor arranca y muere. `service unavailable` a secas significa que nada escucha en el puerto. Casi siempre son las variables sin cargar: sin `JWT_SECRETO` la app sale con codigo 1. **Los logs que sirven son los de Deploy Logs, no los de Build Logs**: son dos pestañas distintas y en las de build no aparece una sola linea de la app |
 | `IllegalStateException: Falta la variable de entorno JWT_SECRETO` | Funcionó la validación: falta cargar la variable |
 | `Schema validation: missing table` | Flyway no corrió. Revisar que `spring-boot-starter-flyway` esté en el pom, no solo `flyway-core` |
 | `Connection refused` a la base | La URL quedó en formato `postgresql://` en vez de `jdbc:postgresql://` |
 | `UnknownHostException` con `.railway.internal` | La red privada de Railway resuelve por IPv6 y a veces tarda en estar lista. Probar con las variables públicas del Postgres |
-| El health check falla y Railway reinicia en loop | Ver los logs: casi siempre es la base o una variable faltante |
+| El deploy dice *successful* y *Online* pero la URL no existe | El servicio arranca **Unexposed**. Falta **Settings → Networking → Generate Domain** |
+
+## Cosas que se aprendieron deployando
+
+- **`smoke-test.ps1` NO se corre contra produccion.** Esta clavado a
+  `localhost:8080`, usa el codigo de invitacion y la contrasena de desarrollo, y
+  arranca registrando usuarios: contra la base real fallaria en la primera linea
+  porque el grupo ya esta completo. Es un script de la maquina de desarrollo.
+- **No hay endpoint para cambiar el email ni la contrasena.** Esta fuera del MVP
+  a proposito: son dos personas que se registran una vez. Si hay que corregir un
+  email, es un `UPDATE usuario SET email = '...' WHERE id = ...` en la consola de
+  Railway, **en minusculas y sin espacios**, porque `normalizar()` busca asi y
+  una mayuscula deja a esa persona sin poder entrar.
+- **La politica de contrasenas muerde de verdad.** `violeyfran2026` se rechaza
+  para `viole@minutria.app` porque empieza con la parte local del email, que es
+  la primera combinacion que prueba cualquier ataque dirigido.
+- **El `Clock` con zona horaria se justifico el primer dia.** El contenedor
+  arranco a las 01:47 UTC del 7 de septiembre y el resumen del mes igual corto
+  en el 6, que era la fecha en Buenos Aires. Sin el bean, el corte de mes se
+  habria adelantado seis horas todas las noches.
 
 ## Pendientes conocidos para después del deploy
 
