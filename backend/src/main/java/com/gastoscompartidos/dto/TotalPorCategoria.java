@@ -7,7 +7,7 @@ import java.math.BigDecimal;
  * evitable.
  */
 public record TotalPorCategoria(
-        Long categoriaId,
+        String categoriaId,
         String nombre,
         String icono,
         BigDecimal total,

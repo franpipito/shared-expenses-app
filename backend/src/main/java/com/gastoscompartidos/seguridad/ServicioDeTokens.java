@@ -68,10 +68,10 @@ public class ServicioDeTokens {
      * apenas cambien y no habria forma de refrescarla hasta que expire el token.
      * Con solo el id, cada request lee el estado actual de la base.
      */
-    public String emitirPara(Long usuarioId, long tokenVersion) {
+    public String emitirPara(String usuarioId, long tokenVersion) {
         Instant ahora = Instant.now(reloj);
         return Jwts.builder()
-                .subject(String.valueOf(usuarioId))
+                .subject(usuarioId)
                 // La generacion de tokens del usuario. Es lo que permite
                 // revocar: si en la base ese numero sube, este token queda
                 // fuera aunque siga sin expirar y con la firma valida.
@@ -105,7 +105,7 @@ public class ServicioDeTokens {
                     : claims.get("tv", Number.class).longValue();
 
             return Optional.of(new IdentidadDelToken(
-                    Long.valueOf(claims.getSubject()), tokenVersion));
+                    claims.getSubject(), tokenVersion));
         } catch (JwtException | IllegalArgumentException e) {
             // Firma invalida, token expirado, malformado, algoritmo distinto al
             // esperado... todos terminan aca y todos significan lo mismo: no

@@ -57,8 +57,8 @@ public class GastoControlador {
     @GetMapping
     public List<GastoRespuesta> listar(
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth mes,
-            @RequestParam(required = false) Long categoria,
-            @RequestParam(required = false) Long pagadoPor) {
+            @RequestParam(required = false) String categoria,
+            @RequestParam(required = false) String pagadoPor) {
         return servicio.listar(mes, categoria, pagadoPor);
     }
 
@@ -68,7 +68,7 @@ public class GastoControlador {
      * @PathVariable toma el {id} de la ruta.
      */
     @PutMapping("/{id}")
-    public GastoRespuesta actualizar(@PathVariable Long id,
+    public GastoRespuesta actualizar(@PathVariable String id,
                                      @Valid @RequestBody GuardarGastoRequest req) {
         return servicio.actualizar(id, req);
     }
@@ -80,7 +80,7 @@ public class GastoControlador {
      */
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void eliminar(@PathVariable Long id) {
+    public void eliminar(@PathVariable String id) {
         servicio.eliminar(id);
     }
 }

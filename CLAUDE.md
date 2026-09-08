@@ -145,11 +145,11 @@ mockup, no un elemento de la app: el animo lo decide el backend.
 
 | Pieza    | Tecnologia                                    | Estado |
 |----------|-----------------------------------------------|--------|
-| Backend  | Java 21 + Spring Boot 4.1.1 + PostgreSQL 17   | en curso |
+| Backend  | Java 21 + Spring Boot 4.1.1 + MongoDB 8       | en curso |
 | DB local | Docker Compose (`docker compose up -d`)       | en curso |
 | Mobile   | Expo + React Native + TypeScript              | pendiente |
 | Web      | React + Vite + TypeScript + Tailwind          | pendiente |
-| Deploy   | Railway (Docker) + Postgres gestionado        | listo |
+| Deploy   | Railway (se acaba el credito) -> Render + Atlas | a migrar |
 
 Build con el **Maven wrapper** (`./mvnw`, `mvnw.cmd`): no hace falta instalar
 Maven, el script baja la version que el proyecto declara.
@@ -277,22 +277,71 @@ era. No es decorativa.
 UPDATE. Si los dos integrantes editan el mismo gasto a la vez, la segunda
 escritura falla en vez de pisar la primera en silencio.
 
-### Schema: Flyway, no `ddl-auto`
-Las migraciones viven en `backend/src/main/resources/db/migration` y corren al
-arrancar. Flyway guarda un checksum de cada archivo: **una migracion ya aplicada
-no se edita nunca**, porque la app se niega a arrancar si cambia. Para corregir
-algo se escribe una version nueva.
+### Schema: no hay. Es MongoDB.
 
-`ddl-auto=validate`: Hibernate ya no toca el esquema, solo verifica al arrancar
-que las entidades coincidan con las tablas. Si alguien agrega un campo a una
-entidad y se olvida la migracion, la app no arranca en vez de romperse en la
-primera consulta que use esa columna.
+**Esta es la perdida mas seria del cambio de base, y conviene poder nombrarla.**
 
-**OJO EN BOOT 4:** hace falta `spring-boot-starter-flyway`, NO `flyway-core`
-suelto. Cada integracion vive en su propio modulo, y con la libreria sola la app
-levanta sin decir una palabra sobre Flyway y falla despues por tablas que no
-existen. En Boot 3 alcanzaba con `flyway-core`, y por eso todo internet lo dice
-asi.
+Con Postgres habia migraciones versionadas con checksum en `db/migration`, mas
+`ddl-auto=validate`: si alguien agregaba un campo a una entidad y se olvidaba la
+migracion, **la app no arrancaba**. Un error se convertia en un deploy fallido,
+que es el mejor lugar para que aparezca.
+
+Mongo no tiene esquema. Un campo que se agrega y no se migra simplemente llega
+`null` en produccion, y te enteras tres pantallas mas alla cuando algo se rompe
+raro. Lo que quedo en su lugar:
+
+- **`SembradorDeCategorias`** siembra las seis categorias al arrancar. Es
+  idempotente porque esta escrito idempotente, no porque nada lo controle.
+- **`auto-index-creation=true`** crea los indices declarados con `@Indexed` y
+  `@CompoundIndex`. Crea indices; no valida la forma de los documentos.
+- **`ValidacionDeConfiguracion`** ahora chequea que `MONGO_URI` no apunte a
+  localhost en produccion. No reemplaza a Flyway, pero tapa un agujero nuevo: sin
+  eso la app arrancaria contra una base vacia sin dar un solo error.
+
+Si algun dia hacen falta migraciones de datos de verdad, la herramienta del
+ecosistema es **Mongock**.
+
+### El modelado: snapshots embebidos, y lo que cuestan
+`Gasto` guarda `pagadoPor` y `categoria` como **documentos embebidos**
+(`{id, nombre}` y `{id, nombre, icono}`), no como referencias.
+
+Lo que se gana: la consulta mas frecuente de la app —- listar los gastos del mes
+-— es una sola lectura, sin `$lookup` y sin N+1 posible. Ademas se resolvio solo
+el pendiente de que `password_hash` viajara en cada listado, porque el snapshot
+no lo incluye por construccion.
+
+Lo que se paga: **si se renombra una categoria, los gastos viejos conservan el
+nombre viejo.** Se acepta porque son las seis palabras que uso la usuaria y no
+cambian. Si cambiaran, las salidas son un `updateMany` o asumir el snapshot como
+dato historico ("asi se llamaba cuando lo cargo").
+
+### No hay `@Transactional` en ningun servicio
+No es un olvido. Mongo tiene transacciones multi-documento, pero exigen un
+replica set y un `MongoTransactionManager` que Spring Boot no crea solo — y aca
+casi todos los metodos escriben **un solo documento**, que en Mongo ya es atomico.
+
+La diferencia de fondo con Postgres: alla `@Transactional` no servia solo para
+atomicidad, abria la sesion de Hibernate, y de ahi salian el dirty checking y las
+relaciones lazy. Aca lo que se lee es un objeto comun de Java: si querés que un
+cambio se guarde, llamás a `save()`. Menos magia, y menos cosas que pasan sin que
+las hayas pedido.
+
+**El unico lugar que escribe dos documentos es el registro** (crea el grupo y el
+usuario). Si falla en el medio queda un grupo huerfano; el reintento se cura solo
+porque el segundo intento encuentra el grupo existente.
+
+### Fechas como texto ISO, montos como Decimal128
+Dos conversiones declaradas a mano en `ConfiguracionMongo`, y las dos importan:
+
+- **`LocalDate` -> `"2026-09-07"`.** Mongo no tiene "fecha sin hora": su tipo
+  Date es un instante UTC, o sea el mismo bug de zona horaria que motivo el bean
+  `Clock`. Como texto, el dia es el dia. No se pierde nada al consultar porque
+  **las fechas ISO ordenan igual como texto que como fecha**, asi que el rango
+  semiabierto `[desde, hasta)` sigue funcionando con `$gte`/`$lt`.
+- **`BigDecimal` -> `Decimal128`.** Es el analogo de `NUMERIC(12,2)`: decimal
+  exacto. Sin declararlo, Spring Data lo guarda como String (no se puede sumar) o
+  como Double (y vuelve el problema del centavo). Importa el doble porque el
+  resumen y el saldo suman con `$sum` **adentro de Mongo**.
 
 ### Endurecimiento previo al deploy
 - **Rate limiting** en `/auth/login` y `/auth/registro` (`LimitadorDeIntentos`,
@@ -417,11 +466,11 @@ octubre en UTC, y Railway y Render corren en UTC. Configurable por
     dto/          records de entrada y salida. La API NUNCA expone entidades
     seguridad/    JWT, filtro, config de Spring Security y UsuarioActual
     error/        excepciones de dominio + @RestControllerAdvice
+    config/       conversores de Mongo y el sembrador de categorias
 /mobile       Expo (sesion 6)
 /web          React + Vite (despues del MVP)
-docker-compose.yml       Postgres local
+docker-compose.yml       MongoDB local
 scripts/
-  seed-desarrollo.sql    solo categorias (los usuarios los crea /auth/registro)
   smoke-test.ps1         57 chequeos de la API contra el backend corriendo
 ```
 
@@ -451,7 +500,26 @@ con el lenguaje del producto.
       JWT, alta de gasto, resumen con el animo de la nutria, y baja. El bean
       `Clock` quedo probado en serio: el contenedor corre en UTC y el corte de
       mes igual cayo en la fecha de Buenos Aires. Ver **`docs/deploy.md`**.
-- [ ] **6 — App Expo minima.** Contra la API deployada, no localhost.
+- [~] **6 — App Expo minima.** Contra la API deployada, no localhost. Estan el
+      login, el resumen con el animo de la nutria y el alta de gasto, corriendo
+      en Expo Go. **Falta la lista de gastos del mes** (que es donde se ve la
+      marca de hormiga por gasto, o sea el producto), la pantalla de saldo, el
+      reparto personalizado, el tipo compartido, y editar/borrar. Ademas hay dos
+      bugs conocidos: los iconos de categoria se muestran como texto ("coffee")
+      en vez de iconos de Lucide, y el numero grande del resumen se parte en dos
+      lineas cuando no entra.
+- [x] **6.5 — Migracion a MongoDB.** El motivo es de busqueda laboral: la
+      postulacion pide relacional y no relacional, y MatchPoint ya cubre
+      Postgres. Se rehicieron modelo, repositorios y los dos servicios que tocan
+      agregados. **No se toco `seguridad/` ni `error/`, y `CalculadorDeAnimo` y
+      `Periodo` siguen igual** —- los 24 tests puros pasaron sin cambios. Ver las
+      secciones de modelado, transacciones y conversores mas arriba.
+- [ ] **6.6 — Salir de Railway.** El credito de $5 se acaba y no hay tier gratis
+      permanente. Destino elegido: **Render (Docker) + MongoDB Atlas M0**, los dos
+      gratis, con un cron externo pegandole cada 10 minutos para que el servicio
+      no se duerma. El arranque en frio de Spring Boot es de 40-60s, y la app
+      tiene un requisito duro de velocidad de carga: el ping es lo que hace que
+      Viole nunca se lo coma. Atlas y Render **en la misma region**.
 - [ ] **7 — Build EAS y TestFlight.**
 
 ## Comandos
@@ -464,11 +532,11 @@ con el lenguaje del producto.
 > `Invoke-WebRequest`: para el curl de verdad va `curl.exe`.
 
 ```powershell
-# Levantar Postgres
+# Levantar MongoDB
 docker compose up -d
 
-# Las categorias las crea Flyway (V2). Los usuarios, POST /auth/registro.
-# No hay script de seed que correr.
+# Las categorias las siembra SembradorDeCategorias al arrancar la app.
+# Los usuarios, POST /auth/registro. No hay script de seed que correr.
 
 # Levantar la API
 cd backend; .\mvnw.cmd spring-boot:run
@@ -476,6 +544,6 @@ cd backend; .\mvnw.cmd spring-boot:run
 # Correr los tests
 cd backend; .\mvnw.cmd test
 
-# Consola de Postgres
-docker exec -it gastos-postgres psql -U gastos -d gastos
+# Consola de MongoDB
+docker exec -it gastos-mongo mongosh -u gastos -p gastos_local --authenticationDatabase admin gastos
 ```

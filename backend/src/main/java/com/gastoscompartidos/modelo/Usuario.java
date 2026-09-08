@@ -1,63 +1,99 @@
 package com.gastoscompartidos.modelo;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 /**
  * Un usuario pertenece a exactamente un grupo.
  * La contrasena se guarda hasheada (BCrypt); nunca en texto plano.
  */
-@Entity
-@Table(
-        name = "usuario",
-        uniqueConstraints = @UniqueConstraint(name = "uk_usuario_email", columnNames = "email")
-)
+@Document(collection = "usuario")
 public class Usuario {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(nullable = false, length = 100)
     private String nombre;
 
-    @Column(nullable = false, length = 255)
+    /**
+     * unique = true crea el indice unico sobre email, que es lo que impide dos
+     * cuentas con el mismo mail.
+     *
+     * DIFERENCIA REAL CON POSTGRES, y conviene tenerla clara: alla la restriccion
+     * la creaba una migracion y estaba garantizada antes de que la app corriera.
+     * Aca el indice lo crea la app al arrancar. Si por algun motivo no llega a
+     * crearse, **Mongo acepta el duplicado sin quejarse** — no hay un esquema
+     * que lo impida por su cuenta. Es la clase de garantia que en Mongo hay que
+     * verificar, no asumir.
+     */
+    @Indexed(unique = true)
     private String email;
 
-    @Column(name = "password_hash", nullable = false, length = 100)
+    /**
+     * @Field renombra el campo en el documento. Se podria dejar `passwordHash`
+     * en camelCase, pero se mantiene `password_hash` para que quien mire la
+     * coleccion desde Atlas vea los mismos nombres que veia en Postgres.
+     */
+    @Field("password_hash")
     private String passwordHash;
 
     /**
      * Numero de generacion de los tokens de este usuario.
      *
-     * Cada JWT emitido lleva adentro el valor que tenia esta columna en ese
+     * Cada JWT emitido lleva adentro el valor que tenia este campo en ese
      * momento, y cada request lo compara contra el actual. Subirle uno invalida
      * al instante todos los tokens emitidos antes: es la forma de recuperar la
      * capacidad de revocar sin dejar de ser stateless.
      */
-    @Column(name = "token_version", nullable = false)
+    @Field("token_version")
     private long tokenVersion = 0L;
 
     /**
-     * FetchType.LAZY: al traer un Usuario, NO se trae el Grupo hasta que alguien
-     * llame a getGrupo(). Por defecto @ManyToOne es EAGER, que dispara un JOIN
-     * en cada consulta aunque no se use. LAZY es casi siempre lo que uno quiere.
+     * El grupo, como referencia por id y no como objeto embebido.
+     *
+     * En JPA esto era un @ManyToOne LAZY. En Mongo hay tres opciones y vale
+     * saber por que esta:
+     *
+     *  - Embeber el Grupo entero: se duplicaria su nombre en cada usuario y
+     *    habria que actualizar los dos documentos al renombrarlo.
+     *  - @DBRef: Spring Data resuelve la referencia sola, pero dispara una
+     *    consulta extra invisible por cada acceso. Es el N+1 de JPA, con otro
+     *    nombre y sin fetch join para arreglarlo.
+     *  - El id pelado, que es esto: explicito, una sola consulta, y quien
+     *    necesita el grupo lo pide.
+     *
+     * En la practica casi nunca hace falta el Grupo entero: lo que se usa es el
+     * id, para filtrar los gastos.
      */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "grupo_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_usuario_grupo"))
-    private Grupo grupo;
+    @Field("grupo_id")
+    private String grupoId;
 
     protected Usuario() {
     }
 
-    public Usuario(String nombre, String email, String passwordHash, Grupo grupo) {
+    public Usuario(String nombre, String email, String passwordHash, String grupoId) {
         this.nombre = nombre;
         this.email = email;
         this.passwordHash = passwordHash;
-        this.grupo = grupo;
+        this.grupoId = grupoId;
     }
 
-    public Long getId() {
+    /**
+     * El snapshot de este usuario que se embebe en cada gasto que paga.
+     *
+     * Fijate que solo lleva id y nombre: el email y el hash de la contrasena se
+     * quedan afuera por construccion. Con Postgres, `join fetch g.pagadoPor`
+     * traia la entidad entera y el hash viajaba de la base a la app en cada
+     * listado de gastos — era un pendiente conocido en CLAUDE.md. El modelo de
+     * documentos lo resuelve solo.
+     */
+    public ReferenciaUsuario comoReferencia() {
+        return new ReferenciaUsuario(id, nombre);
+    }
+
+    public String getId() {
         return id;
     }
 
@@ -94,11 +130,11 @@ public class Usuario {
         this.tokenVersion++;
     }
 
-    public Grupo getGrupo() {
-        return grupo;
+    public String getGrupoId() {
+        return grupoId;
     }
 
-    public void setGrupo(Grupo grupo) {
-        this.grupo = grupo;
+    public void setGrupoId(String grupoId) {
+        this.grupoId = grupoId;
     }
 }

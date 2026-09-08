@@ -4,7 +4,7 @@ import com.gastoscompartidos.dto.ResumenRespuesta;
 import com.gastoscompartidos.dto.SaldoRespuesta;
 import com.gastoscompartidos.dto.TotalPorCategoria;
 import com.gastoscompartidos.modelo.AnimoNutria;
-import com.gastoscompartidos.modelo.Categoria;
+import com.gastoscompartidos.modelo.ReferenciaCategoria;
 import com.gastoscompartidos.modelo.Gasto;
 import com.gastoscompartidos.modelo.Periodo;
 import com.gastoscompartidos.modelo.Usuario;
@@ -12,7 +12,6 @@ import com.gastoscompartidos.repositorio.GastoRepositorio;
 import com.gastoscompartidos.repositorio.UsuarioRepositorio;
 import com.gastoscompartidos.seguridad.UsuarioActual;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -59,21 +58,25 @@ public class ResumenServicio {
         this.reloj = reloj;
     }
 
-    @Transactional(readOnly = true)
     public ResumenRespuesta resumen(YearMonth mes) {
         Usuario actual = usuarioActual.requerido();
-        Long grupoId = actual.getGrupo().getId();
-        Long yo = actual.getId();
+        String grupoId = actual.getGrupoId();
+        String yo = actual.getId();
 
         YearMonth periodoPedido = (mes != null) ? mes : YearMonth.now(reloj);
         Periodo actualP = Periodo.transcurridoDe(periodoPedido, LocalDate.now(reloj));
         Periodo anteriorP = actualP.mismoTramoDelMesAnterior();
 
-        // Traemos las filas del mes y agrupamos en memoria. A esta escala (dos
-        // personas, decenas de gastos por mes) el costo es despreciable, y a
-        // cambio la logica de agregacion queda en Java: legible y testeable sin
-        // base. Si algun dia un mes trajera miles de filas, esto se mueve a un
-        // GROUP BY en SQL.
+        // Traemos los documentos del mes y agrupamos en memoria. A esta escala
+        // (dos personas, decenas de gastos por mes) el costo es despreciable, y
+        // a cambio la logica de agregacion queda en Java: legible y testeable
+        // sin base. Si algun dia un mes trajera miles de documentos, esto se
+        // mueve a un $group en un pipeline, como ya estan sumarHormigaDe y
+        // saldoDe.
+        //
+        // Con los snapshots embebidos esto se volvio mas barato que en Postgres:
+        // agrupar por categoria no necesita ir a buscar ninguna categoria, su
+        // nombre y su icono ya vienen adentro de cada gasto.
         List<Gasto> delMes = gastos.buscarVisibles(
                 grupoId, yo, actualP.desde(), actualP.hasta(), null, null);
 
@@ -104,11 +107,10 @@ public class ResumenServicio {
                 animo);
     }
 
-    @Transactional(readOnly = true)
     public SaldoRespuesta saldo(YearMonth mes) {
         Usuario actual = usuarioActual.requerido();
-        Long grupoId = actual.getGrupo().getId();
-        Long yo = actual.getId();
+        String grupoId = actual.getGrupoId();
+        String yo = actual.getId();
 
         YearMonth periodoPedido = (mes != null) ? mes : YearMonth.now(reloj);
         Periodo periodo = Periodo.transcurridoDe(periodoPedido, LocalDate.now(reloj));
@@ -137,20 +139,22 @@ public class ResumenServicio {
 
     // ---------------------------------------------------------------- helpers
 
-    private List<TotalPorCategoria> agruparPorCategoria(List<Gasto> delMes, Long yo) {
-        Map<Long, List<Gasto>> agrupados = delMes.stream()
+    private List<TotalPorCategoria> agruparPorCategoria(List<Gasto> delMes, String yo) {
+        Map<String, List<Gasto>> agrupados = delMes.stream()
                 .collect(Collectors.groupingBy(
-                        g -> g.getCategoria().getId(),
+                        g -> g.getCategoria().categoriaId(),
                         LinkedHashMap::new,
                         Collectors.toList()));
 
         return agrupados.values().stream()
                 .map(deLaCategoria -> {
-                    Categoria categoria = deLaCategoria.get(0).getCategoria();
+                    // El snapshot embebido en el gasto, no la categoria de su
+                    // coleccion: no hace falta ir a buscarla.
+                    ReferenciaCategoria categoria = deLaCategoria.get(0).getCategoria();
                     return new TotalPorCategoria(
-                            categoria.getId(),
-                            categoria.getNombre(),
-                            categoria.getIcono(),
+                            categoria.categoriaId(),
+                            categoria.nombre(),
+                            categoria.icono(),
                             sumar(deLaCategoria.stream().map(g -> g.parteDe(yo)).toList()),
                             sumar(deLaCategoria.stream()
                                     .filter(Gasto::esHormiga)
@@ -166,8 +170,8 @@ public class ResumenServicio {
         return montos.stream().reduce(CERO, BigDecimal::add);
     }
 
-    private Usuario otroIntegrante(Long grupoId, Long yo) {
-        return usuarios.findByGrupoIdOrderById(grupoId).stream()
+    private Usuario otroIntegrante(String grupoId, String yo) {
+        return usuarios.findByGrupoIdOrderByIdAsc(grupoId).stream()
                 .filter(u -> !u.getId().equals(yo))
                 .findFirst()
                 .orElse(null);

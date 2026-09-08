@@ -5,6 +5,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.data.mongodb.config.EnableMongoAuditing;
 
 import java.time.Clock;
 import java.time.ZoneId;
@@ -22,6 +23,16 @@ import java.time.ZoneId;
  * arranque que forma parte del diseno.
  */
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
+/*
+ * @EnableMongoAuditing es lo que hace funcionar @CreatedDate y @LastModifiedDate
+ * en Gasto. Reemplaza a los callbacks @PrePersist y @PreUpdate de JPA, que
+ * venian activos sin pedir nada.
+ *
+ * Ojo con esto: si falta la anotacion, los campos creado_en y actualizado_en
+ * quedan en null y NADIE AVISA. No hay error de arranque ni warning en el log;
+ * simplemente los documentos salen sin fecha.
+ */
+@EnableMongoAuditing
 public class BackendApplication {
 
 	public static void main(String[] args) {

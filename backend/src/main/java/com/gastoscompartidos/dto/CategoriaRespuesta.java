@@ -15,7 +15,7 @@ import com.gastoscompartidos.modelo.Categoria;
  *  3. Desacopla: podes renombrar un campo de la entidad sin romper la app
  *     mobile, porque el contrato de la API es este record y no la tabla.
  */
-public record CategoriaRespuesta(Long id, String nombre, String icono) {
+public record CategoriaRespuesta(String id, String nombre, String icono) {
 
     /** Fabrica el DTO desde la entidad. Se llama dentro de la transaccion. */
     public static CategoriaRespuesta desde(Categoria categoria) {

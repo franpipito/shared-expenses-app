@@ -39,7 +39,7 @@ public record GuardarGastoRequest(
         BigDecimal monto,
 
         @NotNull(message = "la categoria es obligatoria")
-        Long categoriaId,
+        String categoriaId,
 
         @NotNull(message = "la fecha es obligatoria")
         @PastOrPresent(message = "la fecha no puede ser futura")
@@ -56,7 +56,7 @@ public record GuardarGastoRequest(
         @Max(value = 100, message = "el porcentaje va de 0 a 100")
         Integer porcentajePagador,
 
-        Long pagadoPorId,
+        String pagadoPorId,
 
         /*
          * Boolean y no boolean, a proposito.

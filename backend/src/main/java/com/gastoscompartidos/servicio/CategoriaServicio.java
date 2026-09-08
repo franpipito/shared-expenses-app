@@ -3,7 +3,6 @@ package com.gastoscompartidos.servicio;
 import com.gastoscompartidos.dto.CategoriaRespuesta;
 import com.gastoscompartidos.repositorio.CategoriaRepositorio;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -28,11 +27,11 @@ public class CategoriaServicio {
     }
 
     /**
-     * readOnly = true le avisa a Hibernate que no hace falta el dirty checking
-     * (no va a haber UPDATEs), asi que no guarda la foto del estado original de
-     * cada entidad. En lecturas grandes ahorra memoria y trabajo.
+     * Ya no lleva @Transactional(readOnly = true). Esa anotacion le avisaba a
+     * Hibernate que no hiciera dirty checking, y en Mongo no hay dirty checking
+     * que evitar: lo que se lee es un objeto comun de Java. Sin sesion que
+     * abrir, la anotacion seria puro ruido.
      */
-    @Transactional(readOnly = true)
     public List<CategoriaRespuesta> listar() {
         return categorias.findAllByOrderByNombreAsc()
                 .stream()

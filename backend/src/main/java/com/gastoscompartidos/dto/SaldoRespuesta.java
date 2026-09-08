@@ -23,9 +23,9 @@ import java.math.BigDecimal;
 public record SaldoRespuesta(
         String mes,
         BigDecimal monto,
-        Long deudorId,
+        String deudorId,
         String deudorNombre,
-        Long acreedorId,
+        String acreedorId,
         String acreedorNombre,
         BigDecimal aFavorMio
 ) {

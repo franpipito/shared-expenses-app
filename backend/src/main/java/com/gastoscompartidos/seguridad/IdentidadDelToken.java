@@ -7,5 +7,5 @@ package com.gastoscompartidos.seguridad;
  * identificador y no un portador de permisos: no lleva nombre, ni grupo, ni
  * roles. Solo quien decis ser, y de que generacion de tokens venis.
  */
-public record IdentidadDelToken(Long usuarioId, long tokenVersion) {
+public record IdentidadDelToken(String usuarioId, long tokenVersion) {
 }

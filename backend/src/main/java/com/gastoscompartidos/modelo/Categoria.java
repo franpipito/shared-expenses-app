@@ -1,28 +1,38 @@
 package com.gastoscompartidos.modelo;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * Categorias predefinidas y compartidas por todos los grupos.
- * Es tabla y no enum de Java a proposito: asi se pueden agregar categorias
- * sin recompilar ni redeployar el backend.
+ * Una categoria de gasto. Son datos de referencia: cafe, uber, comida, ropa,
+ * regalos, otros. Salieron de las palabras que uso la usuaria en la entrevista.
+ *
+ * Con Postgres se sembraban con la migracion V2 de Flyway, que garantizaba que
+ * viajaran con el esquema. Sin Flyway, las siembra `SembradorDeCategorias` al
+ * arrancar. La diferencia no es cosmetica: Flyway registraba que la migracion
+ * ya se habia aplicado, y el sembrador tiene que verificarlo el mismo cada vez.
  */
-@Entity
-@Table(
-        name = "categoria",
-        uniqueConstraints = @UniqueConstraint(name = "uk_categoria_nombre", columnNames = "nombre")
-)
+@Document(collection = "categoria")
 public class Categoria {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(nullable = false, length = 50)
+    /**
+     * unique = true crea un indice unico en Mongo, que es lo que impide dos
+     * categorias con el mismo nombre.
+     *
+     * OJO CON UNA DIFERENCIA IMPORTANTE respecto de Postgres: aca el indice lo
+     * crea la app al arrancar (auto-index-creation), no una migracion. Si la
+     * coleccion YA tuviera duplicados, la creacion del indice falla y se entera
+     * el log, no el deploy. Con Flyway, una migracion que no podia aplicarse
+     * frenaba el arranque.
+     */
+    @Indexed(unique = true)
     private String nombre;
 
-    /** Nombre del icono que consume el cliente (mobile/web decide como dibujarlo). */
-    @Column(nullable = false, length = 50)
+    /** Nombre del icono de Lucide: "coffee", "car", "utensils". No es un emoji. */
     private String icono;
 
     protected Categoria() {
@@ -33,7 +43,7 @@ public class Categoria {
         this.icono = icono;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
@@ -41,15 +51,7 @@ public class Categoria {
         return nombre;
     }
 
-    public void setNombre(String nombre) {
-        this.nombre = nombre;
-    }
-
     public String getIcono() {
         return icono;
-    }
-
-    public void setIcono(String icono) {
-        this.icono = icono;
     }
 }

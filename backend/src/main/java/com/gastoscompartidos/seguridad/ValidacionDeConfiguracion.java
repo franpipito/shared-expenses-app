@@ -27,7 +27,7 @@ public class ValidacionDeConfiguracion {
     public ValidacionDeConfiguracion(
             @Value("${app.jwt.secreto}") String secretoJwt,
             @Value("${app.registro.codigo-invitacion}") String codigoInvitacion,
-            @Value("${spring.jpa.hibernate.ddl-auto}") String ddlAuto) {
+            @Value("${spring.mongodb.uri}") String mongoUri) {
 
         if (secretoJwt.contains("NO-USAR-EN-PRODUCCION")) {
             throw new IllegalStateException("""
@@ -43,12 +43,27 @@ public class ValidacionDeConfiguracion {
                     El codigo de desarrollo esta en el repo, asi que cualquiera podria registrarse.""");
         }
 
-        // update en produccion modificaria el esquema por su cuenta, saltandose
-        // Flyway y dejando la base y las migraciones fuera de sincronia.
-        if (!"validate".equals(ddlAuto) && !"none".equals(ddlAuto)) {
+        // ACA HABIA UN CHEQUEO DE ddl-auto, que con Postgres impedia que
+        // Hibernate modificara el esquema por su cuenta saltandose Flyway.
+        // Mongo no tiene esquema, asi que ese chequeo perdio sentido -- pero el
+        // hueco se puede llenar con algo que si aplica.
+        //
+        // Si la app de produccion arranca con la URI local, levanta contra una
+        // base vacia y "funciona": deja registrarse, deja cargar gastos, y nadie
+        // se entera de que los datos se van a un Mongo efimero adentro del
+        // contenedor. Es peor que fallar, porque falla en silencio.
+        if (mongoUri.contains("localhost") || mongoUri.contains("127.0.0.1")) {
+            throw new IllegalStateException("""
+                    Falta la variable de entorno MONGO_URI.
+                    La app esta apuntando a la base local, no a Atlas: arrancaria contra una
+                    base vacia sin dar ningun error, y los datos se perderian al reiniciar.""");
+        }
+
+        // Las credenciales de Atlas viajan adentro de la URI. Que no aparezcan
+        // las de desarrollo, que estan en el repo a la vista.
+        if (mongoUri.contains("gastos_local")) {
             throw new IllegalStateException(
-                    "ddl-auto tiene que ser validate o none en produccion, no '" + ddlAuto + "'. "
-                    + "El esquema lo maneja Flyway.");
+                    "MONGO_URI trae la contrasena de desarrollo, que esta publicada en el repo.");
         }
     }
 }

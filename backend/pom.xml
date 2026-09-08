@@ -30,9 +30,14 @@
 		<java.version>21</java.version>
 	</properties>
 	<dependencies>
+		<!-- MongoDB. Trae Spring Data MongoDB y el driver sincronico.
+		     Reemplaza a spring-boot-starter-data-jpa: no hay Hibernate, no hay
+		     JPQL y no hay ddl-auto. Lo que se conserva del mundo Spring Data es
+		     la forma: repositorios como interfaces, consultas derivadas del
+		     nombre del metodo, y @Version para bloqueo optimista. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<artifactId>spring-boot-starter-data-mongodb</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -55,24 +60,24 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
-		<!-- Migraciones versionadas.
-		     OJO: tiene que ser el STARTER de Spring Boot, no flyway-core suelto.
-		     En Boot 4 cada integracion vive en su propio modulo
-		     (spring-boot-flyway), y flyway-core por si solo te da la libreria
-		     pero NO la autoconfiguracion que corre las migraciones al arrancar.
-		     El sintoma es traicionero: la app levanta, no dice una palabra sobre
-		     Flyway, y falla mas adelante por tablas que no existen.
-		     En Boot 3 alcanzaba con flyway-core, y por eso todo internet lo dice
-		     asi. -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-flyway</artifactId>
-		</dependency>
-		<!-- Desde Flyway 10, el soporte de cada motor va aparte. -->
-		<dependency>
-			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-database-postgresql</artifactId>
-		</dependency>
+		<!--
+		     ACA ESTABA FLYWAY, y su ausencia es la perdida mas seria de la
+		     migracion a Mongo.
+
+		     Con Postgres habia migraciones versionadas con checksum y
+		     ddl-auto=validate: si una entidad no coincidia con su tabla, la app
+		     NO ARRANCABA. Mongo no tiene esquema, asi que esa red no existe. Un
+		     campo que se agrega y no se migra simplemente llega null en
+		     produccion, y te enteras cuando algo se rompe raro tres pantallas
+		     mas alla.
+
+		     Lo que se puede hacer y esta hecho: las categorias las siembra
+		     SembradorDeCategorias al arrancar, y los indices los declara
+		     @CompoundIndex en la entidad. Lo que NO se puede hacer es detectar
+		     documentos viejos con la forma vieja. Si algun dia hacen falta
+		     migraciones de datos de verdad, la herramienta del ecosistema es
+		     Mongock.
+		-->
 
 		<!--
 			jjwt viene partido en tres a proposito: tu codigo compila solo contra
@@ -98,13 +103,8 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.postgresql</groupId>
-			<artifactId>postgresql</artifactId>
-			<scope>runtime</scope>
-		</dependency>
-		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
+			<artifactId>spring-boot-starter-data-mongodb-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

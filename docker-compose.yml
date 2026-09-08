@@ -1,29 +1,36 @@
-# Postgres local para desarrollo.
+# MongoDB local para desarrollo.
 # Levantar:  docker compose up -d
 # Apagar:    docker compose down        (los datos sobreviven, viven en el volumen)
 # Borrar:    docker compose down -v     (elimina el volumen y con el los datos)
+#
+# En produccion esto lo reemplaza MongoDB Atlas M0, que es gratis para siempre.
 services:
-  postgres:
-    image: postgres:17-alpine
-    container_name: gastos-postgres
+  mongo:
+    image: mongo:8
+    container_name: gastos-mongo
     environment:
-      POSTGRES_DB: gastos
-      POSTGRES_USER: gastos
-      POSTGRES_PASSWORD: gastos_local
+      MONGO_INITDB_ROOT_USERNAME: gastos
+      MONGO_INITDB_ROOT_PASSWORD: gastos_local
+      MONGO_INITDB_DATABASE: gastos
     ports:
-      # 127.0.0.1 adelante, y no solo "5432:5432", que publica el puerto en
+      # 127.0.0.1 adelante, y no solo "27017:27017", que publica el puerto en
       # TODAS las interfaces de red. Con el binding abierto, cualquiera en la
       # misma red (un wifi de cafe, por ejemplo) puede conectarse a esta base
       # con el usuario y la contrasena que estan ahi abajo, a la vista en el
       # repo. Asi solo escucha en tu propia maquina.
-      - "127.0.0.1:5432:5432"
+      #
+      # Con Mongo importa MAS que con Postgres: durante anios la imagen por
+      # defecto venia sin autenticacion, y hay bots que barren internet
+      # buscando el 27017 abierto justamente por eso.
+      - "127.0.0.1:27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongo_data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gastos -d gastos"]
+      # mongosh reemplazo a la vieja shell `mongo`, que ya no viene en la imagen.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 5s
       retries: 10
 
 volumes:
-  postgres_data:
+  mongo_data:

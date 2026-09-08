@@ -6,6 +6,7 @@ import com.gastoscompartidos.error.RecursoNoEncontradoException;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Categoria;
 import com.gastoscompartidos.modelo.Gasto;
+import com.gastoscompartidos.modelo.ReferenciaCategoria;
 import com.gastoscompartidos.modelo.TipoGasto;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.CategoriaRepositorio;
@@ -14,7 +15,6 @@ import com.gastoscompartidos.repositorio.UsuarioRepositorio;
 import com.gastoscompartidos.seguridad.UsuarioActual;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -23,6 +23,23 @@ import java.util.List;
 
 /**
  * Toda la logica de gastos. El controlador no decide nada.
+ *
+ * POR QUE YA NO HAY @Transactional EN NINGUN METODO.
+ *
+ * No es un olvido, y es de las cosas que mas conviene poder explicar de esta
+ * migracion.
+ *
+ * MongoDB si tiene transacciones multi-documento, pero exigen un replica set y
+ * un bean MongoTransactionManager que Spring Boot no crea solo. Y sobre todo:
+ * aca no comprarian nada. Cada metodo de este servicio escribe **un solo
+ * documento**, y en Mongo la escritura de un documento es atomica por si misma.
+ * Una transaccion alrededor de una sola escritura es ceremonia.
+ *
+ * Eso es un cambio de fondo respecto de Postgres, donde `@Transactional` no
+ * servia solo para atomicidad: abria la sesion de Hibernate, y de ahi salian el
+ * dirty checking y las relaciones lazy. Sin sesion no habia entidades managed.
+ * En Mongo no existe nada de eso -— lo que se lee es un objeto comun de Java, y
+ * si querés que un cambio se guarde, tenés que llamar a save(). Ni mas ni menos.
  */
 @Service
 public class GastoServicio {
@@ -47,7 +64,6 @@ public class GastoServicio {
         this.usuarioActual = usuarioActual;
     }
 
-    @Transactional
     public GastoRespuesta crear(GuardarGastoRequest req) {
         Usuario actual = usuarioActual.requerido();
         Categoria categoria = buscarCategoria(req.categoriaId());
@@ -56,9 +72,10 @@ public class GastoServicio {
         BigDecimal monto = normalizar(req.monto());
 
         Gasto gasto = new Gasto(
-                actual.getGrupo(),
-                pagador,
-                categoria,
+                actual.getGrupoId(),
+                // Los snapshots se congelan ACA, al escribir. Ver ReferenciaUsuario.
+                pagador.comoReferencia(),
+                referencia(categoria),
                 monto,
                 calcularMontoPagador(monto, req.tipo(), req.porcentajePagador()),
                 req.tipo(),
@@ -69,13 +86,12 @@ public class GastoServicio {
         return GastoRespuesta.desde(gastos.save(gasto));
     }
 
-    @Transactional(readOnly = true)
-    public List<GastoRespuesta> listar(YearMonth mes, Long categoriaId, Long pagadoPorId) {
+    public List<GastoRespuesta> listar(YearMonth mes, String categoriaId, String pagadoPorId) {
         Usuario actual = usuarioActual.requerido();
         YearMonth periodo = (mes != null) ? mes : YearMonth.now();
 
         return gastos.buscarVisibles(
-                        actual.getGrupo().getId(),
+                        actual.getGrupoId(),
                         actual.getId(),
                         periodo.atDay(1),
                         periodo.plusMonths(1).atDay(1),
@@ -86,8 +102,7 @@ public class GastoServicio {
                 .toList();
     }
 
-    @Transactional
-    public GastoRespuesta actualizar(Long id, GuardarGastoRequest req) {
+    public GastoRespuesta actualizar(String id, GuardarGastoRequest req) {
         Usuario actual = usuarioActual.requerido();
         Gasto gasto = buscarVisible(id, actual);
 
@@ -99,8 +114,8 @@ public class GastoServicio {
 
         BigDecimal monto = normalizar(req.monto());
 
-        gasto.setCategoria(buscarCategoria(req.categoriaId()));
-        gasto.setPagadoPor(resolverPagador(req, actual));
+        gasto.setCategoria(referencia(buscarCategoria(req.categoriaId())));
+        gasto.setPagadoPor(resolverPagador(req, actual).comoReferencia());
         gasto.setMonto(monto);
         gasto.setMontoPagador(calcularMontoPagador(monto, req.tipo(), req.porcentajePagador()));
         gasto.setTipo(req.tipo());
@@ -108,21 +123,26 @@ public class GastoServicio {
         gasto.setDescripcion(req.descripcion().trim());
         gasto.setEsHormiga(esHormiga(req));
 
-        // No hay save(). El gasto esta MANAGED, asi que Hibernate compara contra
-        // la foto que guardo al cargarlo y emite el UPDATE. Eso es dirty checking.
+        // ACA HABIA UN gastos.flush() Y AHORA HAY UN save(), y el motivo de
+        // fondo es el mismo que antes: hay que devolverle al cliente la version
+        // NUEVA. Si le devolvieramos la vieja, su proxima edicion daria 409 sin
+        // que nadie haya tocado nada.
         //
-        // Pero el flush() SI hace falta, y es sutil: sin el, Hibernate recien
-        // escribiria al cerrar la transaccion, DESPUES de que armemos el DTO.
-        // Y como es en el UPDATE donde incrementa `version`, le devolveriamos al
-        // cliente la version vieja -- con lo cual su proxima edicion daria 409
-        // sin que nadie haya tocado nada.
-        gastos.flush();
-
-        return GastoRespuesta.desde(gasto);
+        // Lo que cambio es de donde sale. Con Hibernate el objeto estaba managed
+        // y el UPDATE salia solo por dirty checking; el flush() solo adelantaba
+        // el momento. Aca no hay nada parecido: `gasto` es un objeto comun, y si
+        // no se llama a save() no se escribe nada. Menos magia, y menos formas
+        // de que algo pase sin que lo hayas pedido.
+        //
+        // save() con @Version puesto hace el update filtrando por la version que
+        // tenia, e incrementa. Si otro escribio en el medio, no matchea ningun
+        // documento y lanza OptimisticLockingFailureException -- la misma
+        // excepcion que lanzaba Hibernate, que es lo que permite que el
+        // ManejadorDeErrores no se entere del cambio de base.
+        return GastoRespuesta.desde(gastos.save(gasto));
     }
 
-    @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(String id) {
         Usuario actual = usuarioActual.requerido();
         gastos.delete(buscarVisible(id, actual));
     }
@@ -134,14 +154,18 @@ public class GastoServicio {
      * La consulta ya aplica la regla de visibilidad, asi que desde aca los dos
      * casos son indistinguibles -- que es exactamente lo que queremos.
      */
-    private Gasto buscarVisible(Long id, Usuario actual) {
-        return gastos.buscarVisiblePorId(id, actual.getGrupo().getId(), actual.getId())
+    private Gasto buscarVisible(String id, Usuario actual) {
+        return gastos.buscarVisiblePorId(id, actual.getGrupoId(), actual.getId())
                 .orElseThrow(() -> new RecursoNoEncontradoException("No existe el gasto " + id));
     }
 
-    private Categoria buscarCategoria(Long id) {
+    private Categoria buscarCategoria(String id) {
         return categorias.findById(id)
                 .orElseThrow(() -> new ReglaDeNegocioException("No existe la categoria " + id));
+    }
+
+    private static ReferenciaCategoria referencia(Categoria categoria) {
+        return new ReferenciaCategoria(categoria.getId(), categoria.getNombre(), categoria.getIcono());
     }
 
     /**
@@ -159,7 +183,7 @@ public class GastoServicio {
         }
         Usuario otro = usuarios.findById(req.pagadoPorId())
                 .orElseThrow(() -> new ReglaDeNegocioException("No existe el usuario " + req.pagadoPorId()));
-        if (!otro.getGrupo().getId().equals(actual.getGrupo().getId())) {
+        if (!otro.getGrupoId().equals(actual.getGrupoId())) {
             throw new ReglaDeNegocioException("Ese usuario no es de tu grupo");
         }
         return otro;
@@ -189,6 +213,11 @@ public class GastoServicio {
      * Con HALF_UP, en un empate el centavo se lo queda quien pago (5,005 -> 5,01
      * para el pagador, 5,00 de deuda para el otro), que ademas es lo mas justo:
      * el que puso la plata absorbe la diferencia.
+     *
+     * En Mongo esto vale MAS que antes: como el reparto queda resuelto en el
+     * documento, las agregaciones del resumen y del saldo son un `$sum` puro. Si
+     * guardaramos el porcentaje, habria que multiplicar y redondear adentro del
+     * pipeline, donde el redondeo es mucho mas dificil de auditar que aca.
      */
     private BigDecimal calcularMontoPagador(BigDecimal monto, TipoGasto tipo, Integer porcentaje) {
         if (tipo == TipoGasto.PERSONAL) {

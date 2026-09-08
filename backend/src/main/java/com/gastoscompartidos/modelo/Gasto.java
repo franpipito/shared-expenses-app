@@ -1,7 +1,12 @@
 package com.gastoscompartidos.modelo;
 
-import jakarta.persistence.*;
-import org.hibernate.annotations.Check;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -10,71 +15,83 @@ import java.time.LocalDate;
 /**
  * Un gasto cargado por un integrante del grupo.
  *
- * DECISION CENTRAL DEL MODELO: el reparto se guarda resuelto.
- * En lugar de guardar un porcentaje y dividir en cada lectura, guardamos
- * `montoPagador` = cuanto de este gasto le corresponde a quien lo pago.
+ * DECISION CENTRAL DEL MODELO, y no cambio al pasar a Mongo: el reparto se
+ * guarda resuelto. En lugar de guardar un porcentaje y dividir en cada lectura,
+ * guardamos `montoPagador` = cuanto de este gasto le corresponde a quien lo pago.
  *
  * De ahi sale, sin ninguna division:
  *     deuda generada por este gasto = monto - montoPagador
  *     (la debe el OTRO integrante, a favor de pagadoPor)
  *
  * Un gasto PERSONAL tiene montoPagador == monto, asi que aporta 0 a la deuda.
- * El porcentaje 50/50 es un input de UI que se traduce a montoPagador al crear;
- * el centavo impar de un monto como 10.01 se decide una sola vez, al escribir,
- * y queda congelado en la fila para siempre.
+ * El centavo impar de un monto como 10.01 se decide una sola vez, al escribir.
+ *
+ * Esa decision se volvio MAS valiosa en Mongo: como no hay aritmetica por
+ * documento, el resumen y el saldo son un `$group` con `$sum` y nada mas. Con un
+ * porcentaje guardado, cada agregacion tendria que multiplicar y redondear
+ * adentro del pipeline, que es donde el redondeo se vuelve dificil de auditar.
+ *
+ * QUE CAMBIO RESPECTO DE POSTGRES:
+ *
+ *  - `pagadoPor` y `categoria` pasaron de foreign key a documento embebido.
+ *    Ver {@link ReferenciaUsuario}.
+ *  - Los @Check de la base ya no existen. Postgres verificaba `monto > 0` y
+ *    `monto_pagador BETWEEN 0 AND monto` como ultima linea de defensa contra un
+ *    bug de la capa de servicio. **Mongo no tiene un equivalente que se declare
+ *    desde la entidad**: existen los JSON Schema validators, pero se configuran
+ *    sobre la coleccion, no desde Spring Data. Hoy esas invariantes viven solo
+ *    en GastoServicio, o sea que hay una red menos.
  */
-@Entity
-@Table(
-        name = "gasto",
-        indexes = {
-                // El indice que sostiene tanto el listado del mes como el calculo del saldo.
-                @Index(name = "idx_gasto_grupo_fecha", columnList = "grupo_id, fecha"),
-                @Index(name = "idx_gasto_pagado_por", columnList = "pagado_por_id")
-        }
-)
-// Invariantes a nivel base de datos: ultima linea de defensa si un bug de
-// la capa de servicio deja pasar un valor invalido.
-@Check(name = "ck_gasto_monto_positivo", constraints = "monto > 0")
-@Check(name = "ck_gasto_reparto_valido", constraints = "monto_pagador >= 0 AND monto_pagador <= monto")
+@Document(collection = "gasto")
+// El indice que sostiene tanto el listado del mes como el calculo del saldo.
+// Es el mismo idx_gasto_grupo_fecha que teniamos en Postgres, y por el mismo
+// motivo: toda consulta de la app filtra por grupo y por rango de fecha.
+@CompoundIndex(name = "idx_gasto_grupo_fecha", def = "{'grupo_id': 1, 'fecha': -1}")
+@CompoundIndex(name = "idx_gasto_pagado_por", def = "{'pagadoPor.usuarioId': 1}")
 public class Gasto {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "grupo_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_gasto_grupo"))
-    private Grupo grupo;
+    @Field("grupo_id")
+    private String grupoId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "pagado_por_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_gasto_pagado_por"))
-    private Usuario pagadoPor;
+    /** Snapshot embebido: {usuarioId, nombre}. Sin email ni hash de contrasena. */
+    private ReferenciaUsuario pagadoPor;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "categoria_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_gasto_categoria"))
-    private Categoria categoria;
+    /** Snapshot embebido: {categoriaId, nombre, icono}. */
+    private ReferenciaCategoria categoria;
 
-    /** Monto total del gasto. precision=12, scale=2 -> NUMERIC(12,2) en Postgres. */
-    @Column(nullable = false, precision = 12, scale = 2)
+    /**
+     * Monto total del gasto.
+     *
+     * Se guarda como Decimal128 por spring.data.mongodb.representation.big-decimal.
+     * Es el analogo exacto de NUMERIC(12,2): decimal de verdad, no punto
+     * flotante. Sin esa conversion, `$sum` sumaria doubles y el error se
+     * acumularia gasto por gasto.
+     */
     private BigDecimal monto;
 
     /** Parte del monto que le corresponde a quien pago. Ver javadoc de la clase. */
-    @Column(name = "monto_pagador", nullable = false, precision = 12, scale = 2)
+    @Field("monto_pagador")
     private BigDecimal montoPagador;
 
     /**
-     * EnumType.STRING guarda el texto "PERSONAL"/"COMPARTIDO".
-     * El default de JPA es ORDINAL (guarda 0/1), que se rompe silenciosamente
-     * si alguien reordena las constantes del enum. STRING siempre.
+     * En Mongo el enum se guarda como su nombre ("PERSONAL"/"COMPARTIDO") por
+     * defecto, que es lo que queriamos.
+     *
+     * Es un default mejor que el de JPA: alla el default era ORDINAL (guardaba
+     * 0/1) y habia que pedir @Enumerated(EnumType.STRING) explicitamente para
+     * que reordenar las constantes del enum no corrompiera los datos viejos en
+     * silencio.
      */
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
     private TipoGasto tipo;
 
-    @Column(nullable = false)
+    /**
+     * Se guarda como texto ISO ("2026-09-07"), no como fecha de Mongo.
+     * El por que esta en ConfiguracionMongo: Mongo no tiene "fecha sin hora", y
+     * su tipo Date reintroduce el problema de zona horaria que motivo el `Clock`.
+     */
     private LocalDate fecha;
 
     /**
@@ -82,7 +99,6 @@ public class Gasto {
      * No es decorativa. Es lo que le permite distinguir despues un gasto evitable
      * de uno que no lo era: "uber cumple guada" contra "uber a las 15hs".
      */
-    @Column(nullable = false, length = 255)
     private String descripcion;
 
     /**
@@ -91,26 +107,39 @@ public class Gasto {
      * de cargarlo.
      *
      * No es derivable de nada mas: el mismo Uber por el mismo monto es necesario
-     * si fue por seguridad y hormiga si fue por comodidad. Por eso no puede vivir
-     * en la categoria ni deducirse del monto.
+     * si fue por seguridad y hormiga si fue por comodidad.
      *
      * El total mensual de estos gastos es el numero principal de la app.
      */
-    @Column(name = "es_hormiga", nullable = false)
+    @Field("es_hormiga")
     private boolean esHormiga;
 
-    @Column(name = "creado_en", nullable = false, updatable = false)
+    /**
+     * @CreatedDate y @LastModifiedDate reemplazan a @PrePersist y @PreUpdate de
+     * JPA. Necesitan que @EnableMongoAuditing este activo (esta en
+     * BackendApplication); sin eso quedan en null sin avisar.
+     */
+    @CreatedDate
+    @Field("creado_en")
     private Instant creadoEn;
 
-    @Column(name = "actualizado_en", nullable = false)
+    @LastModifiedDate
+    @Field("actualizado_en")
     private Instant actualizadoEn;
 
     /**
-     * Bloqueo optimista. Hibernate agrega "AND version = ?" a cada UPDATE e
-     * incrementa el numero. Si las dos personas editan el mismo gasto a la vez,
-     * la segunda escritura afecta 0 filas y Hibernate lanza excepcion en vez de
-     * pisar el cambio de la otra en silencio.
-     * Es el mismo patron de UPDATE ... WHERE condicional, pero automatico.
+     * Bloqueo optimista, y sigue funcionando igual que con Hibernate: Spring
+     * Data MongoDB agrega la version al filtro del update e incrementa el
+     * numero. Si las dos personas editan el mismo gasto a la vez, la segunda
+     * escritura no matchea ningun documento y se lanza
+     * OptimisticLockingFailureException en vez de pisar el cambio de la otra.
+     *
+     * Es el mismo patron de UPDATE ... WHERE condicional, y en Mongo es la
+     * unica forma razonable de conseguirlo: las transacciones multi-documento
+     * existen, pero requieren replica set y son mucho mas caras que esto.
+     *
+     * Ojo con el tipo: @Version de Spring Data (org.springframework.data), no
+     * el de JPA (jakarta.persistence).
      */
     @Version
     private Long version;
@@ -118,11 +147,11 @@ public class Gasto {
     protected Gasto() {
     }
 
-    public Gasto(Grupo grupo, Usuario pagadoPor, Categoria categoria,
+    public Gasto(String grupoId, ReferenciaUsuario pagadoPor, ReferenciaCategoria categoria,
                  BigDecimal monto, BigDecimal montoPagador,
                  TipoGasto tipo, LocalDate fecha, String descripcion,
                  boolean esHormiga) {
-        this.grupo = grupo;
+        this.grupoId = grupoId;
         this.pagadoPor = pagadoPor;
         this.categoria = categoria;
         this.monto = monto;
@@ -149,48 +178,35 @@ public class Gasto {
      * cero (monto - monto = 0). O sea que los gastos privados ajenos no ensucian
      * tus totales aunque la consulta los trajera.
      */
-    public BigDecimal parteDe(Long usuarioId) {
-        return pagadoPor.getId().equals(usuarioId) ? montoPagador : deudaGenerada();
+    public BigDecimal parteDe(String usuarioId) {
+        return pagadoPor.usuarioId().equals(usuarioId) ? montoPagador : deudaGenerada();
     }
 
-    /** Se ejecuta justo antes del INSERT. */
-    @PrePersist
-    void alCrear() {
-        this.creadoEn = Instant.now();
-        this.actualizadoEn = this.creadoEn;
-    }
-
-    /** Se ejecuta justo antes de cada UPDATE. */
-    @PreUpdate
-    void alActualizar() {
-        this.actualizadoEn = Instant.now();
-    }
-
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public Grupo getGrupo() {
-        return grupo;
+    public String getGrupoId() {
+        return grupoId;
     }
 
-    public void setGrupo(Grupo grupo) {
-        this.grupo = grupo;
+    public void setGrupoId(String grupoId) {
+        this.grupoId = grupoId;
     }
 
-    public Usuario getPagadoPor() {
+    public ReferenciaUsuario getPagadoPor() {
         return pagadoPor;
     }
 
-    public void setPagadoPor(Usuario pagadoPor) {
+    public void setPagadoPor(ReferenciaUsuario pagadoPor) {
         this.pagadoPor = pagadoPor;
     }
 
-    public Categoria getCategoria() {
+    public ReferenciaCategoria getCategoria() {
         return categoria;
     }
 
-    public void setCategoria(Categoria categoria) {
+    public void setCategoria(ReferenciaCategoria categoria) {
         this.categoria = categoria;
     }
 
@@ -235,12 +251,9 @@ public class Gasto {
     }
 
     /**
-     * Nota: la convencion de Java para booleanos seria `isEsHormiga()`, que en
-     * castellano queda ilegible. Usamos `esHormiga()`, que se lee bien.
-     * Es seguro porque Hibernate accede por campo (el @Id esta sobre el campo),
-     * no por getter. Ojo en la sesion 2: Jackson SI usa la convencion de bean,
-     * asi que no detecta este getter solo -- pero como vamos a serializar DTOs
-     * y no la entidad, no nos afecta.
+     * La convencion de Java seria `isEsHormiga()`, que en castellano queda
+     * ilegible. `esHormiga()` se lee bien, y es seguro porque Spring Data mapea
+     * por campo y no por getter — igual que hacia Hibernate.
      */
     public boolean esHormiga() {
         return esHormiga;

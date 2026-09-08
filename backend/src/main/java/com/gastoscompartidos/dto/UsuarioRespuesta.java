@@ -10,7 +10,7 @@ import com.gastoscompartidos.modelo.Usuario;
  * `Usuario`, el hash de la contrasena saldria por la API en cada listado de
  * gastos, y nadie lo notaria hasta que fuera tarde.
  */
-public record UsuarioRespuesta(Long id, String nombre) {
+public record UsuarioRespuesta(String id, String nombre) {
 
     public static UsuarioRespuesta desde(Usuario usuario) {
         return new UsuarioRespuesta(usuario.getId(), usuario.getNombre());

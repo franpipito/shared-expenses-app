@@ -17,7 +17,6 @@ import com.gastoscompartidos.seguridad.UsuarioActual;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -71,7 +70,6 @@ public class AutenticacionServicio {
      * @param ip de donde viene la request. La pasa el controlador para que este
      *           servicio no tenga que saber que existe HTTP.
      */
-    @Transactional
     public TokenRespuesta registrar(RegistroRequest req, String ip) {
         // El codigo de invitacion tambien es adivinable a fuerza bruta, y aca
         // no hay email contra el cual limitar: la clave es la IP.
@@ -100,13 +98,12 @@ public class AutenticacionServicio {
                 // La contrasena en texto plano no se guarda, ni se loguea, ni
                 // sale de este metodo. Lo unico que persiste es el hash.
                 codificador.encode(req.password()),
-                grupoParaNuevoIntegrante());
+                grupoParaNuevoIntegrante().getId());
 
         limitador.limpiar(clave);
         return tokenPara(usuarios.save(usuario));
     }
 
-    @Transactional(readOnly = true)
     public TokenRespuesta login(LoginRequest req, String ip) {
         String email = normalizar(req.email());
 
@@ -154,12 +151,14 @@ public class AutenticacionServicio {
      * Devuelve un token nuevo para que quien lo pidio desde otro dispositivo no
      * quede afuera de su propia sesion.
      */
-    @Transactional
     public TokenRespuesta cerrarOtrasSesiones() {
         Usuario usuario = usuarioActual.requerido();
         usuario.invalidarSesiones();
-        usuarios.flush();
-        return tokenPara(usuario);
+        // Antes alcanzaba con usuarios.flush(): la entidad estaba managed y
+        // Hibernate detectaba el cambio solo. En Mongo no hay dirty checking,
+        // asi que si no se llama a save() el token_version nuevo se pierde al
+        // salir del metodo y el boton de "perdi el celular" no hace nada.
+        return tokenPara(usuarios.save(usuario));
     }
 
     // ---------------------------------------------------------------- helpers
@@ -167,6 +166,16 @@ public class AutenticacionServicio {
     /**
      * El primero que se registra crea el grupo; el segundo se suma al mismo. Un
      * tercero se rechaza, porque el reparto del modelo asume dos integrantes.
+     *
+     * ESTE ES EL UNICO LUGAR DE LA APP QUE ESCRIBE DOS DOCUMENTOS, y por lo
+     * tanto el unico donde la falta de transaccion se nota. Si se crea el grupo
+     * y despues falla el alta del usuario, queda un grupo huerfano.
+     *
+     * Se acepta a conciencia, por dos motivos: el reintento se cura solo (el
+     * segundo intento encuentra el grupo existente y se suma), y una
+     * transaccion de Mongo exigiria correr un replica set tambien en local,
+     * que es bastante costo para un camino que se ejecuta exactamente dos veces
+     * en la vida de esta app.
      */
     private Grupo grupoParaNuevoIntegrante() {
         Optional<Grupo> existente = grupos.findFirstByOrderByIdAsc();
@@ -174,7 +183,7 @@ public class AutenticacionServicio {
             return grupos.save(new Grupo(nombreGrupoPorDefecto));
         }
         Grupo grupo = existente.get();
-        if (usuarios.findByGrupoIdOrderById(grupo.getId()).size() >= MAXIMO_INTEGRANTES) {
+        if (usuarios.countByGrupoId(grupo.getId()) >= MAXIMO_INTEGRANTES) {
             throw new ReglaDeNegocioException("El grupo ya esta completo");
         }
         return grupo;

@@ -2,7 +2,7 @@
 #
 # Requiere:
 #   - la app corriendo en localhost:8080
-#   - las categorias cargadas (scripts/seed-desarrollo.sql)
+#   - las categorias sembradas (las siembra la app sola al arrancar)
 #
 # Correr desde la raiz del repo:
 #   .\scripts\smoke-test.ps1
@@ -17,8 +17,13 @@ $base     = "http://localhost:8080"
 $CODIGO   = "nutrias"          # app.registro.codigo-invitacion
 $PASSWORD = "gastos-dev-2026"
 
-# ids de categoria del seed
-$CAFE = 1; $UBER = 2; $COMIDA = 3
+# Los ids de categoria se resuelven POR NOMBRE, mas abajo, una vez que hay token.
+#
+# Antes estaban hardcodeados ($CAFE = 1) y funcionaba porque la migracion V2 de
+# Flyway las insertaba siempre en el mismo orden, asi que los ids eran estables
+# entre bases recreadas. Con Mongo el _id es un ObjectId distinto en cada
+# siembra, asi que hay que preguntarle a la API cual es cual.
+$CAFE = $null; $UBER = $null; $COMIDA = $null
 
 $fallos = 0
 
@@ -203,6 +208,17 @@ $franco = @{ Authorization = "Bearer $($sesionNueva.token)" }
 $categorias = Invoke-RestMethod -Uri "$base/categorias" -Headers $franco
 Chequear (($categorias | Measure-Object).Count -eq 6) "el token nuevo funciona"
 
+# Resolver los ids por nombre, ahora que son ObjectId y no numeros.
+function IdDeCategoria($nombre) {
+    $c = $categorias | Where-Object { $_.nombre -eq $nombre }
+    if (-not $c) { throw "No aparecio la categoria '$nombre' en GET /categorias" }
+    return $c.id
+}
+$CAFE   = IdDeCategoria "cafe"
+$UBER   = IdDeCategoria "uber"
+$COMIDA = IdDeCategoria "comida"
+Chequear ($CAFE -is [string] -and $CAFE.Length -eq 24) "los ids de categoria son ObjectId de 24 caracteres"
+
 # Y el de Ella no se toca: cerrar sesiones es por usuario, no global.
 $catsElla = Invoke-RestMethod -Uri "$base/categorias" -Headers $ella
 Chequear (($catsElla | Measure-Object).Count -eq 6) "la sesion de Ella no se vio afectada"
@@ -291,7 +307,11 @@ EsperarValidacion { Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "
                                      porcentajePagador = 150 } } `
     "porcentajePagador" "porcentaje mayor a 100 rechazado por @Max"
 
-EsperarRegla { Crear $franco @{ monto = 100; categoriaId = 999; fecha = "2026-09-06"
+# El id es un ObjectId (24 caracteres hexadecimales), no un numero. Este es
+# valido en forma pero no existe: si mandaramos "999" el driver lo rechazaria
+# por formato y tendriamos un 400 de conversion en vez del error de negocio que
+# queremos probar.
+EsperarRegla { Crear $franco @{ monto = 100; categoriaId = "000000000000000000000000"; fecha = "2026-09-06"
                                 descripcion = "x"; tipo = "PERSONAL" } } `
     "No existe la categoria" "categoria inexistente rechazada por el servicio"
 
