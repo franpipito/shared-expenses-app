@@ -124,47 +124,65 @@ Por eso va organización por features:
 
 ```
 mobile/
-  app/                        rutas de expo-router: cada archivo es una pantalla
-    _layout.tsx
+  app/                        rutas de expo-router: cada archivo es una ruta
+    _layout.tsx               fuentes, sesion, y el Stack
+    index.tsx                 no dibuja: decide si va a login o a resumen
     login.tsx
-    (tabs)/
-      resumen.tsx
-      nosotros.tsx
-    gasto/nuevo.tsx
+    resumen.tsx
+    gasto/nuevo.tsx           se abre como modal
   src/
     api/
       cliente.ts              fetch con el Bearer y el manejo de errores
       tipos.ts                los DTO del backend, en TypeScript
     features/
-      auth/                   login, registro, sesion
+      auth/                   sesion.tsx: el Context, el unico estado global
       gastos/                 alta, edicion, listado
       resumen/                totales y animo
-      saldo/                  quien le debe a quien
-    componentes/              Boton, Chip, Switch, Nutria, Monto
+      saldo/                  quien le debe a quien (todavia no existe)
+    componentes/              Boton, Nutria, Monto
     tema/
-      colores.ts              los tokens de arriba
+      colores.ts              los tokens de arriba, convertidos a hex
       tipografia.ts
     almacenamiento/
       sesion.ts               expo-secure-store, NUNCA AsyncStorage
-  assets/nutrias/             -> symlink o copia de /assets/nutrias
+  assets/nutrias/             copia de /assets/nutrias
 ```
 
 Cada feature adentro:
 
 ```
 features/gastos/
-  pantallas/          lo que ve el usuario
   componentes/        piezas que solo usa esta feature
   hooks/              useGastos, useCrearGasto: el estado y las llamadas
   api.ts              las llamadas a /gastos
 ```
+
+### Dos cosas que la sesion 6 cambio de este plan
+
+Estaban escritas antes de tener expo-router en la mano, y la realidad las corrigio:
+
+- **Las pantallas viven en `app/`, no en `features/*/pantallas/`.** Con ruteo por
+  archivos, `app/login.tsx` YA es la pantalla de login: meter ahi un archivo de
+  una linea que reexporta el componente real es una indireccion que no compra
+  nada. Lo que si vive en la feature es lo que la pantalla usa: el `api.ts` y los
+  `hooks/`. El mapeo con MVC no cambia — solo la carpeta donde esta la vista.
+
+- **No hay `(tabs)/` todavia.** Un tab bar con una sola pestania no es
+  navegacion, es decoracion. Aparece cuando exista la pantalla de saldo, que es
+  la segunda pestania.
+
+**Los colores estan en hex y no en oklch en `tema/colores.ts`**, porque el parser
+de colores de React Native no entiende oklch: acepta hex, `rgb()`, `hsl()` y los
+nombres CSS. La tabla oklch de arriba sigue siendo la fuente de verdad, y cada
+constante del archivo lleva su oklch en un comentario al lado. Si hay que cambiar
+un color, se cambia el oklch primero y se vuelve a convertir.
 
 Si querés el paralelo con MVC para explicarlo en una entrevista:
 
 | MVC | Equivalente en la app |
 |---|---|
 | Modelo | `api/tipos.ts` + `features/*/api.ts` |
-| Vista | `pantallas/` y `componentes/` |
+| Vista | los archivos de `app/` y `componentes/` |
 | Controlador | `hooks/` |
 
 La diferencia es que están agrupados por feature y no por capa. **Un cambio en
