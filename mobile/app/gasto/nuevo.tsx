@@ -33,6 +33,24 @@ import { fuentes, numerosTabulares } from '../../src/tema/tipografia';
  * hoy), el tipo tampoco por ahora (es PERSONAL), y el reparto personalizado
  * aparece cuando exista la seccion de pareja.
  */
+/**
+ * Los repartos que se ofrecen, como porcentaje que le toca a quien paga.
+ *
+ * Son chips y no un campo numerico ni un slider: cualquiera de estos es UN tap,
+ * y el reparto es el camino raro -- el 50/50 ya viene puesto. Un slider ademas
+ * costaria una dependencia nativa mas.
+ *
+ * Los valores son arbitrarios a proposito y cubren lo que existe entre dos
+ * personas: mitad y mitad, o alguien que pone mas. Un 63% no es un caso real
+ * dividiendo una cena; si alguna vez lo es, esto pasa a ser un input.
+ *
+ * El 100% no es lo mismo que un gasto PERSONAL aunque los numeros den igual:
+ * significa "esto es nuestro y esta vez lo pago yo entero", y por eso vive en el
+ * campo `tipo` y no se deduce de los montos. Ver el CLAUDE.md.
+ */
+const REPARTOS = [50, 60, 70, 80, 100] as const;
+const REPARTO_POR_DEFECTO = 50;
+
 export default function NuevoGasto() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -42,6 +60,8 @@ export default function NuevoGasto() {
   const [monto, setMonto] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [esHormiga, setEsHormiga] = useState(false);
+  const [esCompartido, setEsCompartido] = useState(false);
+  const [porcentaje, setPorcentaje] = useState(REPARTO_POR_DEFECTO);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -73,7 +93,16 @@ export default function NuevoGasto() {
         categoriaId: categoriaId!,
         fecha: hoyLocal(),
         descripcion: descripcion.trim(),
-        tipo: 'PERSONAL',
+        tipo: esCompartido ? 'COMPARTIDO' : 'PERSONAL',
+        // Solo viaja si es compartido: en un PERSONAL el backend ignora el
+        // porcentaje (montoPagador == monto), y mandarlo igual seria decirle
+        // algo que no significa nada.
+        //
+        // `pagadoPorId` NO se manda: cuando falta, el backend toma a quien esta
+        // cargando. Es la decision de alcance de esta pantalla -- cada uno carga
+        // lo que pago el. Ofrecer "lo pago el otro" necesita un endpoint que
+        // devuelva los integrantes del grupo, que hoy no existe.
+        porcentajePagador: esCompartido ? porcentaje : undefined,
         esHormiga,
       });
       // `back` y no `replace`: esto es un modal que se cierra. El resumen que
@@ -184,6 +213,76 @@ export default function NuevoGasto() {
           />
         </View>
 
+        {/*
+          El compartido va DESPUES del de hormiga, y no es un detalle de orden:
+          el camino rapido es monto -> categoria -> descripcion -> guardar, y
+          hormiga es el corazon del producto. Compartido es el caso menos
+          frecuente, asi que va ultimo y arranca cerrado.
+
+          Teal y no ambar: el ambar es del gasto hormiga y de nada mas. Aca el
+          teal significa lo que significa en toda la app, que es "lo compartido".
+        */}
+        <View style={[estilos.compartido, esCompartido && estilos.compartidoActivo]}>
+          <View style={estilos.filaSwitch}>
+            <View style={estilos.compartidoTexto}>
+              <Text style={estilos.compartidoTitulo}>Es un gasto compartido</Text>
+              <Text style={estilos.compartidoBajada}>
+                {esCompartido
+                  ? 'Lo van a ver los dos y entra en el saldo'
+                  : 'Un gasto personal lo ves solo vos'}
+              </Text>
+            </View>
+            <Switch
+              value={esCompartido}
+              onValueChange={setEsCompartido}
+              trackColor={{ false: colores.borde, true: colores.rio }}
+              thumbColor={colores.tarjeta}
+              ios_backgroundColor={colores.borde}
+            />
+          </View>
+
+          {/*
+            El reparto aparece recien al prender el switch. Es "revelacion
+            progresiva": el 90% de las veces el formulario no lo muestra, y quien
+            lo necesita lo tiene a un tap. Mostrarlo siempre seria un campo mas
+            en la pantalla que tiene que ser la mas rapida de la app.
+          */}
+          {esCompartido ? (
+            <View style={estilos.reparto}>
+              <Text style={estilos.repartoEtiqueta}>Tu parte</Text>
+              <View style={estilos.chips}>
+                {REPARTOS.map((p) => {
+                  const elegido = p === porcentaje;
+                  return (
+                    <Pressable
+                      key={p}
+                      onPress={() => setPorcentaje(p)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: elegido }}
+                      // El porcentaje solo no dice nada leido en voz alta.
+                      accessibilityLabel={
+                        p === 100 ? 'Pagas vos el total' : `Vos ${p} por ciento, la otra persona ${100 - p}`
+                      }
+                      style={[estilos.chip, elegido && estilos.chipElegido]}
+                    >
+                      <Text style={[estilos.chipTexto, elegido && estilos.chipTextoElegido]}>
+                        {p === 100 ? 'Todo yo' : `${p} / ${100 - p}`}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {/*
+                No se muestra cuanto le toca a cada uno en pesos. La app NO hace
+                aritmetica con plata: monto x porcentaje lo calcula el backend,
+                que es el unico que sabe donde cae el centavo cuando la division
+                no es exacta ($10,01 al 50/50). Un preview calculado aca podria
+                no coincidir con lo que despues queda guardado.
+              */}
+            </View>
+          ) : null}
+        </View>
+
         {error ? <Text style={estilos.error}>{error}</Text> : null}
       </ScrollView>
 
@@ -270,6 +369,41 @@ const estilos = StyleSheet.create({
     fontSize: 13,
     color: colores.textoSuave,
     marginTop: 2,
+  },
+
+  // Misma caja que el bloque de hormiga, pero en columna: adentro entra el
+  // reparto cuando el switch esta prendido.
+  compartido: {
+    backgroundColor: colores.tarjeta,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  // Al activarse cambia solo el borde, no el fondo. El bloque de hormiga SI se
+  // tine entero, y esa asimetria es deliberada: el hormiga es el corazon del
+  // producto y tiene permiso para gritar; este no tiene que competirle. Ademas,
+  // si el fondo pasara a teal, el chip de reparto elegido -- que tambien es teal
+  // suave -- se perderia contra el.
+  compartidoActivo: { borderColor: colores.rio },
+  filaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  compartidoTexto: { flex: 1 },
+  compartidoTitulo: { fontFamily: fuentes.cuerpoSemi, fontSize: 16, color: colores.texto },
+  compartidoBajada: {
+    fontFamily: fuentes.cuerpo,
+    fontSize: 13,
+    color: colores.textoSuave,
+    marginTop: 2,
+  },
+
+  reparto: { marginTop: 14, gap: 8 },
+  repartoEtiqueta: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 11,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+    color: colores.textoSuave,
   },
 
   error: { fontFamily: fuentes.cuerpo, fontSize: 14, color: colores.terracotaProfunda },
