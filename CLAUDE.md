@@ -441,15 +441,30 @@ zona**. Un gasto cargado 21:00 del 30 de septiembre en Buenos Aires ya es 1 de
 octubre en UTC, y Railway y Render corren en UTC. Configurable por
 `app.zona-horaria`, default `America/Argentina/Buenos_Aires`.
 
+### Los iconos: Metro no hace tree-shaking de un barrel
+Los iconos de categoria son de **Lucide** (`lucide-react-native` sobre
+`react-native-svg`), porque el campo `icono` que siembra el backend ya guarda
+nombres de Lucide: cualquier otra libreria habria obligado a una tabla de
+traduccion, o sea un segundo sistema de nombres para mantener a mano.
+
+Lo que importa de verdad, y se midio: **cada icono se importa por su subpath**
+(`lucide-react-native/icons/car`) y NO del barrel (`from 'lucide-react-native'`).
+Importando del barrel, el bundle de iOS pesa **4,55 MB**; con los subpaths,
+**2,63 MB**. Casi la mitad, porque Metro no hace tree-shaking de un barrel ESM y
+se lleva los ~1500 iconos de la libreria aunque se usen seis.
+
+Se verifico buscando dentro del `.hbc` iconos que la app no usa: con el barrel
+estaban ahi.
+
+Corolario que vale mas que el caso: **en React Native no se asume que el bundler
+descarta lo que no se usa.** Un `import { X } from 'libreria'` de una libreria
+grande merece que alguien mire cuanto pesa el bundle antes y despues.
+
 ### Pendiente de decidir
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
   cliente lo manda, se verifica; si no, gana la ultima escritura. Conviene
   volverlo obligatorio cuando la app mobile este armada y sepamos que siempre lo
   reenvia.
-- **`password_hash` viaja de la base a la app en cada listado de gastos**, porque
-  el `join fetch g.pagadoPor` trae la entidad Usuario entera. No sale por la API
-  (el DTO no lo incluye), pero es dato sensible moviendose sin necesidad. Se
-  arregla con una proyeccion o marcando el campo como lazy. No es urgente.
 - **El default 50/50 del reparto puede no ser lo justo para ellos**, porque tienen
   ingresos diferentes y separados. Es una conversacion entre ellos, no una
   decision tecnica.
@@ -467,7 +482,7 @@ octubre en UTC, y Railway y Render corren en UTC. Configurable por
     seguridad/    JWT, filtro, config de Spring Security y UsuarioActual
     error/        excepciones de dominio + @RestControllerAdvice
     config/       conversores de Mongo y el sembrador de categorias
-/mobile       Expo (sesion 6)
+/mobile       Expo. Por features, no por capas: ver docs/diseno.md
 /web          React + Vite (despues del MVP)
 docker-compose.yml       MongoDB local
 scripts/
@@ -501,13 +516,23 @@ con el lenguaje del producto.
       `Clock` quedo probado en serio: el contenedor corre en UTC y el corte de
       mes igual cayo en la fecha de Buenos Aires. Ver **`docs/deploy.md`**.
 - [~] **6 — App Expo minima.** Contra la API deployada, no localhost. Estan el
-      login, el resumen con el animo de la nutria y el alta de gasto, corriendo
-      en Expo Go. **Falta la lista de gastos del mes** (que es donde se ve la
-      marca de hormiga por gasto, o sea el producto), la pantalla de saldo, el
-      reparto personalizado, el tipo compartido, y editar/borrar. Ademas hay dos
-      bugs conocidos: los iconos de categoria se muestran como texto ("coffee")
-      en vez de iconos de Lucide, y el numero grande del resumen se parte en dos
-      lineas cuando no entra.
+      login, el resumen con el animo de la nutria, el alta de gasto y **la lista
+      de gastos del mes**, que es donde se ve la marca de hormiga gasto por
+      gasto. Los iconos de categoria ya se dibujan con Lucide y no como texto.
+
+      **Para cerrar la sesion falta la seccion de pareja**, que son dos cosas
+      encadenadas: el alta hoy manda `tipo: 'PERSONAL'` fijo, asi que sin poder
+      cargar un COMPARTIDO la pantalla de saldo mostraria cero siempre. Primero
+      el tipo compartido en el alta (con el reparto), despues `/saldo`.
+
+      Lo que queda afuera y no bloquea el cierre: editar y borrar, y los filtros
+      por categoria y pagador del listado (el endpoint ya los acepta).
+
+      Bug conocido: el numero grande del resumen se parte en dos lineas cuando
+      no entra.
+
+      Nada de esto se probo en un telefono todavia: se verifico con
+      `tsc --noEmit` y con `expo export`, que bundlea de verdad.
 - [x] **6.5 — Migracion a MongoDB.** El motivo es de busqueda laboral: la
       postulacion pide relacional y no relacional, y MatchPoint ya cubre
       Postgres. Se rehicieron modelo, repositorios y los dos servicios que tocan
