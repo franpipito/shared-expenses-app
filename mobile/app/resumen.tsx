@@ -91,6 +91,20 @@ export default function Resumen() {
               <Monto valor={resumen.total} tamano={18} />
             </View>
 
+            {/*
+              La entrada a la lista. Es un link y no un segundo boton terracota:
+              `docs/diseno.md` pide un solo boton principal por pantalla, y el de
+              esta es "Cargar un gasto".
+            */}
+            <Pressable
+              onPress={() => router.push('/gastos')}
+              accessibilityRole="button"
+              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+            >
+              <Text style={estilos.verGastos}>Ver los gastos del mes</Text>
+              <Text style={estilos.flecha}>›</Text>
+            </Pressable>
+
             {resumen.porCategoria.length > 0 ? (
               <View style={estilos.categorias}>
                 <Text style={estilos.rotuloSeccion}>Por categoria</Text>
@@ -190,6 +204,9 @@ const estilos = StyleSheet.create({
     paddingVertical: 14,
   },
   filaEtiqueta: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.textoSuave },
+  filaPresionada: { backgroundColor: colores.arena },
+  verGastos: { fontFamily: fuentes.cuerpoSemi, fontSize: 15, color: colores.rioProfundo },
+  flecha: { fontFamily: fuentes.cuerpoSemi, fontSize: 20, color: colores.rioProfundo },
 
   categorias: { gap: 8 },
   rotuloSeccion: {

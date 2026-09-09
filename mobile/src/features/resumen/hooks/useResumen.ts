@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorDeApi } from '../../../api/cliente';
+import { mesActual } from '../../../api/periodo';
 import type { ResumenRespuesta } from '../../../api/tipos';
-import { mesActual, traerResumen } from '../api';
+import { traerResumen } from '../api';
 
 /**
  * El "controlador" de la pantalla de resumen, en terminos de MVC.

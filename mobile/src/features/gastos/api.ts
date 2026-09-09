@@ -5,6 +5,22 @@ export function traerCategorias(): Promise<CategoriaRespuesta[]> {
   return pedir<CategoriaRespuesta[]>('/categorias');
 }
 
+/**
+ * Los gastos del mes, ya ordenados por el backend: fecha descendente y, dentro
+ * del mismo dia, el ultimo cargado primero. **La app no reordena nada.**
+ *
+ * El orden lo decide `GastoConsultasImpl` desempatando por `_id`, y puede
+ * hacerlo porque los primeros bytes de un ObjectId son el timestamp de creacion.
+ * Replicar ese criterio aca seria tener la misma regla escrita en dos lugares.
+ *
+ * Lo que llega ya viene filtrado por visibilidad: un gasto PERSONAL de la otra
+ * persona no esta en la respuesta. Esa regla vive en el WHERE del repositorio,
+ * no en un `if` de esta pantalla.
+ */
+export function traerGastos(mes: string): Promise<GastoRespuesta[]> {
+  return pedir<GastoRespuesta[]>(`/gastos?mes=${mes}`);
+}
+
 export function crearGasto(gasto: GuardarGastoRequest): Promise<GastoRespuesta> {
   return pedir<GastoRespuesta>('/gastos', { metodo: 'POST', cuerpo: gasto });
 }
