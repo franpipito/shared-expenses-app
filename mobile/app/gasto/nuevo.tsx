@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorDeApi } from '../../src/api/cliente';
 import type { CategoriaRespuesta } from '../../src/api/tipos';
 import { Boton } from '../../src/componentes/Boton';
+import { IconoCategoria } from '../../src/componentes/IconoCategoria';
 import { crearGasto, hoyLocal, traerCategorias } from '../../src/features/gastos/api';
 import { colores } from '../../src/tema/colores';
 import { fuentes, numerosTabulares } from '../../src/tema/tipografia';
@@ -131,7 +132,13 @@ export default function NuevoGasto() {
                   accessibilityState={{ selected: elegida }}
                   style={[estilos.chip, elegida && estilos.chipElegido]}
                 >
-                  <Text style={estilos.chipIcono}>{c.icono}</Text>
+                  <IconoCategoria
+                    nombre={c.icono}
+                    tamano={17}
+                    // El icono acompana al texto del chip: cuando el chip esta
+                    // elegido, los dos pasan a teal.
+                    color={elegida ? colores.rioProfundo : colores.corteza}
+                  />
                   <Text style={[estilos.chipTexto, elegida && estilos.chipTextoElegido]}>
                     {c.nombre}
                   </Text>
@@ -241,7 +248,6 @@ const estilos = StyleSheet.create({
   },
   // La categoria elegida se marca con teal, no con ambar.
   chipElegido: { backgroundColor: colores.rioSuave, borderColor: colores.rio },
-  chipIcono: { fontSize: 16 },
   chipTexto: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.texto },
   chipTextoElegido: { fontFamily: fuentes.cuerpoSemi, color: colores.rioProfundo },
 

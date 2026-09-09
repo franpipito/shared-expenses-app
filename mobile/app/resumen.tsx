@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Boton } from '../src/componentes/Boton';
+import { IconoCategoria } from '../src/componentes/IconoCategoria';
 import { Monto, formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
@@ -110,7 +111,7 @@ export default function Resumen() {
                 <Text style={estilos.rotuloSeccion}>Por categoria</Text>
                 {resumen.porCategoria.map((c) => (
                   <View key={c.categoriaId} style={estilos.categoria}>
-                    <Text style={estilos.icono}>{c.icono}</Text>
+                    <IconoCategoria nombre={c.icono} />
                     <Text style={estilos.nombreCategoria}>{c.nombre}</Text>
                     <View style={estilos.montosCategoria}>
                       <Text style={estilos.totalCategoria}>{formatearMonto(c.total)}</Text>
@@ -228,7 +229,6 @@ const estilos = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
   },
-  icono: { fontSize: 20 },
   nombreCategoria: { flex: 1, fontFamily: fuentes.cuerpo, fontSize: 16, color: colores.texto },
   montosCategoria: { alignItems: 'flex-end' },
   totalCategoria: {
