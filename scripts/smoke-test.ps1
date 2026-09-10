@@ -224,6 +224,41 @@ $catsElla = Invoke-RestMethod -Uri "$base/categorias" -Headers $ella
 Chequear (($catsElla | Measure-Object).Count -eq 6) "la sesion de Ella no se vio afectada"
 
 # ---------------------------------------------------------------------------
+Titulo "0.1 El grupo y sus integrantes"
+
+# GET /grupo existe para que la app pueda ofrecer "lo pago la otra persona" al
+# cargar un COMPARTIDO: sin esto el cliente no tiene forma de saber el id del
+# otro integrante.
+$grupoFranco = Invoke-RestMethod -Uri "$base/grupo" -Headers $franco
+$grupoElla   = Invoke-RestMethod -Uri "$base/grupo" -Headers $ella
+
+Chequear ($grupoFranco.id -is [string] -and $grupoFranco.id.Length -eq 24) `
+    "el grupo tiene un id de ObjectId"
+Chequear (($grupoFranco.integrantes | Measure-Object).Count -eq 2) `
+    "el grupo tiene dos integrantes"
+Chequear ($grupoFranco.id -eq $grupoElla.id) `
+    "los dos ven el mismo grupo"
+
+# El endpoint NO acepta un id por parametro justamente para que no se pueda
+# pedir el grupo de otro. Lo que se devuelve sale del token.
+$nombres = ($grupoFranco.integrantes | ForEach-Object { $_.nombre }) | Sort-Object
+Chequear (($nombres -join ",") -eq "Ella,Franco") `
+    "estan los dos por nombre"
+
+# Un DTO lleva lo que hace falta y ni un campo mas. El email es dato de contacto
+# que la app no necesita, y este chequeo es lo que evita que alguien lo agregue
+# sin darse cuenta mas adelante.
+$tieneEmail = $grupoFranco.integrantes | Where-Object { $null -ne $_.email }
+Chequear ($null -eq $tieneEmail) "los integrantes NO exponen el email"
+
+$idDeElla = ($grupoFranco.integrantes | Where-Object { $_.nombre -eq "Ella" }).id
+Chequear ($idDeElla -is [string] -and $idDeElla.Length -eq 24) `
+    "de aca sale el id que necesita el alta para 'lo pago el otro'"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/grupo" } 401 `
+    "sin token, /grupo da 401"
+
+# ---------------------------------------------------------------------------
 Titulo "1. Ella carga un gasto PERSONAL marcado como hormiga"
 
 $personalDeElla = Crear $ella @{
