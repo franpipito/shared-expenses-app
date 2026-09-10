@@ -120,3 +120,10 @@ export type ErrorRespuesta = {
   /** Presente solo en fallos de validacion: campo -> mensaje. */
   errores?: Record<string, string>;
 };
+
+export type GrupoRespuesta = {
+  id: string;
+  nombre: string;
+  /** Son dos: el modelo de reparto asume dos integrantes. */
+  integrantes: UsuarioRespuesta[];
+};

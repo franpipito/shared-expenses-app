@@ -1,5 +1,10 @@
 import { pedir } from '../../api/cliente';
-import type { CategoriaRespuesta, GastoRespuesta, GuardarGastoRequest } from '../../api/tipos';
+import type {
+  CategoriaRespuesta,
+  GastoRespuesta,
+  GrupoRespuesta,
+  GuardarGastoRequest,
+} from '../../api/tipos';
 
 export function traerCategorias(): Promise<CategoriaRespuesta[]> {
   return pedir<CategoriaRespuesta[]>('/categorias');
@@ -37,4 +42,20 @@ export function crearGasto(gasto: GuardarGastoRequest): Promise<GastoRespuesta> 
 export function hoyLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * El grupo con sus integrantes.
+ *
+ * Vive en la feature de gastos y no en una feature propia porque el unico lugar
+ * que lo consume es el alta, para poder ofrecer "lo pago la otra persona": es lo
+ * unico que le falta al cliente para armar un COMPARTIDO completo, porque el
+ * login solo dice quien sos vos. La regla de `docs/diseno.md` es que lo que usa
+ * una sola feature se queda adentro.
+ *
+ * El endpoint no acepta un id: devuelve siempre el grupo de quien pregunta, que
+ * sale del token. Un endpoint sin id no puede filtrar datos de otro grupo.
+ */
+export function traerGrupo(): Promise<GrupoRespuesta> {
+  return pedir<GrupoRespuesta>('/grupo');
 }

@@ -14,10 +14,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorDeApi } from '../../src/api/cliente';
-import type { CategoriaRespuesta } from '../../src/api/tipos';
+import type { CategoriaRespuesta, UsuarioRespuesta } from '../../src/api/tipos';
 import { Boton } from '../../src/componentes/Boton';
 import { IconoCategoria } from '../../src/componentes/IconoCategoria';
-import { crearGasto, hoyLocal, traerCategorias } from '../../src/features/gastos/api';
+import { useSesion } from '../../src/features/auth/sesion';
+import { crearGasto, hoyLocal, traerCategorias, traerGrupo } from '../../src/features/gastos/api';
 import { colores } from '../../src/tema/colores';
 import { fuentes, numerosTabulares } from '../../src/tema/tipografia';
 
@@ -29,10 +30,15 @@ import { fuentes, numerosTabulares } from '../../src/tema/tipografia';
  * gasto antes que anotar lento. Por eso: **categoria, monto, descripcion, y el
  * toggle de hormiga.** Nada mas.
  *
- * Cada campo que se le agregue se paga en abandono. La fecha no se pregunta (es
- * hoy), el tipo tampoco por ahora (es PERSONAL), y el reparto personalizado
- * aparece cuando exista la seccion de pareja.
+ * Cada campo que se le agregue se paga en abandono. La fecha no se pregunta:
+ * es hoy.
+ *
+ * Lo de compartido -- el reparto y quien pago -- existe pero **arranca cerrado**
+ * y aparece recien al prender el switch. Es revelacion progresiva: el camino
+ * rapido sigue siendo el de siempre, y lo que solo hace falta a veces no ocupa
+ * lugar el resto del tiempo.
  */
+
 /**
  * Los repartos que se ofrecen, como porcentaje que le toca a quien paga.
  *
@@ -54,6 +60,7 @@ const REPARTO_POR_DEFECTO = 50;
 export default function NuevoGasto() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { usuario } = useSesion();
 
   const [categorias, setCategorias] = useState<CategoriaRespuesta[]>([]);
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
@@ -62,6 +69,8 @@ export default function NuevoGasto() {
   const [esHormiga, setEsHormiga] = useState(false);
   const [esCompartido, setEsCompartido] = useState(false);
   const [porcentaje, setPorcentaje] = useState(REPARTO_POR_DEFECTO);
+  const [otro, setOtro] = useState<UsuarioRespuesta | null>(null);
+  const [pagueYo, setPagueYo] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -74,6 +83,21 @@ export default function NuevoGasto() {
       }
     })();
   }, []);
+
+  // El grupo se pide aparte y su fallo NO se muestra como error: sin el, el
+  // formulario sigue sirviendo entero -- lo unico que se pierde es poder decir
+  // "lo pago la otra persona". Mezclarlo con el catch de las categorias haria
+  // que un problema en un extra tape el camino principal, que es el rapido.
+  useEffect(() => {
+    (async () => {
+      try {
+        const grupo = await traerGrupo();
+        setOtro(grupo.integrantes.find((u) => u.id !== usuario?.id) ?? null);
+      } catch {
+        setOtro(null);
+      }
+    })();
+  }, [usuario?.id]);
 
   /**
    * El monto se escribe con coma (es como se escribe en Argentina) y viaja con
@@ -94,15 +118,27 @@ export default function NuevoGasto() {
         fecha: hoyLocal(),
         descripcion: descripcion.trim(),
         tipo: esCompartido ? 'COMPARTIDO' : 'PERSONAL',
-        // Solo viaja si es compartido: en un PERSONAL el backend ignora el
-        // porcentaje (montoPagador == monto), y mandarlo igual seria decirle
-        // algo que no significa nada.
+        // Los dos solo viajan si es compartido: en un PERSONAL el backend
+        // ignora el porcentaje (montoPagador == monto) y ademas rechaza un
+        // pagador que no seas vos.
         //
-        // `pagadoPorId` NO se manda: cuando falta, el backend toma a quien esta
-        // cargando. Es la decision de alcance de esta pantalla -- cada uno carga
-        // lo que pago el. Ofrecer "lo pago el otro" necesita un endpoint que
-        // devuelva los integrantes del grupo, que hoy no existe.
-        porcentajePagador: esCompartido ? porcentaje : undefined,
+        // OJO CON LA INVERSION, que es el punto mas facil de romper de toda la
+        // pantalla. El campo se llama `porcentajePagador`: es la parte de QUIEN
+        // PAGO, no la tuya. Los chips en cambio preguntan por TU parte, que es
+        // como piensa quien carga el gasto. Cuando pago la otra persona, los dos
+        // no son lo mismo y hay que dar vuelta el numero.
+        //
+        // Ejemplo: elegis "Todo yo" (100) y pago Viole -> le toca 0% a ella, o
+        // sea que le debes el gasto entero. Sin invertir, el backend entenderia
+        // lo contrario exacto y el saldo saldria al reves.
+        //
+        // Es aritmetica de PORCENTAJES, no de plata: el 100 - x es sobre enteros
+        // y no toca un peso. La cuenta que si es de plata (monto x porcentaje)
+        // la sigue haciendo el backend, que es el unico que sabe donde cae el
+        // centavo.
+        porcentajePagador: esCompartido ? (pagueYo ? porcentaje : 100 - porcentaje) : undefined,
+        // Ausente significa "lo pague yo", que es lo que el backend asume.
+        pagadoPorId: esCompartido && !pagueYo ? otro?.id : undefined,
         esHormiga,
       });
       // `back` y no `replace`: esto es un modal que se cierra. El resumen que
@@ -249,6 +285,38 @@ export default function NuevoGasto() {
           */}
           {esCompartido ? (
             <View style={estilos.reparto}>
+              {/*
+                Quien pago aparece SOLO si el grupo ya tiene a la otra persona.
+                Mientras Viole no se haya registrado, un selector con una sola
+                opcion no es una eleccion: es un control que ocupa lugar y no
+                hace nada.
+              */}
+              {otro ? (
+                <>
+                  <Text style={estilos.repartoEtiqueta}>Quien pago</Text>
+                  <View style={estilos.chips}>
+                    {[true, false].map((yo) => (
+                      <Pressable
+                        key={String(yo)}
+                        onPress={() => setPagueYo(yo)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: pagueYo === yo }}
+                        style={[estilos.chip, pagueYo === yo && estilos.chipElegido]}
+                      >
+                        <Text
+                          style={[
+                            estilos.chipTexto,
+                            pagueYo === yo && estilos.chipTextoElegido,
+                          ]}
+                        >
+                          {yo ? 'Pague yo' : `Pago ${otro.nombre}`}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+
               <Text style={estilos.repartoEtiqueta}>Tu parte</Text>
               <View style={estilos.chips}>
                 {REPARTOS.map((p) => {

@@ -80,7 +80,17 @@ export default function Resumen() {
                 para que ese numero se vea primero.
               */}
               <Text style={estilos.rotulo}>Gasto hormiga</Text>
-              <Text style={estilos.numeroGrande}>{formatearMonto(resumen.totalHormiga)}</Text>
+              <Text
+                style={estilos.numeroGrande}
+                // El bug de que el numero se partia en dos lineas cuando no
+                // entraba. `adjustsFontSizeToFit` lo achica hasta que entre, que
+                // es preferible a un total hormiga cortado al medio -- justo el
+                // numero que la app existe para mostrar.
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {formatearMonto(resumen.totalHormiga)}
+              </Text>
               <Text style={estilos.comparacion}>{FRASES[resumen.animo]}</Text>
               <Text style={estilos.detalleComparacion}>
                 Mismo tramo del mes pasado: {formatearMonto(resumen.totalHormigaMesAnterior)}
@@ -103,6 +113,21 @@ export default function Resumen() {
               style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
             >
               <Text style={estilos.verGastos}>Ver los gastos del mes</Text>
+              <Text style={estilos.flecha}>›</Text>
+            </Pressable>
+
+            {/*
+              La entrada a la seccion de pareja. El texto es el encuadre del
+              producto, no un titulo generico: no tienen economia compartida, asi
+              que la pregunta que contesta esa pantalla es "quien le debe a
+              quien" y no "cuanto tenemos".
+            */}
+            <Pressable
+              onPress={() => router.push('/saldo')}
+              accessibilityRole="button"
+              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+            >
+              <Text style={estilos.verGastos}>Quien le debe a quien</Text>
               <Text style={estilos.flecha}>›</Text>
             </Pressable>
 
