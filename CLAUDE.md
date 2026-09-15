@@ -574,13 +574,18 @@ con el lenguaje del producto.
       tests puros nuevos en `PozoTest` (37 en total) y 30 chequeos nuevos en el
       smoke test.
 
-      **Falta la pantalla en mobile**, que son dos cosas: el tercer chip
-      (Personal / Compartido / Vaquita) en el alta, y la pantalla del viaje con
-      el numero grande en teal -- nunca en ambar, que es del gasto hormiga.
+      **La pantalla en mobile tambien esta**: `app/vaquita.tsx` con los dos
+      modos (el estado vacio ES el formulario para abrirla), y el tercer chip en
+      el alta. El booleano `esCompartido` paso a ser un tipo `Destino` de tres
+      valores; `VAQUITA` no existe en el backend, donde sigue siendo un
+      COMPARTIDO con `pozoId`. Con una vaquita vigente el alta abre con Vaquita
+      puesta, que es **mas rapido** que Compartido: no hay reparto ni quien pago.
 
-      Nada de esto se probo contra una base todavia: se verifico compilando y con
-      los tests puros. El smoke test es el que lo prueba de verdad, y necesita la
-      app corriendo.
+      Nada de esto se probo contra una base ni en un telefono. El backend se
+      verifico compilando y con los tests puros; el mobile con `tsc --noEmit` y
+      `expo export`, que bundlea de verdad (2,7 MB de iOS, contra 2,63 antes).
+      Lo que lo prueba en serio es `scripts/smoke-test.ps1`, que necesita la app
+      corriendo.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a

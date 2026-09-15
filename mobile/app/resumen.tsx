@@ -131,6 +131,23 @@ export default function Resumen() {
               <Text style={estilos.flecha}>›</Text>
             </Pressable>
 
+            {/*
+              La fila esta siempre, aunque no haya ninguna vaquita abierta, y no
+              condicionada a que exista una. Preguntar por el pozo activo aca
+              costaria una request mas en la pantalla que se abre primero y mas
+              seguido de toda la app, y para decidir si mostrar UNA fila. La
+              pantalla de la vaquita sabe dibujar su estado vacio, y ese estado
+              vacio ES el formulario para abrirla.
+            */}
+            <Pressable
+              onPress={() => router.push('/vaquita')}
+              accessibilityRole="button"
+              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+            >
+              <Text style={estilos.verGastos}>La vaquita del viaje</Text>
+              <Text style={estilos.flecha}>›</Text>
+            </Pressable>
+
             {resumen.porCategoria.length > 0 ? (
               <View style={estilos.categorias}>
                 <Text style={estilos.rotuloSeccion}>Por categoria</Text>

@@ -14,11 +14,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorDeApi } from '../../src/api/cliente';
-import type { CategoriaRespuesta, UsuarioRespuesta } from '../../src/api/tipos';
+import type { CategoriaRespuesta, PozoRespuesta, UsuarioRespuesta } from '../../src/api/tipos';
 import { Boton } from '../../src/componentes/Boton';
 import { IconoCategoria } from '../../src/componentes/IconoCategoria';
 import { useSesion } from '../../src/features/auth/sesion';
 import { crearGasto, hoyLocal, traerCategorias, traerGrupo } from '../../src/features/gastos/api';
+import { traerPozoActivo } from '../../src/features/vaquita/api';
 import { colores } from '../../src/tema/colores';
 import { fuentes, numerosTabulares } from '../../src/tema/tipografia';
 
@@ -57,6 +58,20 @@ import { fuentes, numerosTabulares } from '../../src/tema/tipografia';
 const REPARTOS = [50, 60, 70, 80, 100] as const;
 const REPARTO_POR_DEFECTO = 50;
 
+/**
+ * De donde sale el gasto.
+ *
+ * Reemplaza al booleano `esCompartido` que habia antes. El motivo es que con la
+ * vaquita ya son tres opciones y no dos, y **un booleano que crece a tres
+ * estados es como se ensucian los formularios**: aparece un segundo booleano,
+ * y con el las combinaciones imposibles.
+ *
+ * Fijate que VAQUITA no es un `tipo` del backend: alla el gasto sigue siendo
+ * COMPARTIDO y lo unico que lo distingue es tener `pozoId`. Este tipo existe
+ * solo en la pantalla, que es donde la pregunta se hace una sola vez.
+ */
+type Destino = 'PERSONAL' | 'COMPARTIDO' | 'VAQUITA';
+
 export default function NuevoGasto() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -67,7 +82,12 @@ export default function NuevoGasto() {
   const [monto, setMonto] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [esHormiga, setEsHormiga] = useState(false);
-  const [esCompartido, setEsCompartido] = useState(false);
+  const [destino, setDestino] = useState<Destino>('PERSONAL');
+  const [pozo, setPozo] = useState<PozoRespuesta | null>(null);
+  // Para que el default de la vaquita, que llega tarde porque es una request,
+  // no pise una eleccion que la persona ya hizo. Es el clasico de setear estado
+  // desde un efecto asincrono.
+  const [eligioAMano, setEligioAMano] = useState(false);
   const [porcentaje, setPorcentaje] = useState(REPARTO_POR_DEFECTO);
   const [otro, setOtro] = useState<UsuarioRespuesta | null>(null);
   const [pagueYo, setPagueYo] = useState(true);
@@ -100,6 +120,40 @@ export default function NuevoGasto() {
   }, [usuario?.id]);
 
   /**
+   * La vaquita abierta, si hay una. Su fallo tampoco se muestra: sin ella el
+   * formulario sigue siendo el de siempre.
+   *
+   * EL DEFAULT ES LA PARTE INTERESANTE. Si hay una vaquita abierta **y hoy cae
+   * dentro de las fechas del viaje**, el formulario abre con Vaquita puesta: en
+   * Bariloche el 90% de lo que carguen sale del pozo, asi que el camino rapido
+   * queda mas corto que hoy (ni reparto ni quien pago: pago el pozo).
+   *
+   * Se ata a `vigente` y no a que la vaquita exista para que el cafe que se
+   * compra Viole sola en octubre no se cargue sin querer al viaje. Y `vigente`
+   * lo decide el backend, porque "hoy" depende de la zona horaria.
+   */
+  useEffect(() => {
+    (async () => {
+      try {
+        const activo = await traerPozoActivo();
+        setPozo(activo);
+        if (activo?.vigente && !eligioAMano) setDestino('VAQUITA');
+      } catch {
+        setPozo(null);
+      }
+    })();
+    // eligioAMano a proposito NO esta en las dependencias: este efecto tiene que
+    // correr una sola vez, al abrir. Si se re-ejecutara al tocar un chip,
+    // volveria a pisar la eleccion, que es justo lo que se quiere evitar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function elegirDestino(elegido: Destino) {
+    setEligioAMano(true);
+    setDestino(elegido);
+  }
+
+  /**
    * El monto se escribe con coma (es como se escribe en Argentina) y viaja con
    * punto, que es lo unico que entiende JSON. Es la unica transformacion de
    * plata que hace la app: la aritmetica sigue siendo toda del backend.
@@ -117,7 +171,10 @@ export default function NuevoGasto() {
         categoriaId: categoriaId!,
         fecha: hoyLocal(),
         descripcion: descripcion.trim(),
-        tipo: esCompartido ? 'COMPARTIDO' : 'PERSONAL',
+        // VAQUITA no es un tipo del backend: alla es un COMPARTIDO con pozoId.
+        // El backend RECHAZA un PERSONAL con pozoId en vez de corregirlo, asi
+        // que esta linea y la de pozoId tienen que moverse juntas.
+        tipo: destino === 'PERSONAL' ? 'PERSONAL' : 'COMPARTIDO',
         // Los dos solo viajan si es compartido: en un PERSONAL el backend
         // ignora el porcentaje (montoPagador == monto) y ademas rechaza un
         // pagador que no seas vos.
@@ -136,9 +193,20 @@ export default function NuevoGasto() {
         // y no toca un peso. La cuenta que si es de plata (monto x porcentaje)
         // la sigue haciendo el backend, que es el unico que sabe donde cae el
         // centavo.
-        porcentajePagador: esCompartido ? (pagueYo ? porcentaje : 100 - porcentaje) : undefined,
+        //
+        // En un gasto de la VAQUITA no viaja ninguno de los dos: el backend
+        // ignora el porcentaje (es mitad y mitad por construccion, porque el
+        // pozo se financio entre los dos) y toma como pagador a quien carga.
+        // No hay reparto que decidir al gastar plata que ya es de los dos.
+        porcentajePagador:
+          destino === 'COMPARTIDO' ? (pagueYo ? porcentaje : 100 - porcentaje) : undefined,
         // Ausente significa "lo pague yo", que es lo que el backend asume.
-        pagadoPorId: esCompartido && !pagueYo ? otro?.id : undefined,
+        pagadoPorId: destino === 'COMPARTIDO' && !pagueYo ? otro?.id : undefined,
+        pozoId: destino === 'VAQUITA' ? pozo?.id : undefined,
+        // Un gasto del viaje SI se puede marcar como hormiga: un souvenir
+        // carisimo que no hacia falta lo es. Lo que no hace es contar para el
+        // total hormiga del mes ni para el animo de la nutria -- eso lo filtra
+        // el backend, no esta pantalla.
         esHormiga,
       });
       // `back` y no `replace`: esto es un modal que se cierra. El resumen que
@@ -258,24 +326,67 @@ export default function NuevoGasto() {
           Teal y no ambar: el ambar es del gasto hormiga y de nada mas. Aca el
           teal significa lo que significa en toda la app, que es "lo compartido".
         */}
-        <View style={[estilos.compartido, esCompartido && estilos.compartidoActivo]}>
-          <View style={estilos.filaSwitch}>
-            <View style={estilos.compartidoTexto}>
-              <Text style={estilos.compartidoTitulo}>Es un gasto compartido</Text>
+        <View style={[estilos.compartido, destino !== 'PERSONAL' && estilos.compartidoActivo]}>
+          {/*
+            DOS FORMAS DISTINTAS PARA EL MISMO CAMPO, y es deliberado.
+
+            Sin vaquita abierta -- o sea casi todo el anio -- el control es el
+            switch de siempre y esta pantalla no cambio en nada. Con una vaquita
+            abierta pasan a ser tres chips, porque un switch no tiene tres
+            estados y meter un segundo switch traeria combinaciones imposibles.
+
+            Lo importante es que el tercer chip **no agrega un campo, reemplaza
+            uno**: elegir Vaquita es mas rapido que elegir Compartido, porque no
+            hay que decidir reparto ni quien pago. Un tap en vez de tres.
+          */}
+          {pozo ? (
+            <>
+              <Text style={estilos.repartoEtiqueta}>De donde sale</Text>
+              <View style={estilos.chips}>
+                {(['PERSONAL', 'COMPARTIDO', 'VAQUITA'] as const).map((d) => {
+                  const elegido = d === destino;
+                  return (
+                    <Pressable
+                      key={d}
+                      onPress={() => elegirDestino(d)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: elegido }}
+                      style={[estilos.chip, elegido && estilos.chipElegido]}
+                    >
+                      <Text style={[estilos.chipTexto, elegido && estilos.chipTextoElegido]}>
+                        {d === 'PERSONAL' ? 'Personal' : d === 'COMPARTIDO' ? 'Compartido' : 'Vaquita'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <Text style={estilos.compartidoBajada}>
-                {esCompartido
-                  ? 'Lo van a ver los dos y entra en el saldo'
-                  : 'Un gasto personal lo ves solo vos'}
+                {destino === 'PERSONAL'
+                  ? 'Un gasto personal lo ves solo vos'
+                  : destino === 'COMPARTIDO'
+                    ? 'Lo van a ver los dos y entra en el saldo'
+                    : `Sale de ${pozo.nombre}. No genera deuda entre ustedes.`}
               </Text>
+            </>
+          ) : (
+            <View style={estilos.filaSwitch}>
+              <View style={estilos.compartidoTexto}>
+                <Text style={estilos.compartidoTitulo}>Es un gasto compartido</Text>
+                <Text style={estilos.compartidoBajada}>
+                  {destino === 'COMPARTIDO'
+                    ? 'Lo van a ver los dos y entra en el saldo'
+                    : 'Un gasto personal lo ves solo vos'}
+                </Text>
+              </View>
+              <Switch
+                value={destino === 'COMPARTIDO'}
+                onValueChange={(v) => elegirDestino(v ? 'COMPARTIDO' : 'PERSONAL')}
+                trackColor={{ false: colores.borde, true: colores.rio }}
+                thumbColor={colores.tarjeta}
+                ios_backgroundColor={colores.borde}
+              />
             </View>
-            <Switch
-              value={esCompartido}
-              onValueChange={setEsCompartido}
-              trackColor={{ false: colores.borde, true: colores.rio }}
-              thumbColor={colores.tarjeta}
-              ios_backgroundColor={colores.borde}
-            />
-          </View>
+          )}
 
           {/*
             El reparto aparece recien al prender el switch. Es "revelacion
@@ -283,7 +394,7 @@ export default function NuevoGasto() {
             lo necesita lo tiene a un tap. Mostrarlo siempre seria un campo mas
             en la pantalla que tiene que ser la mas rapida de la app.
           */}
-          {esCompartido ? (
+          {destino === 'COMPARTIDO' ? (
             <View style={estilos.reparto}>
               {/*
                 Quien pago aparece SOLO si el grupo ya tiene a la otra persona.

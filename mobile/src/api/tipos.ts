@@ -29,6 +29,8 @@ export type TipoGasto = 'PERSONAL' | 'COMPARTIDO';
 
 export type AnimoNutria = 'CONTENTA' | 'TRANQUILA' | 'PREOCUPADA';
 
+export type EstadoPozo = 'ABIERTO' | 'CERRADO';
+
 export type UsuarioRespuesta = {
   id: string;
   nombre: string;
@@ -63,6 +65,8 @@ export type GastoRespuesta = {
   pagadoPor: UsuarioRespuesta;
   /** Bloqueo optimista: se recibe al leer y se devuelve al editar. */
   version: number;
+  /** El pozo del que salio, o null si es un gasto de la vida normal. */
+  pozoId: string | null;
 };
 
 export type GuardarGastoRequest = {
@@ -78,6 +82,14 @@ export type GuardarGastoRequest = {
   /** Si falta, el backend lo toma como false. */
   esHormiga?: boolean;
   version?: number;
+  /**
+   * La vaquita. Si viaja, el backend **exige** que `tipo` sea COMPARTIDO y
+   * rechaza el gasto si no lo es -- no lo corrige solo, porque promover un
+   * PERSONAL a COMPARTIDO en silencio publicaria un gasto que su duenio marco
+   * como privado. Ademas ignora `porcentajePagador`: un gasto del pozo es mitad
+   * y mitad por construccion.
+   */
+  pozoId?: string;
 };
 
 export type TotalPorCategoria = {
@@ -119,6 +131,68 @@ export type ErrorRespuesta = {
   mensaje: string;
   /** Presente solo en fallos de validacion: campo -> mensaje. */
   errores?: Record<string, string>;
+};
+
+/**
+ * La vaquita del viaje.
+ *
+ * `aportado`, `gastado` y `restante` los calcula el backend en cada lectura: la
+ * app NO hace la resta. Es la misma regla que rige toda la plata de este
+ * cliente -- los montos llegan como `number`, que en JavaScript es punto
+ * flotante, y restar ahi reintroduce el problema del centavo que BigDecimal y
+ * Decimal128 vienen evitando de punta a punta.
+ *
+ * @property restante  puede ser NEGATIVO, y no es un error: si se les acabo la
+ *                     vaquita en medio de una cena, el gasto se cargo igual y el
+ *                     pozo quedo en rojo. La pantalla tiene que saber dibujarlo.
+ * @property vigente   si hoy cae dentro de las fechas del viaje. Lo decide el
+ *                     backend y no el telefono, porque "hoy" depende de la zona
+ *                     horaria: es el mismo motivo que el bean `Clock`.
+ */
+export type PozoRespuesta = {
+  id: string;
+  nombre: string;
+  objetivo: number | null;
+  estado: EstadoPozo;
+  /** yyyy-MM-dd */
+  desde: string | null;
+  hasta: string | null;
+  vigente: boolean;
+  aportado: number;
+  gastado: number;
+  restante: number;
+  porPersona: TotalPorPersona[];
+  aportes: AporteRespuesta[];
+  version: number;
+};
+
+export type TotalPorPersona = {
+  usuarioId: string;
+  nombre: string;
+  total: number;
+};
+
+export type AporteRespuesta = {
+  usuario: UsuarioRespuesta;
+  monto: number;
+  /** yyyy-MM-dd */
+  fecha: string;
+};
+
+export type CrearPozoRequest = {
+  nombre: string;
+  objetivo?: number;
+  desde?: string;
+  hasta?: string;
+};
+
+/**
+ * Poner plata. Fijate que NO lleva quien aporta: el backend lo saca del token.
+ * Nadie puede anotar un aporte a nombre de la otra persona, que es lo correcto
+ * -- un aporte es la afirmacion "puse esta plata".
+ */
+export type AporteRequest = {
+  monto: number;
 };
 
 export type GrupoRespuesta = {

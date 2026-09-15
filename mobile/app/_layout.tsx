@@ -61,6 +61,7 @@ export default function LayoutRaiz() {
           <Stack.Screen name="resumen" />
           <Stack.Screen name="gastos" />
           <Stack.Screen name="saldo" />
+          <Stack.Screen name="vaquita" />
           <Stack.Screen
             name="gasto/nuevo"
             options={{

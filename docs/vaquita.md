@@ -320,13 +320,47 @@ posible y se muestra.
 ### Lo visual
 
 - El número grande es **"queda"**, y **no va en ámbar**. El ámbar es del gasto
-  hormiga y de nada más (ver `docs/diseno.md`). Va teal, que es lo compartido.
+  hormiga y de nada más (ver `docs/diseno.md`). Va teal, que es lo compartido, y
+  terracota cuando el restante es negativo — que es el color de "mirá esto",
+  tampoco ámbar.
 - Es la segunda pantalla que se gana la ilustración de las dos nutrias
   (`nosotros.png`), que Viole pidió explícitamente al evaluar los mockups.
 - La pantalla del viaje **no es mensual**. Es el primer agregado de la app que
   no se corta por mes, y está bien: el viaje trae su propio corte natural. Eso
   es justamente lo que le faltaba al saldo histórico para no ser un número que
   solo crece.
+
+## 8.b Cómo quedó en la app
+
+**`app/vaquita.tsx`** es una pantalla con dos modos, y el vacío **es un
+formulario, no un cartel**: como abrir la vaquita se hace una sola vez, la
+pantalla vacía ya es el formulario para abrirla, en vez de un cartel que obliga a
+un tap más. Solo pide el nombre; el objetivo es opcional, y dice explícitamente
+que *no es un tope* — un número que parece un límite se lee como presupuesto, y
+los presupuestos están descartados.
+
+Con vaquita abierta muestra el restante grande, cuánto puso cada uno (**los dos
+siempre, incluso el que puso cero**), un campo para poner plata, la lista de
+gastos del viaje y el cierre. Cerrar pasa por un `Alert` de confirmación: es lo
+único irreversible de la app, porque no hay endpoint para reabrir un pozo.
+
+**El alta de gasto cambia de forma según haya vaquita o no**, y es deliberado:
+
+- **Sin vaquita abierta** —o sea casi todo el año— el control sigue siendo el
+  switch de siempre. Esa pantalla no cambió en nada.
+- **Con vaquita abierta** pasa a ser tres chips: Personal / Compartido /
+  Vaquita. Un switch no tiene tres estados, y meter un segundo switch traería
+  combinaciones imposibles.
+
+El booleano `esCompartido` se reemplazó por un tipo `Destino` de tres valores.
+**`VAQUITA` no existe en el backend**: allá el gasto sigue siendo `COMPARTIDO` y
+lo único que lo distingue es tener `pozoId`. El tipo vive solo en la pantalla,
+que es donde la pregunta se hace una vez.
+
+Y la lista del viaje reusa `FilaGasto` tal cual, con lo que viene gratis lo que
+importa: **la marca ámbar de gasto hormiga se sigue viendo gasto por gasto**. Un
+souvenir carísimo es hormiga aunque haya salido de la vaquita; lo que no hace es
+contar para el total del mes.
 
 ## 9. Lo que queda afuera a propósito
 
