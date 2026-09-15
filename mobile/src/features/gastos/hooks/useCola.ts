@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { descartar, leerCola, type GastoPendiente } from '../../../almacenamiento/cola';
 import { sincronizar } from '../sincronizador';
@@ -35,9 +36,24 @@ export function useCola() {
     [releer],
   );
 
-  useEffect(() => {
-    void releer();
-  }, [releer]);
+  /**
+   * Se releee CADA VEZ que la pantalla gana foco, no solo al montarse.
+   *
+   * Con un `useEffect` comun esto tenia un bug: el contador se leia una sola vez
+   * y despues quedaba viejo. Volver del alta de un gasto, o que `recargar` de la
+   * pantalla vaciara la cola, dejaba el aviso diciendo "1 gasto sin enviar" para
+   * siempre -- que es peor que no tener aviso, porque miente sobre plata.
+   *
+   * Y se llama a `enviar` y no a `releer`: hay que leer DESPUES de que termine
+   * el envio, no antes, o el contador sale viejo igual. Engancharse al envio no
+   * cuesta nada porque `sincronizar()` deduplica -- si la pantalla ya lo
+   * disparo, esto se suma a esa misma promesa en vez de arrancar otro.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      void enviar();
+    }, [enviar]),
+  );
 
   return {
     /** Esperando a que haya red. Se reintentan solos. */

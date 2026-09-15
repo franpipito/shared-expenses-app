@@ -32,8 +32,9 @@ tiene equivalente en la app.
 ### La limitación que hay que conocer antes de armarlo
 
 **El atajo no tiene cola offline y nunca la va a tener.** Es un POST y listo: si
-no hay señal, falla y el gasto se pierde. La app sí puede guardar local y
-sincronizar después.
+no hay señal, falla y el gasto se pierde. La app, desde la sesión 6.8, guarda
+local y sincroniza sola: ahí guardar es una operación de disco que anda con una
+barra de señal o sin ninguna.
 
 O sea que conviven con roles distintos: **el atajo es el camino rápido cuando
 hay señal, la app es el camino confiable.** Por eso el paso 8 del atajo (la
@@ -114,8 +115,49 @@ En la app **Atajos** → `+` → agregá estas acciones en orden:
 | `pozoId` | Texto | el id del pozo *(omitir hasta la 6.7)* |
 | `esHormiga` | Booleano | `false` |
 
-El paso 8 importa: sin una confirmación visible no tenés forma de saber si se
-guardó, y un POST fallido en Atajos es fácil de no ver.
+El paso 8 importa **más de lo que parece**, y por un motivo que cambió desde que
+la app tiene cola offline: ver la sección siguiente.
+
+## 3.b La clave de idempotencia, y por qué el atajo no la lleva
+
+El backend acepta un campo `clienteId` en `POST /gastos`: una clave que el
+cliente genera y que hace que reintentar un gasto sea seguro. Si el POST llega,
+el servidor lo escribe y la respuesta se pierde de vuelta, el reintento con la
+misma clave choca contra un índice único y **devuelve el gasto que ya existía en
+vez de crear un segundo**.
+
+**La app la usa. El atajo no, y conviene entender por qué no sirve acá.**
+
+El atajo no reintenta solo: si falla, lo reintentás vos volviendo a tocarlo. Y un
+segundo toque genera una clave nueva, así que el servidor lo ve como un gasto
+distinto y lo guarda. Una clave aleatoria por ejecución **no protege de nada**:
+el único escenario que cubriría es uno que el atajo no hace.
+
+Agregarle un paso a un atajo cuyo propósito entero es la velocidad, para una
+garantía que no da, es exactamente lo que este proyecto no hace.
+
+**Lo que sí protege al atajo es el paso 8.** Si la notificación no aparece, no
+sabés si entró: abrí la app y fijate en la lista antes de volver a tocar. Sin esa
+confirmación, la reacción natural —tocar de nuevo— es la que duplica el gasto.
+
+### La variante para el doble toque accidental
+
+Back Tap a veces dispara dos veces sola. Si eso te pasa seguido, la clave puede
+servir, pero tiene que ser **derivada del contenido y no aleatoria**: agregá un
+paso de *Texto* con `[monto]-[desc]-[fecha y hora en formato yyyyMMddHHmm]` y
+mandalo como `clienteId`. Dos disparos del mismo gasto en el mismo minuto quedan
+en uno solo.
+
+El costo, que hay que aceptar a sabiendas: **dos gastos idénticos de verdad,
+cargados en el mismo minuto, también se fusionan en uno.** Dos cafés iguales
+comprados juntos entrarían como uno. Por eso no va por defecto.
+
+## 3.c Qué pasa si cargás por el atajo y por la app
+
+Nada raro, pero vale saberlo: son dos caminos independientes. El atajo escribe
+directo contra la API; la app escribe en su cola local y sincroniza. Un gasto
+cargado por el atajo aparece en la app en cuanto la abrís y refresca. No hay
+riesgo de que se pisen.
 
 ## 4. Dónde engancharlo
 

@@ -534,7 +534,7 @@ grande merece que alguien mire cuanto pesa el bundle antes y despues.
 /web          React + Vite (despues del MVP)
 docker-compose.yml       MongoDB local
 scripts/
-  smoke-test.ps1         57 chequeos de la API contra el backend corriendo
+  smoke-test.ps1         chequeos de la API contra el backend corriendo
 docs/
   entrevista-usuaria.md  fuente de verdad de las decisiones de producto
   diseno.md              colores, tipografias, nutrias y estructura de carpetas
@@ -583,9 +583,6 @@ con el lenguaje del producto.
 
       Lo que queda afuera y no bloquea el cierre: editar y borrar, y los filtros
       por categoria y pagador del listado (el endpoint ya los acepta).
-
-      Bug conocido: el numero grande del resumen se parte en dos lineas cuando
-      no entra.
 
       Nada de esto se probo en un telefono todavia: se verifico con
       `tsc --noEmit` y con `expo export`, que bundlea de verdad.
