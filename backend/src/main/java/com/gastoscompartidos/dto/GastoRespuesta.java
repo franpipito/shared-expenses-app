@@ -28,7 +28,9 @@ public record GastoRespuesta(
         boolean esHormiga,
         CategoriaRespuesta categoria,
         UsuarioRespuesta pagadoPor,
-        Long version
+        Long version,
+        /** El pozo del que salio, o null si es un gasto de la vida normal. */
+        String pozoId
 ) {
     /**
      * ESTE METODO SE SIMPLIFICO MUCHO AL PASAR A MONGO, y vale saber por que.
@@ -64,7 +66,8 @@ public record GastoRespuesta(
                 new UsuarioRespuesta(
                         gasto.getPagadoPor().usuarioId(),
                         gasto.getPagadoPor().nombre()),
-                gasto.getVersion()
+                gasto.getVersion(),
+                gasto.getPozoId()
         );
     }
 }

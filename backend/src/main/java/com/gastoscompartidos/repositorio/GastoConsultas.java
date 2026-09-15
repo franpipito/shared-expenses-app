@@ -26,6 +26,12 @@ import java.util.Optional;
  * La regla: un gasto COMPARTIDO lo ve todo el grupo; uno PERSONAL solo lo ve
  * quien lo pago.
  *
+ * SEGUNDA REGLA, que llego con la vaquita: los agregados MENSUALES ignoran los
+ * gastos que salieron de un pozo. Un viaje no ensucia el mes -- ni la deuda
+ * entre ellos, ni el total hormiga, ni el humor de la nutria. Para eso esta
+ * `sinPozo()`, y vale el mismo argumento que para la visibilidad: vive en el
+ * filtro de cada consulta y no en el servicio, asi que no se puede olvidar.
+ *
  * Lo que MEJORO al pasar a Mongo: en JPQL esa condicion estaba copiada y pegada
  * en las cuatro consultas, porque un string de JPQL no se puede componer. Aca es
  * un `Criteria` que devuelve un metodo y que todas reusan. Un solo lugar donde
@@ -33,7 +39,10 @@ import java.util.Optional;
  */
 public interface GastoConsultas {
 
-    /** Gastos del mes que el usuario puede ver, con filtros opcionales. */
+    /**
+     * Gastos del mes que el usuario puede ver, con filtros opcionales.
+     * NO incluye los gastos de un pozo: esos viven en la pantalla del viaje.
+     */
     List<Gasto> buscarVisibles(String grupoId, String usuarioId,
                                LocalDate desde, LocalDate hasta,
                                String categoriaId, String pagadoPorId);
@@ -48,7 +57,7 @@ public interface GastoConsultas {
      */
     Optional<Gasto> buscarVisiblePorId(String id, String grupoId, String usuarioId);
 
-    /** Cuanto gasto hormiga consumio este usuario en el periodo. */
+    /** Cuanto gasto hormiga consumio este usuario en el periodo, sin los del pozo. */
     BigDecimal sumarHormigaDe(String grupoId, String usuarioId, LocalDate desde, LocalDate hasta);
 
     /**
@@ -58,6 +67,18 @@ public interface GastoConsultas {
      */
     long contarEn(String grupoId, String usuarioId, LocalDate desde, LocalDate hasta);
 
-    /** El saldo del periodo. Positivo = a este usuario le deben. */
+    /**
+     * El saldo del periodo. Positivo = a este usuario le deben.
+     *
+     * Los gastos del pozo quedan afuera porque no generan deuda: la plata ya
+     * se repartio al aportar. Lo que si mueve el saldo es aportar distinto, y
+     * eso se ve en el pozo, no aca.
+     */
     BigDecimal saldoDe(String grupoId, String usuarioId, LocalDate desde, LocalDate hasta);
+
+    /** Todos los gastos de un pozo, sin recorte por mes: un viaje puede cruzarlo. */
+    List<Gasto> buscarDelPozo(String pozoId, String grupoId);
+
+    /** Cuanto se gasto del pozo. Es el lado de los debitos del invariante. */
+    BigDecimal sumarDelPozo(String pozoId);
 }

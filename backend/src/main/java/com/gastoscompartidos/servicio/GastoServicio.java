@@ -5,12 +5,15 @@ import com.gastoscompartidos.dto.GuardarGastoRequest;
 import com.gastoscompartidos.error.RecursoNoEncontradoException;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Categoria;
+import com.gastoscompartidos.modelo.EstadoPozo;
 import com.gastoscompartidos.modelo.Gasto;
+import com.gastoscompartidos.modelo.Pozo;
 import com.gastoscompartidos.modelo.ReferenciaCategoria;
 import com.gastoscompartidos.modelo.TipoGasto;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.CategoriaRepositorio;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
+import com.gastoscompartidos.repositorio.PozoRepositorio;
 import com.gastoscompartidos.repositorio.UsuarioRepositorio;
 import com.gastoscompartidos.seguridad.UsuarioActual;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -52,15 +55,18 @@ public class GastoServicio {
     private final GastoRepositorio gastos;
     private final CategoriaRepositorio categorias;
     private final UsuarioRepositorio usuarios;
+    private final PozoRepositorio pozos;
     private final UsuarioActual usuarioActual;
 
     public GastoServicio(GastoRepositorio gastos,
                          CategoriaRepositorio categorias,
                          UsuarioRepositorio usuarios,
+                         PozoRepositorio pozos,
                          UsuarioActual usuarioActual) {
         this.gastos = gastos;
         this.categorias = categorias;
         this.usuarios = usuarios;
+        this.pozos = pozos;
         this.usuarioActual = usuarioActual;
     }
 
@@ -70,6 +76,7 @@ public class GastoServicio {
         Usuario pagador = resolverPagador(req, actual);
 
         BigDecimal monto = normalizar(req.monto());
+        String pozoId = validarPozo(req, actual);
 
         Gasto gasto = new Gasto(
                 actual.getGrupoId(),
@@ -77,11 +84,12 @@ public class GastoServicio {
                 pagador.comoReferencia(),
                 referencia(categoria),
                 monto,
-                calcularMontoPagador(monto, req.tipo(), req.porcentajePagador()),
+                montoPagadorDe(req, monto),
                 req.tipo(),
                 req.fecha(),
                 req.descripcion().trim(),
-                esHormiga(req));
+                esHormiga(req),
+                pozoId);
 
         return GastoRespuesta.desde(gastos.save(gasto));
     }
@@ -117,11 +125,16 @@ public class GastoServicio {
         gasto.setCategoria(referencia(buscarCategoria(req.categoriaId())));
         gasto.setPagadoPor(resolverPagador(req, actual).comoReferencia());
         gasto.setMonto(monto);
-        gasto.setMontoPagador(calcularMontoPagador(monto, req.tipo(), req.porcentajePagador()));
+        gasto.setMontoPagador(montoPagadorDe(req, monto));
         gasto.setTipo(req.tipo());
         gasto.setFecha(req.fecha());
         gasto.setDescripcion(req.descripcion().trim());
         gasto.setEsHormiga(esHormiga(req));
+        // Se puede mover un gasto adentro o afuera de la vaquita editandolo.
+        // Es la valvula de escape para el que se cargo al pozo sin querer, que
+        // es el riesgo conocido de que el formulario abra con "Vaquita" puesto
+        // durante el viaje.
+        gasto.setPozoId(validarPozo(req, actual));
 
         // ACA HABIA UN gastos.flush() Y AHORA HAY UN save(), y el motivo de
         // fondo es el mismo que antes: hay que devolverle al cliente la version
@@ -197,6 +210,65 @@ public class GastoServicio {
     /** El cliente podria mandar 3 decimales. Los llevamos a 2 en el borde. */
     private BigDecimal normalizar(BigDecimal monto) {
         return monto.setScale(ESCALA_DINERO, REDONDEO);
+    }
+
+    /**
+     * Valida el pozo que vino en la request y devuelve su id, o null.
+     *
+     * DOS REGLAS, y la segunda es de privacidad y no de prolijidad:
+     *
+     * 1. El pozo tiene que existir, ser de tu grupo y estar ABIERTO. Que el
+     *    grupo viaje en la consulta y no en un if es lo mismo que hace
+     *    `visiblesPara`: un pozo ajeno simplemente no aparece.
+     *
+     * 2. **Un gasto del pozo NO puede ser PERSONAL, y se rechaza en vez de
+     *    corregirse.** Es tentador "arreglarlo" forzando COMPARTIDO, y seria un
+     *    error grave: un gasto PERSONAL es privado de quien lo carga, asi que
+     *    promoverlo en silencio publicaria un gasto que su duenio marco como
+     *    privado. El caso concreto es el que la usuaria pidio cuidar en la
+     *    entrevista: un regalo sorpresa cargado por error con el pozo puesto.
+     *    Un 400 es molesto; filtrar el regalo es romper el producto.
+     */
+    private String validarPozo(GuardarGastoRequest req, Usuario actual) {
+        if (req.pozoId() == null) {
+            return null;
+        }
+
+        if (req.tipo() == TipoGasto.PERSONAL) {
+            throw new ReglaDeNegocioException(
+                    "Un gasto personal no puede salir de la vaquita: la vaquita la ven los dos");
+        }
+
+        Pozo pozo = pozos.findByIdAndGrupoId(req.pozoId(), actual.getGrupoId())
+                .orElseThrow(() -> new ReglaDeNegocioException(
+                        "No existe la vaquita " + req.pozoId()));
+
+        if (pozo.getEstado() != EstadoPozo.ABIERTO) {
+            throw new ReglaDeNegocioException("Esa vaquita ya esta cerrada");
+        }
+
+        return pozo.getId();
+    }
+
+    /**
+     * Cuanto le toca al pagador.
+     *
+     * Un gasto del pozo es **siempre mitad y mitad**, y el porcentaje que haya
+     * mandado el cliente se ignora. No es una simplificacion: la plata del pozo
+     * es de los dos desde que entro, asi que no hay reparto que decidir al
+     * gastarla. Si aportaron distinto, esa diferencia se salda una sola vez
+     * mirando los aportes, no gasto por gasto.
+     *
+     * En rigor este numero es inerte, porque los gastos del pozo estan excluidos
+     * de todos los agregados que miran deuda. Se guarda coherente igual: si
+     * alguien saca el gasto del pozo editandolo, los montos que quedan tienen
+     * sentido en vez de ser basura heredada.
+     */
+    private BigDecimal montoPagadorDe(GuardarGastoRequest req, BigDecimal monto) {
+        if (req.pozoId() != null) {
+            return calcularMontoPagador(monto, TipoGasto.COMPARTIDO, PORCENTAJE_POR_DEFECTO);
+        }
+        return calcularMontoPagador(monto, req.tipo(), req.porcentajePagador());
     }
 
     /**

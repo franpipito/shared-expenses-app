@@ -107,8 +107,8 @@ por eso su **lectura** va separada aunque la **escritura** no lo esté.
 pozo {
   _id, grupo_id, nombre: "Bariloche", objetivo: 800000.00,
   estado: ABIERTO | CERRADO, desde, hasta,
-  aportes: [ { usuarioId, nombre, monto, fecha } ],
-  creado_en, actualizado_en
+  aportes: [ { usuario: { usuarioId, nombre }, monto, fecha } ],
+  creado_en, actualizado_en, version
 }
 ```
 
@@ -116,10 +116,14 @@ Los aportes van **embebidos**, por el mismo criterio que `ReferenciaUsuario`:
 son pocos, están acotados (dos personas, un puñado de aportes por viaje) y
 siempre se leen junto al pozo. Nunca se consultan solos.
 
-El snapshot `{usuarioId, nombre}` sigue la misma regla que el resto del modelo, y
-**el campo se llama `usuarioId` y no `id`** por el motivo documentado en
-`ReferenciaUsuario`: Spring Data convierte cualquier propiedad llamada `id` a
-ObjectId, también dentro de un documento embebido, y en silencio.
+El aporte embebe un `ReferenciaUsuario`, el mismo snapshot que usa
+`Gasto.pagadoPor`, en vez de repetir los campos sueltos. **El campo se llama
+`usuarioId` y no `id`** por el motivo documentado ahí: Spring Data convierte
+cualquier propiedad llamada `id` a ObjectId, también dentro de un documento
+embebido, y en silencio.
+
+`Aporte` es un `record`, o sea inmutable, que es lo correcto para un asiento
+contable: un aporte no se edita; si estuvo mal, se compensa con otro.
 
 ### El detalle de Mongo que importa: `$push`, no read-modify-write
 
@@ -142,9 +146,15 @@ mismo argumento por el que no hay `@Transactional` en ningún servicio. En
 Postgres el aporte sería un `INSERT` en una tabla hija; acá el array *es* la
 tabla hija y `$push` es el insert.
 
-Nota: `updateFirst` con `$push` **no pasa por `@Version`**. Es correcto y es a
-propósito: un aporte es un append, no una edición. El `@Version` del pozo
-protege los cambios a sus campos propios (nombre, fechas, cierre).
+**Y acá hay una trampa que costó encontrar pensándola:** `updateFirst` a mano no
+toca el `@Version`. Si lo dejáramos así, alguien que leyó el pozo *antes* del
+aporte podría después llamar a `save()`, su versión seguiría coincidiendo, y
+pisaría la lista de aportes con la copia vieja — o sea, **borraría el aporte
+recién hecho sin ningún error**.
+
+Por eso el update lleva `.inc("version", 1)`, que es exactamente lo que haría
+`save()`. De ahí sale la regla de la clase: *después de crearlo, un `Pozo` no se
+guarda nunca más con `save()`.* Todo cambio es una actualización condicional.
 
 ## 6. Qué toca del código que ya funciona
 
@@ -156,8 +166,21 @@ Casi nada, y esa era la idea:
 | `repositorio/GastoConsultasImpl.java:141` (`saldoDe`) | un `Criteria.where("pozo_id").is(null)` |
 | `repositorio/GastoConsultasImpl.java:116` (`sumarHormigaDe`) | idem |
 | `repositorio/GastoConsultasImpl.java:132` (`contarEn`) | idem |
-| `servicio/GastoServicio.java:67` (`crear`) | validar el pozo y forzar `tipo = COMPARTIDO` |
+| `repositorio/GastoConsultas.java` | dos consultas nuevas: `buscarDelPozo` y `sumarDelPozo` |
+| `servicio/GastoServicio.java` (`crear` y `actualizar`) | validar el pozo y **rechazar** los `PERSONAL` |
 | `dto/GuardarGastoRequest.java` | `String pozoId` opcional |
+
+### Un gasto PERSONAL con `pozoId` se rechaza, no se corrige
+
+Es tentador "arreglarlo" promoviéndolo a COMPARTIDO, y sería un error grave.
+
+Un gasto PERSONAL es privado de quien lo carga. Promoverlo en silencio
+**publicaría un gasto que su dueño marcó como privado**, y el caso concreto es
+justo el que la usuaria pidió cuidar en la entrevista: un regalo sorpresa
+cargado por error con la vaquita puesta. Un 400 es molesto; filtrar el regalo
+rompe el producto.
+
+Es la regla general de este backend: ante un input ambiguo, fallar, no adivinar.
 
 **Nada más.** La regla de visibilidad (`visiblesPara()`, línea 54) no se toca:
 un gasto del pozo es un `COMPARTIDO` normal con una marca, así que los dos lo
@@ -191,17 +214,37 @@ va a tener.
 ```
 POST   /pozos                  { nombre, objetivo?, desde?, hasta? }   201
 GET    /pozos/activo           ->  PozoRespuesta  |  204 si no hay
+GET    /pozos/{id}/gastos      ->  los gastos del viaje, sin recorte por mes
 POST   /pozos/{id}/aportes     { monto }                               200
 POST   /pozos/{id}/cerrar                                              200
 ```
 
 ```
 PozoRespuesta {
-  id, nombre, objetivo, estado, desde, hasta,
+  id, nombre, objetivo, estado, desde, hasta, vigente,
   aportado, gastado, restante,
-  aportes: [ { usuarioId, nombre, monto, fecha } ]
+  porPersona: [ { usuarioId, nombre, total } ],
+  aportes:    [ { usuario: {...}, monto, fecha } ],
+  version
 }
 ```
+
+Tres decisiones de la API que vale justificar:
+
+- **`GET /pozos/activo` devuelve 204 y no 404 cuando no hay ninguna.** No tener
+  vaquita es un estado normal de la app, no un error. El cliente pregunta "¿hay
+  una?" y "no" es una respuesta válida, no un fallo que mostrarle a nadie.
+- **`vigente` lo calcula el backend**, aunque sea una comparación de fechas. Es
+  el mismo motivo que el bean `Clock`: "hoy" depende de la zona horaria, y el
+  servidor corre en UTC.
+- **`porPersona` lista a los dos integrantes, incluso al que aportó cero.**
+  "Viole $0" es información útil, no un hueco: es justo lo que hay que mirar
+  antes de salir de viaje.
+
+`GET /pozos/{id}/gastos` existe aparte, en vez de un parámetro en `GET /gastos`,
+porque su consulta tiene otra semántica: no se corta por mes. Meterle un
+parámetro que cambia el modo a un endpoint existente es cómo se pudren los
+endpoints.
 
 `aportado`, `gastado` y `restante` se calculan **al vuelo**, con un `$sum`
 filtrando por `pozo_id`, consistente con la decisión de no materializar
@@ -297,6 +340,14 @@ la pantalla de cierre, no.
 
 Tampoco: múltiples pozos simultáneos, metas de ahorro, el pozo dentro del
 resumen mensual, ni notificaciones de "queda poco".
+
+**El número del desbalance tampoco se calcula, y es una decisión, no un olvido.**
+Si Franco pone $500.000 y Viole $300.000, el invariante dice que ella le debe
+$100.000. Hoy la API devuelve los dos totales en `porPersona` y nada más: con dos
+personas mirando una pantalla que dice "Franco $500.000 / Viole $300.000", la
+cuenta la hacen ellos. Exponerlo como número propio agrega un concepto nuevo a la
+UI ("la vaquita te debe") que todavía no se diseñó. Queda anotado para cuando la
+pantalla exista.
 
 ### Qué se tomó de BBVA y qué no
 

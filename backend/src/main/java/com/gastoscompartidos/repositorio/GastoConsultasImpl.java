@@ -71,13 +71,32 @@ public class GastoConsultasImpl implements GastoConsultas {
         return Criteria.where("fecha").gte(desde).lt(hasta);
     }
 
+    /**
+     * "Los gastos de la vida normal", o sea los que no salieron de un pozo.
+     *
+     * Es el filtro de los TRES agregados mensuales. Un viaje se paga con plata
+     * que se ahorro a proposito, asi que no es deuda entre ellos ni es gasto
+     * hormiga, y comparar un mes con viaje contra uno sin viaje no es una
+     * tendencia sino ruido. Ver docs/vaquita.md.
+     *
+     * OJO CON ESTE `is(null)`, que en SQL seria un bug: en Mongo `{campo: null}`
+     * matchea tanto los documentos con el campo en null como **los que no tienen
+     * el campo**. Es justo lo que hace falta, porque Spring Data no escribe los
+     * null y los gastos anteriores a la vaquita directamente no tienen la clave.
+     * En SQL, `= NULL` no matchea nunca y habria que escribir `IS NULL`.
+     */
+    private static Criteria sinPozo() {
+        return Criteria.where("pozo_id").is(null);
+    }
+
     @Override
     public List<Gasto> buscarVisibles(String grupoId, String usuarioId,
                                       LocalDate desde, LocalDate hasta,
                                       String categoriaId, String pagadoPorId) {
         Query query = new Query(new Criteria().andOperator(
                 visiblesPara(grupoId, usuarioId),
-                enElPeriodo(desde, hasta)
+                enElPeriodo(desde, hasta),
+                sinPozo()
         ));
 
         // Los filtros opcionales se agregan solo si vinieron. En JPQL esto era
@@ -118,6 +137,7 @@ public class GastoConsultasImpl implements GastoConsultas {
         Criteria filtro = new Criteria().andOperator(
                 visiblesPara(grupoId, usuarioId),
                 enElPeriodo(desde, hasta),
+                sinPozo(),
                 Criteria.where("es_hormiga").is(true)
         );
 
@@ -130,9 +150,15 @@ public class GastoConsultasImpl implements GastoConsultas {
 
     @Override
     public long contarEn(String grupoId, String usuarioId, LocalDate desde, LocalDate hasta) {
+        // sinPozo() tambien aca, y no es un detalle: este conteo decide si la
+        // nutria tiene datos del mes anterior para comparar. Si contara los
+        // gastos del viaje, un mes que solo tuvo viaje daria "hay datos" con
+        // cero hormiga, y la nutria saldria CONTENTA por un mes que en realidad
+        // no midio nada.
         Query query = new Query(new Criteria().andOperator(
                 visiblesPara(grupoId, usuarioId),
-                enElPeriodo(desde, hasta)
+                enElPeriodo(desde, hasta),
+                sinPozo()
         ));
         return mongoTemplate.count(query, Gasto.class);
     }
@@ -147,13 +173,38 @@ public class GastoConsultasImpl implements GastoConsultas {
         Criteria filtro = new Criteria().andOperator(
                 Criteria.where("grupo_id").is(grupoId),
                 Criteria.where("tipo").is(TipoGasto.COMPARTIDO),
-                enElPeriodo(desde, hasta)
+                enElPeriodo(desde, hasta),
+                sinPozo()
         );
 
         // Positivo = a este usuario le deben. Negativo = debe el.
         return sumar(filtro, condicional(usuarioId,
                 new Document("$subtract", List.of("$monto", "$monto_pagador")),
                 new Document("$subtract", List.of("$monto_pagador", "$monto"))));
+    }
+
+    @Override
+    public List<Gasto> buscarDelPozo(String pozoId, String grupoId) {
+        // Sin rango de fechas, a proposito: el pozo ES el recorte. Es el primer
+        // listado de la app que no se corta por mes, y esta bien -- un viaje
+        // trae su propio corte natural, y el de Bariloche cruza de septiembre a
+        // octubre. El grupoId va igual, para que el id de un pozo ajeno no
+        // devuelva nada.
+        Query query = new Query(new Criteria().andOperator(
+                Criteria.where("pozo_id").is(pozoId),
+                Criteria.where("grupo_id").is(grupoId)
+        ));
+        query.with(Sort.by(Sort.Direction.DESC, "fecha", "_id"));
+        return mongoTemplate.find(query, Gasto.class);
+    }
+
+    @Override
+    public BigDecimal sumarDelPozo(String pozoId) {
+        // Suma el monto ENTERO y no la parte de nadie: el gasto salio del pozo,
+        // no del bolsillo de uno de los dos. Por eso no hay $cond aca, a
+        // diferencia de saldoDe y sumarHormigaDe. Es el lado de los debitos de
+        // `restante = aportes - gastos`.
+        return sumar(Criteria.where("pozo_id").is(pozoId), "$monto");
     }
 
     /**
@@ -188,7 +239,13 @@ public class GastoConsultasImpl implements GastoConsultas {
      * `_id: null` significa "una sola fila con el total de todo", que es el
      * equivalente de un SUM sin GROUP BY.
      */
-    private BigDecimal sumar(Criteria filtro, Document expresion) {
+    /**
+     * @param expresion la expresion que se suma. Puede ser un Document (un
+     *                  `$cond`, por ejemplo) o simplemente la ruta de un campo
+     *                  como "$monto": las dos son expresiones validas de
+     *                  agregacion, y por eso el parametro es Object y no Document.
+     */
+    private BigDecimal sumar(Criteria filtro, Object expresion) {
         // OJO CON ESTAS DOS LINEAS: aca estuvo el bug que hizo fallar el saldo.
         //
         // La primera version armaba el $match a mano con

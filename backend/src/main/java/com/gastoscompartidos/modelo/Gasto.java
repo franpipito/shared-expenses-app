@@ -48,6 +48,11 @@ import java.time.LocalDate;
 // motivo: toda consulta de la app filtra por grupo y por rango de fecha.
 @CompoundIndex(name = "idx_gasto_grupo_fecha", def = "{'grupo_id': 1, 'fecha': -1}")
 @CompoundIndex(name = "idx_gasto_pagado_por", def = "{'pagadoPor.usuarioId': 1}")
+// Sostiene el listado de gastos de un viaje. Es parcial a proposito: la
+// enorme mayoria de los gastos NO tiene pozo_id, y un indice parcial no los
+// indexa, asi que ocupa lo que ocupan los gastos del viaje y nada mas.
+@CompoundIndex(name = "idx_gasto_pozo_fecha", def = "{'pozo_id': 1, 'fecha': -1}",
+        partialFilter = "{'pozo_id': {$exists: true}}")
 public class Gasto {
 
     @Id
@@ -115,6 +120,31 @@ public class Gasto {
     private boolean esHormiga;
 
     /**
+     * El pozo del que salio este gasto, o null si es un gasto de la vida normal.
+     *
+     * ESTE CAMPO NULLABLE ES TODO EL CAMBIO QUE LA VAQUITA LE HIZO AL MODELO, y
+     * era la idea: `null` es lo que tienen todos los gastos que ya estaban
+     * cargados, asi que ninguno cambio de significado al agregarlo.
+     *
+     * Un gasto con pozo es un COMPARTIDO normal con una marca, de modo que la
+     * regla de visibilidad sigue funcionando sin tocarla: los dos lo ven.
+     *
+     * Lo que SI cambia es que `pozo_id == null` paso a significar "gasto de la
+     * vida normal", y ese es el filtro de los tres agregados mensuales (saldo,
+     * total hormiga y el conteo del animo). Un gasto del viaje no ensucia el mes:
+     * ni la deuda entre ellos, ni el humor de la nutria. Ver docs/vaquita.md.
+     *
+     * DETALLE DE MONGO QUE EN SQL SERIA UN BUG: la consulta
+     * `Criteria.where("pozo_id").is(null)` matchea tanto los documentos que
+     * tienen el campo en null como **los que no lo tienen**. Eso es justo lo que
+     * hace falta, porque Spring Data no escribe los campos null y los gastos
+     * viejos directamente no tienen la clave. En SQL es al reves: `= NULL` no
+     * matchea nunca y hay que escribir `IS NULL`.
+     */
+    @Field("pozo_id")
+    private String pozoId;
+
+    /**
      * @CreatedDate y @LastModifiedDate reemplazan a @PrePersist y @PreUpdate de
      * JPA. Necesitan que @EnableMongoAuditing este activo (esta en
      * BackendApplication); sin eso quedan en null sin avisar.
@@ -150,7 +180,7 @@ public class Gasto {
     public Gasto(String grupoId, ReferenciaUsuario pagadoPor, ReferenciaCategoria categoria,
                  BigDecimal monto, BigDecimal montoPagador,
                  TipoGasto tipo, LocalDate fecha, String descripcion,
-                 boolean esHormiga) {
+                 boolean esHormiga, String pozoId) {
         this.grupoId = grupoId;
         this.pagadoPor = pagadoPor;
         this.categoria = categoria;
@@ -160,6 +190,7 @@ public class Gasto {
         this.fecha = fecha;
         this.descripcion = descripcion;
         this.esHormiga = esHormiga;
+        this.pozoId = pozoId;
     }
 
     /** Lo que el otro integrante le debe a `pagadoPor` por este gasto. */
@@ -261,6 +292,19 @@ public class Gasto {
 
     public void setEsHormiga(boolean esHormiga) {
         this.esHormiga = esHormiga;
+    }
+
+    public String getPozoId() {
+        return pozoId;
+    }
+
+    public void setPozoId(String pozoId) {
+        this.pozoId = pozoId;
+    }
+
+    /** Si este gasto salio de un pozo. Se lee mejor que comparar contra null. */
+    public boolean esDelPozo() {
+        return pozoId != null;
     }
 
     public Instant getCreadoEn() {

@@ -1,4 +1,4 @@
-# Smoke test de la API de gastos.
+﻿# Smoke test de la API de gastos.
 #
 # Requiere:
 #   - la app corriendo en localhost:8080
@@ -435,7 +435,141 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method 
     409 "editar con una version vieja da 409 Conflict"
 
 # ---------------------------------------------------------------------------
-Titulo "9. Limpieza"
+Titulo "9. La vaquita"
+
+# Sin pozo abierto, /pozos/activo devuelve 204 y no 404: no tener vaquita es un
+# estado normal de la app, no un error.
+$sinPozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $franco
+Chequear ($null -eq $sinPozo) "sin vaquita abierta, /pozos/activo no devuelve nada"
+
+# Se crea SIN fechas a proposito: asi `vigente` no depende del dia en que se
+# corra el script. El rango de fechas lo cubren los tests puros de PozoTest.
+$pozo = Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{
+        nombre = "Bariloche"; objetivo = 800000.00
+    } | ConvertTo-Json)
+
+Chequear ($pozo.id -is [string] -and $pozo.id.Length -eq 24) "la vaquita se crea con un ObjectId"
+Chequear ($pozo.estado -eq "ABIERTO")   "nace abierta"
+Chequear ($pozo.aportado -eq 0)         "arranca sin plata"
+Chequear ($pozo.restante -eq 0)         "y sin nada gastado"
+Chequear ($pozo.vigente -eq $true)      "una vaquita abierta sin fechas esta vigente"
+Chequear (($pozo.porPersona | Measure-Object).Count -eq 2) `
+    "porPersona lista a los dos integrantes, incluso al que no aporto"
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $ella `
+    -ContentType "application/json" -Body (@{ nombre = "Otra" } | ConvertTo-Json) } `
+    "Ya hay una vaquita abierta" "no se puede abrir una segunda vaquita en el grupo"
+
+# --- aportes ---------------------------------------------------------------
+$pozo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = 400000.00 } | ConvertTo-Json)
+Chequear ($pozo.aportado -eq 400000.00) "el aporte de Franco entra"
+
+$pozo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $ella `
+    -ContentType "application/json" -Body (@{ monto = 400000.00 } | ConvertTo-Json)
+Chequear ($pozo.aportado -eq 800000.00) "los dos aportes suman"
+Chequear ($pozo.restante -eq 800000.00) "sin gastos, el restante es todo lo aportado"
+
+# El aporte se registra SIEMPRE a nombre de quien hace la request: no hay forma
+# de anotar plata a nombre de la otra persona.
+$deElla = $pozo.porPersona | Where-Object { $_.usuarioId -eq $ELLA_ID }
+Chequear ($deElla.total -eq 400000.00) "cada aporte queda a nombre de quien lo hizo"
+
+# --- el saldo y la nutria ANTES de tocar la vaquita -------------------------
+$saldoAntes   = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $franco
+$resumenAntes = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $franco
+
+# --- un gasto que sale del pozo --------------------------------------------
+$gastoPozo = Crear $franco @{
+    monto = 120000.00; categoriaId = $COMIDA; fecha = "2026-09-06"
+    descripcion = "cena en el centro civico"; tipo = "COMPARTIDO"
+    esHormiga = $true; pozoId = $pozo.id
+}
+Chequear ($gastoPozo.pozoId -eq $pozo.id)        "el gasto queda marcado con la vaquita"
+Chequear ($gastoPozo.montoPagador -eq 60000.00)  "un gasto del pozo es mitad y mitad por construccion"
+
+$pozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $ella
+Chequear ($pozo.gastado -eq 120000.00)  "el gasto se descuenta de la vaquita"
+Chequear ($pozo.restante -eq 680000.00) "restante = aportado - gastado"
+
+# ESTOS DOS SON LOS CHEQUEOS QUE IMPORTAN DE TODA LA SECCION.
+#
+# Un viaje no ensucia el mes: no genera deuda entre ellos (la plata ya se
+# repartio al aportar) y no cuenta como gasto hormiga (es plata que se ahorro a
+# proposito). Si alguno de estos dos falla, se rompio `sinPozo()` en
+# GastoConsultasImpl y la nutria va a estar preocupada durante las vacaciones.
+$saldoDespues   = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $franco
+$resumenDespues = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $franco
+
+Chequear ($saldoDespues.aFavorMio -eq $saldoAntes.aFavorMio) `
+    "un gasto de la vaquita NO mueve el saldo entre ellos"
+Chequear ($resumenDespues.totalHormiga -eq $resumenAntes.totalHormiga) `
+    "un gasto de la vaquita NO cuenta para el total hormiga del mes"
+
+$delMes = Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" -Headers $franco
+Chequear (($delMes | Where-Object { $_.id -eq $gastoPozo.id } | Measure-Object).Count -eq 0) `
+    "el gasto de la vaquita no aparece en el listado del mes"
+
+$delPozo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/gastos" -Headers $ella
+Chequear (($delPozo | Measure-Object).Count -eq 1) "pero si en el listado del viaje"
+Chequear ($delPozo[0].descripcion -eq "cena en el centro civico") "y lo ven los dos"
+
+# --- las reglas ------------------------------------------------------------
+# Se RECHAZA en vez de corregirse: promover el gasto a COMPARTIDO en silencio
+# publicaria un gasto que su duenio marco como privado. El caso real es un
+# regalo sorpresa cargado con la vaquita puesta sin querer.
+EsperarRegla { Crear $franco @{
+        monto = 5000.00; categoriaId = $CAFE; fecha = "2026-09-06"
+        descripcion = "regalo"; tipo = "PERSONAL"; pozoId = $pozo.id
+    } } "no puede salir de la vaquita" "un gasto PERSONAL no puede salir de la vaquita"
+
+EsperarRegla { Crear $franco @{
+        monto = 5000.00; categoriaId = $CAFE; fecha = "2026-09-06"
+        descripcion = "pozo inventado"; tipo = "COMPARTIDO"
+        pozoId = "000000000000000000000000"
+    } } "No existe la vaquita" "no se puede cargar a una vaquita que no existe"
+
+# --- sobregiro: se permite, y queda en rojo --------------------------------
+# Bloquear una carga parada en el mostrador es el pecado capital de esta app.
+# Validar no es lo mismo que bloquear.
+$gastoPasado = Crear $franco @{
+    monto = 700000.00; categoriaId = $COMIDA; fecha = "2026-09-06"
+    descripcion = "el hotel"; tipo = "COMPARTIDO"; pozoId = $pozo.id
+}
+$pozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $franco
+Chequear ($pozo.restante -lt 0) "gastar mas de lo aportado se permite y deja el pozo en rojo"
+
+# --- cierre ----------------------------------------------------------------
+Invoke-RestMethod -Uri "$base/gastos/$($gastoPozo.id)" -Method Delete -Headers $franco | Out-Null
+Invoke-RestMethod -Uri "$base/gastos/$($gastoPasado.id)" -Method Delete -Headers $franco | Out-Null
+
+$cerrado = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/cerrar" -Method Post -Headers $franco
+Chequear ($cerrado.estado -eq "CERRADO") "la vaquita se cierra"
+Chequear ($cerrado.vigente -eq $false)   "y deja de estar vigente"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/cerrar" -Method Post -Headers $franco } `
+    404 "cerrar dos veces no es un exito silencioso"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $ella `
+    -ContentType "application/json" -Body (@{ monto = 1000.00 } | ConvertTo-Json) } `
+    404 "no se puede aportar a una vaquita cerrada"
+
+EsperarRegla { Crear $franco @{
+        monto = 5000.00; categoriaId = $CAFE; fecha = "2026-09-06"
+        descripcion = "tarde"; tipo = "COMPARTIDO"; pozoId = $pozo.id
+    } } "ya esta cerrada" "no se puede cargar un gasto a una vaquita cerrada"
+
+$sinPozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $ella
+Chequear ($null -eq $sinPozo) "despues de cerrarla, no hay vaquita activa"
+
+# Nota: el documento del pozo CERRADO queda en la base, igual que los usuarios.
+# No molesta para volver a correr el script, porque el indice unico solo aplica
+# a los ABIERTOS. No hay endpoint para borrar un pozo, y es a proposito: son
+# registros de plata.
+
+# ---------------------------------------------------------------------------
+Titulo "10. Limpieza"
 
 Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method Delete -Headers $franco | Out-Null
 Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Method Delete -Headers $ella | Out-Null

@@ -31,6 +31,10 @@ import java.time.LocalDate;
  *                          gastos COMPARTIDO.
  * @param version           solo se usa en PUT. Si viene, el backend verifica que
  *                          nadie haya modificado el gasto desde que lo leiste.
+ * @param pozoId            si viene, el gasto sale de la vaquita. Obliga a que
+ *                          `tipo` sea COMPARTIDO, y hace que `porcentajePagador`
+ *                          se ignore: un gasto del pozo es mitad y mitad por
+ *                          construccion, porque el pozo se financio entre los dos.
  */
 public record GuardarGastoRequest(
 
@@ -72,6 +76,12 @@ public record GuardarGastoRequest(
          */
         Boolean esHormiga,
 
-        Long version
+        Long version,
+
+        /*
+         * La vaquita. Null es el caso normal: un gasto de la vida de todos los
+         * dias. Ver docs/vaquita.md.
+         */
+        String pozoId
 ) {
 }

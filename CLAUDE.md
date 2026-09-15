@@ -418,6 +418,12 @@ Acotarlo al mes lo mantiene chico y accionable, al costo de asumir que se
 arreglan mes a mes. Si algun dia quieren llevar la cuenta en serio, la solucion es
 una entidad `Liquidacion(grupo, de, para, monto, fecha)` y `saldo = deudas - pagos`.
 
+**La sesion 6.7 construyo esa entidad, acotada a un viaje.** Un aporte a la
+vaquita ES una liquidacion anticipada: pagar por adelantado gastos que todavia no
+se hicieron. De ahi sale que sacar plata del pozo no genere deuda entre ellos, y
+que el filtro `sinPozo()` saque los gastos del viaje del saldo, del total hormiga
+y del conteo que alimenta a la nutria. Ver **`docs/vaquita.md`**.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 
@@ -553,7 +559,7 @@ con el lenguaje del producto.
       no se duerma. El arranque en frio de Spring Boot es de 40-60s, y la app
       tiene un requisito duro de velocidad de carga: el ping es lo que hace que
       Viole nunca se lo coma. Atlas y Render **en la misma region**.
-- [ ] **6.7 — La vaquita del viaje.** Un pozo compartido al que los dos aportan
+- [~] **6.7 — La vaquita del viaje.** Un pozo compartido al que los dos aportan
       y del que salen los gastos de un viaje (Bariloche: $800.000, $400.000 cada
       uno). Un documento `Pozo` con los aportes embebidos mas un `pozoId`
       nullable en `Gasto`; sacar del pozo no genera deuda entre ellos porque la
@@ -561,6 +567,20 @@ con el lenguaje del producto.
       que el saldo mensual siempre necesito.** Los gastos del pozo NO cuentan
       para el animo de la nutria. Ver **`docs/vaquita.md`**, que incluye por que
       no se importan los movimientos de Mercado Pago.
+
+      **El backend esta hecho**: cinco endpoints bajo `/pozos`, los aportes con
+      `$push` atomico, un indice parcial unico que garantiza un solo pozo abierto
+      por grupo, y el filtro `sinPozo()` en los tres agregados mensuales. Mas 13
+      tests puros nuevos en `PozoTest` (37 en total) y 30 chequeos nuevos en el
+      smoke test.
+
+      **Falta la pantalla en mobile**, que son dos cosas: el tercer chip
+      (Personal / Compartido / Vaquita) en el alta, y la pantalla del viaje con
+      el numero grande en teal -- nunca en ambar, que es del gasto hormiga.
+
+      Nada de esto se probo contra una base todavia: se verifico compilando y con
+      los tests puros. El smoke test es el que lo prueba de verdad, y necesita la
+      app corriendo.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a
