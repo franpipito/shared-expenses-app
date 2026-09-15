@@ -487,6 +487,13 @@ grande merece que alguien mire cuanto pesa el bundle antes y despues.
 docker-compose.yml       MongoDB local
 scripts/
   smoke-test.ps1         57 chequeos de la API contra el backend corriendo
+docs/
+  entrevista-usuaria.md  fuente de verdad de las decisiones de producto
+  diseno.md              colores, tipografias, nutrias y estructura de carpetas
+  deploy.md              runbook del deploy
+  vaquita.md             el pozo del viaje: modelo, invariante y lo descartado
+  atajo-ios.md           atajo de Atajos que le pega a POST /gastos con Back Tap
+  aprendizaje/           notas de Java y Spring para el autor
 ```
 
 Nombres de dominio en espanol (Gasto, Usuario, Grupo, Categoria), consistente
@@ -515,15 +522,16 @@ con el lenguaje del producto.
       JWT, alta de gasto, resumen con el animo de la nutria, y baja. El bean
       `Clock` quedo probado en serio: el contenedor corre en UTC y el corte de
       mes igual cayo en la fecha de Buenos Aires. Ver **`docs/deploy.md`**.
-- [~] **6 — App Expo minima.** Contra la API deployada, no localhost. Estan el
+- [x] **6 — App Expo minima.** Contra la API deployada, no localhost. Estan el
       login, el resumen con el animo de la nutria, el alta de gasto y **la lista
       de gastos del mes**, que es donde se ve la marca de hormiga gasto por
       gasto. Los iconos de categoria ya se dibujan con Lucide y no como texto.
 
-      **Para cerrar la sesion falta la seccion de pareja**, que son dos cosas
-      encadenadas: el alta hoy manda `tipo: 'PERSONAL'` fijo, asi que sin poder
-      cargar un COMPARTIDO la pantalla de saldo mostraria cero siempre. Primero
-      el tipo compartido en el alta (con el reparto), despues `/saldo`.
+      **La seccion de pareja quedo cerrada**: el alta permite marcar el gasto
+      como COMPARTIDO con su reparto (chips de 50/60/70/80/100 y quien pago,
+      con revelacion progresiva para no ensuciar el camino rapido), hay
+      `GET /grupo` con los integrantes, y la pantalla de `/saldo` con las dos
+      nutrias.
 
       Lo que queda afuera y no bloquea el cierre: editar y borrar, y los filtros
       por categoria y pagador del listado (el endpoint ya los acepta).
@@ -545,7 +553,20 @@ con el lenguaje del producto.
       no se duerma. El arranque en frio de Spring Boot es de 40-60s, y la app
       tiene un requisito duro de velocidad de carga: el ping es lo que hace que
       Viole nunca se lo coma. Atlas y Render **en la misma region**.
-- [ ] **7 — Build EAS y TestFlight.**
+- [ ] **6.7 — La vaquita del viaje.** Un pozo compartido al que los dos aportan
+      y del que salen los gastos de un viaje (Bariloche: $800.000, $400.000 cada
+      uno). Un documento `Pozo` con los aportes embebidos mas un `pozoId`
+      nullable en `Gasto`; sacar del pozo no genera deuda entre ellos porque la
+      plata ya se repartio al aportar. **Un aporte al pozo es la `Liquidacion`
+      que el saldo mensual siempre necesito.** Los gastos del pozo NO cuentan
+      para el animo de la nutria. Ver **`docs/vaquita.md`**, que incluye por que
+      no se importan los movimientos de Mercado Pago.
+- [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
+      de Apple Developer ya existe. Va **TestFlight interno** (Viole como
+      usuaria en App Store Connect), que no pasa por Beta App Review; subirla a
+      la App Store es App Review de verdad, y una app con login sin usuario
+      demo se rechaza por la guideline 2.1. Ver tambien **`docs/atajo-ios.md`**:
+      un atajo con Back Tap que le pega a `POST /gastos` sin abrir la app.
 
 ## Comandos
 
