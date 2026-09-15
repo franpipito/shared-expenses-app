@@ -51,11 +51,31 @@ export function fijarToken(token: string | null): void {
   tokenActual = token;
 }
 
+/**
+ * Cuanto se espera antes de dar una request por perdida.
+ *
+ * ES GENEROSO A PROPOSITO, y el motivo es el hosting: el backend corre en el
+ * tier gratis de Render, que duerme el servicio tras ~15 minutos sin trafico, y
+ * despertar Spring Boot toma 40-60 segundos. Un timeout de 10s -- que es lo
+ * habitual -- cortaria requests que en realidad iban a andar.
+ *
+ * Que esto sea tolerable es gracias a la cola: **el alta de gasto ya no espera a
+ * la red**, asi que nadie mira un spinner de 60 segundos parado en un mostrador.
+ * Los 75s aplican a las lecturas, donde esperar es la unica opcion porque el
+ * dato no esta.
+ *
+ * Sin timeout, una conexion que se cuelga sin cerrarse -- tipico de una red de
+ * hotel -- deja la promesa colgada para siempre y la pantalla cargando sin fin.
+ */
+const TIMEOUT_MS = 75_000;
+
 type Opciones = {
   metodo?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   cuerpo?: unknown;
   /** Para el login y el registro, que todavia no tienen token. */
   sinToken?: boolean;
+  /** Para el envio de la cola, que no puede quedarse esperando el arranque en frio. */
+  timeoutMs?: number;
 };
 
 /**
@@ -66,11 +86,17 @@ type Opciones = {
  * axios, sin la dependencia.
  */
 export async function pedir<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
-  const { metodo = 'GET', cuerpo, sinToken = false } = opciones;
+  const { metodo = 'GET', cuerpo, sinToken = false, timeoutMs = TIMEOUT_MS } = opciones;
 
   const cabeceras: Record<string, string> = { Accept: 'application/json' };
   if (cuerpo !== undefined) cabeceras['Content-Type'] = 'application/json';
   if (!sinToken && tokenActual) cabeceras.Authorization = `Bearer ${tokenActual}`;
+
+  // AbortController es la unica forma de cortar un fetch: no acepta una opcion
+  // de timeout. El setTimeout dispara el abort, y el finally lo limpia para no
+  // dejar timers colgando por cada request.
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), timeoutMs);
 
   let respuesta: Response;
   try {
@@ -78,11 +104,19 @@ export async function pedir<T>(ruta: string, opciones: Opciones = {}): Promise<T
       method: metodo,
       headers: cabeceras,
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+      signal: control.signal,
     });
   } catch {
     // fetch solo rechaza cuando la request no llego a destino: sin internet, DNS
-    // caido, o el servidor dormido en Railway. Un 500 NO cae aca, cae abajo.
+    // caido, el servidor dormido, o el abort de arriba. Un 500 NO cae aca, cae
+    // abajo.
+    //
+    // El estado 0 es la senial que usa el sincronizador para distinguir "no
+    // llegue" de "el servidor me dijo que no": lo primero se reintenta, lo
+    // segundo no.
     throw new ErrorDeApi(0, 'No se pudo conectar. Fijate si tenes internet.');
+  } finally {
+    clearTimeout(reloj);
   }
 
   // 204 No Content: el DELETE de gastos no devuelve cuerpo, y hacer .json() de

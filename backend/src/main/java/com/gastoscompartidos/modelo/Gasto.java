@@ -53,6 +53,12 @@ import java.time.LocalDate;
 // indexa, asi que ocupa lo que ocupan los gastos del viaje y nada mas.
 @CompoundIndex(name = "idx_gasto_pozo_fecha", def = "{'pozo_id': 1, 'fecha': -1}",
         partialFilter = "{'pozo_id': {$exists: true}}")
+// LA CLAVE DE IDEMPOTENCIA, y es lo que hace que la cola offline del telefono no
+// duplique gastos. Unico por grupo, y parcial porque los gastos cargados antes
+// de que esto existiera no tienen el campo -- un indice unico comun los
+// considerraria a todos duplicados entre si por ser todos null.
+@CompoundIndex(name = "idx_gasto_cliente", def = "{'grupo_id': 1, 'cliente_id': 1}",
+        unique = true, partialFilter = "{'cliente_id': {$exists: true}}")
 public class Gasto {
 
     @Id
@@ -145,6 +151,29 @@ public class Gasto {
     private String pozoId;
 
     /**
+     * Identificador que genera el TELEFONO antes de mandar el gasto.
+     *
+     * Existe por un escenario concreto del viaje: la app guarda el gasto en una
+     * cola local y lo reintenta hasta que entra. Si el POST llega al servidor,
+     * el gasto se escribe y la respuesta se pierde en el camino -- que es lo que
+     * pasa con una barra de senial -- el telefono no tiene forma de saber si
+     * grabo o no, y reintenta. Sin esto, el reintento crea un SEGUNDO gasto.
+     *
+     * Dos gastos duplicados no son un error visible: son un total del mes mal,
+     * en silencio. Que es la peor clase de error en una app de plata.
+     *
+     * Con la clave, el reintento choca contra el indice unico, el servicio lo
+     * interpreta como "ya estaba" y devuelve el gasto que ya existia. La
+     * operacion se vuelve idempotente **sin guardar estado extra en el
+     * servidor**: la garantia la da el indice.
+     *
+     * Es opcional: un cliente que no la mande (el atajo de iOS, curl) funciona
+     * igual, y se queda sin la garantia.
+     */
+    @Field("cliente_id")
+    private String clienteId;
+
+    /**
      * @CreatedDate y @LastModifiedDate reemplazan a @PrePersist y @PreUpdate de
      * JPA. Necesitan que @EnableMongoAuditing este activo (esta en
      * BackendApplication); sin eso quedan en null sin avisar.
@@ -180,7 +209,7 @@ public class Gasto {
     public Gasto(String grupoId, ReferenciaUsuario pagadoPor, ReferenciaCategoria categoria,
                  BigDecimal monto, BigDecimal montoPagador,
                  TipoGasto tipo, LocalDate fecha, String descripcion,
-                 boolean esHormiga, String pozoId) {
+                 boolean esHormiga, String pozoId, String clienteId) {
         this.grupoId = grupoId;
         this.pagadoPor = pagadoPor;
         this.categoria = categoria;
@@ -191,6 +220,7 @@ public class Gasto {
         this.descripcion = descripcion;
         this.esHormiga = esHormiga;
         this.pozoId = pozoId;
+        this.clienteId = clienteId;
     }
 
     /** Lo que el otro integrante le debe a `pagadoPor` por este gasto. */
@@ -305,6 +335,10 @@ public class Gasto {
     /** Si este gasto salio de un pozo. Se lee mejor que comparar contra null. */
     public boolean esDelPozo() {
         return pozoId != null;
+    }
+
+    public String getClienteId() {
+        return clienteId;
     }
 
     public Instant getCreadoEn() {

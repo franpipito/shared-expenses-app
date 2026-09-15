@@ -147,7 +147,7 @@ mockup, no un elemento de la app: el animo lo decide el backend.
 |----------|-----------------------------------------------|--------|
 | Backend  | Java 21 + Spring Boot 4.1.1 + MongoDB 8       | en curso |
 | DB local | Docker Compose (`docker compose up -d`)       | en curso |
-| Mobile   | Expo + React Native + TypeScript              | pendiente |
+| Mobile   | Expo + React Native + TypeScript              | en curso |
 | Web      | React + Vite + TypeScript + Tailwind          | pendiente |
 | Deploy   | Render (Docker) + MongoDB Atlas M0            | en curso |
 
@@ -440,6 +440,48 @@ estar debajo de una linea. La banda de +-10% evita que cambie de humor por ruido
 La logica vive en `CalculadorDeAnimo` y `Periodo`, dos clases puras sin Spring ni
 base, para que se puedan testear barato. Son el 100% de la cobertura de tests.
 
+### La cola offline, y por que obligo a una clave de idempotencia
+El alta de gasto **ya no espera a la red**: el gasto se escribe en un archivo del
+telefono (`expo-file-system`, en `Paths.document`) y se manda despues. Guardar
+paso a ser una operacion de disco, instantanea, que anda igual con una barra de
+senial o con ninguna. Es lo que hacia falta para sostener el requisito duro del
+producto en Bariloche.
+
+Se encola **siempre**, incluso con red perfecta. Si primero intentaramos mandar y
+solo encolaramos al fallar, el gasto se perderia igual cuando iOS mata la app en
+medio de la request -- que es lo que hace apenas abris la camara.
+
+**Y eso obligo a una clave de idempotencia, que es la parte que importa.** Con
+mala senial pasa que el POST llega, el servidor escribe el gasto, y la respuesta
+se pierde de vuelta. El telefono no puede distinguir eso de "no llego", asi que
+reintenta: sin clave, ese reintento crea un segundo gasto. **Un gasto duplicado
+es peor que uno perdido**, porque no se ve como un error sino como un total del
+mes equivocado, en silencio.
+
+`Gasto.clienteId` lo genera el telefono, y un **indice unico parcial**
+`{grupo_id, cliente_id}` lo garantiza desde la base. El servicio intenta escribir
+de una y atrapa `DuplicateKeyException` para devolver el gasto que ya existia: el
+chequeo previo tendria una ventana de carrera entre el SELECT y el INSERT. Es el
+mismo patron que el pozo abierto unico.
+
+Es opcional: un cliente que no la manda (el atajo de iOS, curl) escribe normal y
+se queda sin la garantia.
+
+Tres reglas del sincronizador que salieron de pensar el viaje:
+- **Se frena en el primer fallo de red.** Si el primero no entro por falta de
+  senial, los siguientes tampoco: seguir es sumar un timeout por gasto.
+- **Un 4xx no se reintenta**, porque va a dar el mismo error para siempre y
+  taparia a los que si pueden entrar. Pero **no se borra**: se muestra y decide
+  la persona. Descartar un gasto por decision de la app seria la perdida de datos
+  que la cola viene a evitar.
+- **La cola no es invisible.** `AvisoDeCola` muestra cuantos hay pendientes. Una
+  app que dice "guardado" y no muestra el gasto hace que la persona lo cargue de
+  nuevo, o sea que lo duplique.
+
+El timeout de las lecturas es de 75s, generoso a proposito porque el arranque en
+frio de Render es de 40-60s. Se puede pagar esa espera **solo porque el alta ya
+no la sufre**.
+
 ### Hay un `Clock` inyectable, y tiene zona horaria
 `BackendApplication` declara un bean `Clock` en vez de usar `LocalDate.now()`
 suelto. Dos motivos: un test puede fijar "hoy", y **el corte de mes depende de la
@@ -586,6 +628,16 @@ con el lenguaje del producto.
       `expo export`, que bundlea de verdad (2,7 MB de iOS, contra 2,63 antes).
       Lo que lo prueba en serio es `scripts/smoke-test.ps1`, que necesita la app
       corriendo.
+- [~] **6.8 — La cola offline.** El alta de gasto ya no espera a la red: se
+      escribe en un archivo del telefono y se manda despues. Obligo a agregar
+      `Gasto.clienteId` con indice unico parcial, porque una cola que reintenta
+      sin clave de idempotencia duplica gastos. Ver la seccion de arriba. Unica
+      dependencia nueva: `expo-file-system`, en la version que manda
+      `bundledNativeModules.json` del SDK 57.
+
+      **Falta probarlo en un telefono de verdad**, que es lo unico que prueba una
+      cola offline: poner el telefono en modo avion, cargar tres gastos, sacarlo
+      de avion y ver que entran los tres una sola vez.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a

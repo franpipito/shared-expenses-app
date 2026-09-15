@@ -1,3 +1,4 @@
+import { encolar } from '../../almacenamiento/cola';
 import { pedir } from '../../api/cliente';
 import type {
   CategoriaRespuesta,
@@ -5,6 +6,7 @@ import type {
   GrupoRespuesta,
   GuardarGastoRequest,
 } from '../../api/tipos';
+import { sincronizar } from './sincronizador';
 
 export function traerCategorias(): Promise<CategoriaRespuesta[]> {
   return pedir<CategoriaRespuesta[]>('/categorias');
@@ -26,8 +28,29 @@ export function traerGastos(mes: string): Promise<GastoRespuesta[]> {
   return pedir<GastoRespuesta[]>(`/gastos?mes=${mes}`);
 }
 
-export function crearGasto(gasto: GuardarGastoRequest): Promise<GastoRespuesta> {
-  return pedir<GastoRespuesta>('/gastos', { metodo: 'POST', cuerpo: gasto });
+/**
+ * Cargar un gasto. **No espera a la red, y ese es todo el punto.**
+ *
+ * El gasto se escribe primero en la cola local del telefono y despues se manda.
+ * Guardar pasa a ser una operacion de disco: instantanea, y que funciona igual
+ * con una barra de senial o sin ninguna.
+ *
+ * Es lo que hace falta para sostener el requisito duro del producto. Antes,
+ * cargar un cafe parada en un mostrador con mala senial terminaba en un spinner,
+ * un error, y el gasto perdido: habia que volver a tipearlo. Con esto, el peor
+ * caso es que el gasto tarde un rato en aparecer en la lista.
+ *
+ * SE ENCOLA SIEMPRE, incluso con red perfecta, y es deliberado: si primero
+ * intentaramos mandar y solo encolaramos al fallar, el gasto se perderia igual
+ * cuando iOS mata la app en medio de la request -- que es lo que hace en cuanto
+ * abris la camara. Escribiendo antes, el gasto existe desde que se toca Guardar.
+ *
+ * El envio arranca en el acto pero **no se espera**: por eso no hay await. Quien
+ * quiera saber si entro, mira la cola.
+ */
+export async function crearGasto(gasto: GuardarGastoRequest): Promise<void> {
+  await encolar(gasto);
+  void sincronizar();
 }
 
 /**

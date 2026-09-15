@@ -16,6 +16,7 @@ import com.gastoscompartidos.repositorio.GastoRepositorio;
 import com.gastoscompartidos.repositorio.PozoRepositorio;
 import com.gastoscompartidos.repositorio.UsuarioRepositorio;
 import com.gastoscompartidos.seguridad.UsuarioActual;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
@@ -89,9 +90,10 @@ public class GastoServicio {
                 req.fecha(),
                 req.descripcion().trim(),
                 esHormiga(req),
-                pozoId);
+                pozoId,
+                req.clienteId());
 
-        return GastoRespuesta.desde(gastos.save(gasto));
+        return GastoRespuesta.desde(guardarUnaSolaVez(gasto, actual));
     }
 
     public List<GastoRespuesta> listar(YearMonth mes, String categoriaId, String pagadoPorId) {
@@ -210,6 +212,42 @@ public class GastoServicio {
     /** El cliente podria mandar 3 decimales. Los llevamos a 2 en el borde. */
     private BigDecimal normalizar(BigDecimal monto) {
         return monto.setScale(ESCALA_DINERO, REDONDEO);
+    }
+
+    /**
+     * Guarda el gasto, y si ya estaba, devuelve el que estaba.
+     *
+     * ES EL PUNTO DONDE LA COLA OFFLINE DEL TELEFONO SE VUELVE SEGURA, y vale
+     * entender el escenario completo porque no es obvio.
+     *
+     * Con una barra de senial, la app manda el POST, el servidor lo escribe, y
+     * la respuesta se pierde en el camino de vuelta. El telefono ve un error de
+     * red y no tiene ninguna forma de distinguir "no llego" de "llego y no me
+     * entere", asi que reintenta. Sin nada que lo frene, ese reintento crea un
+     * segundo gasto identico.
+     *
+     * Y un gasto duplicado no se ve como un error: se ve como un total del mes
+     * equivocado, en silencio. Es la peor clase de bug en una app de plata.
+     *
+     * LA GARANTIA LA DA EL INDICE, NO ESTE CODIGO. El chequeo previo
+     * ("existe uno con esta clave?") tendria una ventana de carrera entre el
+     * SELECT y el INSERT. Aca se intenta escribir de una y se deja que el indice
+     * unico parcial de Gasto rechace el duplicado; recien ahi se busca el que ya
+     * estaba. Es el mismo patron que PozoServicio.crear().
+     *
+     * Sin clienteId no hay indice que viole, asi que un cliente que no la manda
+     * (el atajo de iOS, curl) escribe normal y se queda sin la garantia.
+     */
+    private Gasto guardarUnaSolaVez(Gasto gasto, Usuario actual) {
+        try {
+            return gastos.save(gasto);
+        } catch (DuplicateKeyException e) {
+            return gastos.findByGrupoIdAndClienteId(actual.getGrupoId(), gasto.getClienteId())
+                    // Si el indice dijo que hay duplicado, el gasto TIENE que
+                    // estar. Si no aparece, algo mas se rompio y no queremos
+                    // taparlo devolviendo cualquier cosa.
+                    .orElseThrow(() -> e);
+        }
     }
 
     /**

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorDeApi } from '../../../api/cliente';
+import { sincronizar } from '../sincronizador';
 import { mesActual } from '../../../api/periodo';
 import type { GastoRespuesta } from '../../../api/tipos';
 import { traerGastos } from '../api';
@@ -25,6 +26,10 @@ export function useGastos() {
   const recargar = useCallback(async () => {
     setError(null);
     try {
+      // Igual que en el resumen: primero se manda lo que quedo en la cola, y
+      // recien despues se lee. Si no, un gasto recien cargado no apareceria en
+      // la lista y se veria como si no se hubiera guardado.
+      await sincronizar();
       setGastos(await traerGastos(mesActual()));
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudieron traer los gastos.');

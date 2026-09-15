@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorDeApi } from '../../../api/cliente';
+import { sincronizar } from '../../gastos/sincronizador';
 import { mesActual } from '../../../api/periodo';
 import type { ResumenRespuesta } from '../../../api/tipos';
 import { traerResumen } from '../api';
@@ -25,6 +26,13 @@ export function useResumen() {
   const recargar = useCallback(async () => {
     setError(null);
     try {
+      // Vaciar la cola ANTES de leer, y no despues: si hay gastos esperando,
+      // el resumen que traigamos sin mandarlos primero seria viejo por
+      // definicion, y la nutria opinaria sobre numeros incompletos.
+      //
+      // No se hace `await` de nada que pueda romper la lectura: sincronizar()
+      // nunca rechaza, devuelve un resultado.
+      await sincronizar();
       setResumen(await traerResumen(mesActual()));
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo traer el resumen.');

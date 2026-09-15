@@ -90,6 +90,15 @@ export type GuardarGastoRequest = {
    * y mitad por construccion.
    */
   pozoId?: string;
+  /**
+   * Clave de idempotencia que genera el telefono. La manda el sincronizador de
+   * la cola, no las pantallas.
+   *
+   * Es lo que hace que reintentar un gasto sea seguro: si el POST llego pero la
+   * respuesta se perdio, el reintento choca contra un indice unico en el backend
+   * y devuelve el gasto que ya existia, en vez de crear un segundo.
+   */
+  clienteId?: string;
 };
 
 export type TotalPorCategoria = {

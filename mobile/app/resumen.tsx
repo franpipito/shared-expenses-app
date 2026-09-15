@@ -9,6 +9,7 @@ import { Monto, formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { useResumen } from '../src/features/resumen/hooks/useResumen';
+import { AvisoDeCola } from '../src/features/gastos/componentes/AvisoDeCola';
 import { colores } from '../src/tema/colores';
 import { fuentes, numerosTabulares } from '../src/tema/tipografia';
 import { Cargando } from './_layout';
@@ -67,6 +68,8 @@ export default function Resumen() {
             <Text style={estilos.salir}>Salir</Text>
           </Pressable>
         </View>
+
+        <AvisoDeCola />
 
         {error ? <Text style={estilos.error}>{error}</Text> : null}
 

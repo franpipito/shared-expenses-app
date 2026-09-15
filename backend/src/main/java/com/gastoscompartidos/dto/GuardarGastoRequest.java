@@ -82,6 +82,16 @@ public record GuardarGastoRequest(
          * La vaquita. Null es el caso normal: un gasto de la vida de todos los
          * dias. Ver docs/vaquita.md.
          */
-        String pozoId
+        String pozoId,
+
+        /*
+         * La clave de idempotencia que genera el telefono. Ver el javadoc del
+         * campo en Gasto: es lo que hace que la cola offline pueda reintentar un
+         * POST sin riesgo de crear el gasto dos veces.
+         *
+         * Opcional a proposito: un cliente que no la mande funciona igual.
+         */
+        @Size(max = 64, message = "el id de cliente no puede pasar de 64 caracteres")
+        String clienteId
 ) {
 }

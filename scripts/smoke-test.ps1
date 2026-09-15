@@ -435,7 +435,66 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method 
     409 "editar con una version vieja da 409 Conflict"
 
 # ---------------------------------------------------------------------------
-Titulo "9. La vaquita"
+Titulo "9. Idempotencia de la cola offline"
+
+# EL ESCENARIO QUE ESTO CUBRE: la app guarda el gasto en una cola local y lo
+# reintenta hasta que entra. Con mala senial puede pasar que el POST llegue, el
+# servidor escriba el gasto, y la respuesta se pierda de vuelta. El telefono no
+# tiene forma de distinguir eso de "no llego", asi que reintenta.
+#
+# Sin clienteId, ese reintento crea un SEGUNDO gasto. Y un gasto duplicado no se
+# ve como un error: se ve como un total del mes equivocado, en silencio.
+$clave = "smoke-$([guid]::NewGuid().ToString('N').Substring(0,12))"
+
+$primero = Crear $franco @{
+    monto = 3500.00; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "cafe con mala senial"; tipo = "PERSONAL"
+    esHormiga = $true; clienteId = $clave
+}
+Chequear ($primero.id -is [string]) "el primer envio crea el gasto"
+
+# El reintento, byte por byte el mismo.
+$reintento = Crear $franco @{
+    monto = 3500.00; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "cafe con mala senial"; tipo = "PERSONAL"
+    esHormiga = $true; clienteId = $clave
+}
+Chequear ($reintento.id -eq $primero.id) `
+    "el reintento con la misma clave devuelve EL MISMO gasto, no uno nuevo"
+
+$conEsaDescripcion = (Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" -Headers $franco) |
+    Where-Object { $_.descripcion -eq "cafe con mala senial" }
+Chequear (($conEsaDescripcion | Measure-Object).Count -eq 1) `
+    "quedo un solo gasto cargado, no dos"
+
+# Sin clave no hay indice que violar, asi que dos envios identicos SI crean dos
+# gastos. Es el comportamiento correcto: un cliente que no manda la clave (curl,
+# el atajo de iOS) no puede pedir la garantia.
+$suelto1 = Crear $franco @{
+    monto = 111.00; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "sin clave"; tipo = "PERSONAL"
+}
+$suelto2 = Crear $franco @{
+    monto = 111.00; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "sin clave"; tipo = "PERSONAL"
+}
+Chequear ($suelto1.id -ne $suelto2.id) "sin clienteId, dos envios iguales son dos gastos"
+
+# La clave es unica POR GRUPO, no global. Ella esta en el mismo grupo que Franco,
+# asi que su reintento con la misma clave tiene que resolver al mismo gasto.
+$deElla = Crear $ella @{
+    monto = 3500.00; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "otra cosa"; tipo = "COMPARTIDO"; clienteId = $clave
+}
+Chequear ($deElla.id -eq $primero.id) `
+    "la clave es del grupo: el mismo clienteId resuelve al gasto que ya estaba"
+
+Invoke-RestMethod -Uri "$base/gastos/$($primero.id)" -Method Delete -Headers $franco | Out-Null
+Invoke-RestMethod -Uri "$base/gastos/$($suelto1.id)" -Method Delete -Headers $franco | Out-Null
+Invoke-RestMethod -Uri "$base/gastos/$($suelto2.id)" -Method Delete -Headers $franco | Out-Null
+
+# ---------------------------------------------------------------------------
+Titulo "10. La vaquita"
 
 # Sin pozo abierto, /pozos/activo devuelve 204 y no 404: no tener vaquita es un
 # estado normal de la app, no un error.
@@ -569,7 +628,7 @@ Chequear ($null -eq $sinPozo) "despues de cerrarla, no hay vaquita activa"
 # registros de plata.
 
 # ---------------------------------------------------------------------------
-Titulo "10. Limpieza"
+Titulo "11. Limpieza"
 
 Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method Delete -Headers $franco | Out-Null
 Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Method Delete -Headers $ella | Out-Null

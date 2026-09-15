@@ -9,6 +9,7 @@ import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { FilaGasto } from '../src/features/gastos/componentes/FilaGasto';
 import { useGastos } from '../src/features/gastos/hooks/useGastos';
+import { AvisoDeCola } from '../src/features/gastos/componentes/AvisoDeCola';
 import { colores } from '../src/tema/colores';
 import { fuentes } from '../src/tema/tipografia';
 import { Cargando } from './_layout';
@@ -67,6 +68,7 @@ export default function Gastos() {
           <RefreshControl refreshing={cargando} onRefresh={recargar} tintColor={colores.rio} />
         }
         ListHeaderComponent={
+          <>
           <View style={estilos.encabezado}>
             <View style={estilos.encabezadoTexto}>
               <Text style={estilos.seccion}>Gastos de {nombreDelMes(mesActual())}</Text>
@@ -85,6 +87,15 @@ export default function Gastos() {
               <Text style={estilos.volver}>Resumen</Text>
             </Pressable>
           </View>
+          {/*
+            El aviso va DENTRO del header de la lista y no flotando arriba: si
+            estuviera fijo, taparia filas al hacer scroll justo en la pantalla
+            donde se mira gasto por gasto.
+          */}
+          <View style={estilos.aviso}>
+            <AvisoDeCola />
+          </View>
+          </>
         }
         ListEmptyComponent={
           error ? null : (
@@ -112,6 +123,7 @@ const estilos = StyleSheet.create({
   contenido: { paddingHorizontal: 20 },
   contenidoVacio: { flexGrow: 1 },
 
+  aviso: { marginBottom: 12 },
   encabezado: {
     flexDirection: 'row',
     justifyContent: 'space-between',
