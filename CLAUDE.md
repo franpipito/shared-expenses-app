@@ -149,7 +149,7 @@ mockup, no un elemento de la app: el animo lo decide el backend.
 | DB local | Docker Compose (`docker compose up -d`)       | en curso |
 | Mobile   | Expo + React Native + TypeScript              | pendiente |
 | Web      | React + Vite + TypeScript + Tailwind          | pendiente |
-| Deploy   | Railway (se acaba el credito) -> Render + Atlas | a migrar |
+| Deploy   | Render (Docker) + MongoDB Atlas M0            | en curso |
 
 Build con el **Maven wrapper** (`./mvnw`, `mvnw.cmd`): no hace falta instalar
 Maven, el script baja la version que el proyecto declara.
@@ -365,7 +365,7 @@ Dos conversiones declaradas a mano en `ConfiguracionMongo`, y las dos importan:
   `ValidacionDeConfiguracion`, que **impide arrancar** con el secreto o el codigo
   de invitacion de desarrollo. Verificado corriendo la imagen: sin `JWT_SECRETO`
   el contenedor sale con codigo 1.
-- **Postgres local escucha solo en 127.0.0.1**, no en todas las interfaces.
+- **La base local escucha solo en 127.0.0.1**, no en todas las interfaces.
 
 ### Lo que NO aplica a esta arquitectura
 Aparece seguido en checklists genericos de seguridad y conviene saber por que no
