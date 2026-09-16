@@ -1,9 +1,5 @@
 package com.gastoscompartidos.seguridad;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Component;
-
 /**
  * Impide que la app arranque en produccion con los valores de desarrollo.
  *
@@ -16,18 +12,23 @@ import org.springframework.stereotype.Component;
  * completamente abierta, sin ninguna senial de que algo anda mal. Fallar al
  * arrancar es mucho mejor que arrancar insegura y en silencio.
  *
- * @Profile("produccion") hace que este bean exista SOLO cuando ese perfil esta
- * activo. Los perfiles son la forma de Spring de tener configuracion distinta
- * por entorno; se activan con la variable SPRING_PROFILES_ACTIVE.
+ * NO ES UN BEAN, y eso es el arreglo de un bug real. Era un `@Component` con
+ * `@Profile("produccion")`, pero **nadie dependia de el**: Spring lo creaba
+ * cuando le tocaba, y lo que le tocaba antes era la cadena que termina en
+ * `mongoTemplate`. Con la URI apuntando a una base que no existe -- que es
+ * justo el caso que este chequeo viene a cazar -- el driver de Mongo tiraba
+ * primero y esta clase no llegaba a hablar nunca.
+ *
+ * Ahora la invoca `ValidacionAlArrancar`, un listener que corre antes de que
+ * exista un solo bean. Ahi esta contada la historia entera.
+ *
+ * Queda como una clase pura, sin Spring: recibe tres strings y tira o no tira.
+ * Por eso `ValidacionDeConfiguracionTest` la puede ejercitar en milisegundos,
+ * igual que `CalculadorDeAnimoTest` y `PeriodoTest`.
  */
-@Component
-@Profile("produccion")
 public class ValidacionDeConfiguracion {
 
-    public ValidacionDeConfiguracion(
-            @Value("${app.jwt.secreto}") String secretoJwt,
-            @Value("${app.registro.codigo-invitacion}") String codigoInvitacion,
-            @Value("${spring.mongodb.uri}") String mongoUri) {
+    public ValidacionDeConfiguracion(String secretoJwt, String codigoInvitacion, String mongoUri) {
 
         if (secretoJwt.contains("NO-USAR-EN-PRODUCCION")) {
             throw new IllegalStateException("""
