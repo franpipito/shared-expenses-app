@@ -33,13 +33,24 @@ export type ResultadoDeEnvio = {
 /** Evita que dos pantallas que ganan foco a la vez manden el mismo gasto dos veces. */
 let enCurso: Promise<ResultadoDeEnvio> | null = null;
 
+/**
+ * Vacia la cola y **nunca rechaza**.
+ *
+ * Que no rechace es a proposito. Las pantallas llaman a esto antes de leer, y si
+ * un fallo de escritura del archivo se propagara, el resumen mostraria un error
+ * y no se cargaria -- aunque el servidor este perfecto. Un problema en la cola
+ * no tiene por que dejar la app inutilizable: en el peor caso los gastos siguen
+ * esperando y se reintentan en el proximo foco.
+ */
 export function sincronizar(): Promise<ResultadoDeEnvio> {
   // Sin esto, entrar al resumen y que la lista tambien pida foco dispararia dos
   // envios simultaneos del mismo gasto. La clave de idempotencia lo salvaria en
   // el servidor, pero es mejor no hacer el trabajo dos veces.
-  enCurso ??= enviarTodo().finally(() => {
-    enCurso = null;
-  });
+  enCurso ??= enviarTodo()
+    .catch(() => ({ enviados: 0, pendientes: 0, rechazados: 0 }))
+    .finally(() => {
+      enCurso = null;
+    });
   return enCurso;
 }
 

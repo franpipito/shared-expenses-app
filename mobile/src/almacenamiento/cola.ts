@@ -89,6 +89,44 @@ export async function leerCola(): Promise<GastoPendiente[]> {
   }
 }
 
+/**
+ * La cola de operaciones sobre la cola. Un mutex, en criollo.
+ *
+ * HACE FALTA POR UNA CARRERA QUE PIERDE GASTOS, y conviene poder contarla porque
+ * es la misma que en el backend resolvimos con `$push` atomico.
+ *
+ * Toda mutacion de aca es leer-modificar-escribir, y entre el `await leerCola()`
+ * y el `escribirCola()` JavaScript cede el control. Con eso alcanza:
+ *
+ *   1. `sincronizar()` mando el gasto A y llama a `quitarDeLaCola(A)`, que lee
+ *      `[A]` y cede.
+ *   2. Justo ahi alguien toca Guardar: `encolar(B)` lee `[A]` y escribe `[A, B]`.
+ *   3. `quitarDeLaCola` retoma con su copia vieja, filtra A y escribe `[]`.
+ *   4. **El gasto B desaparecio.**
+ *
+ * Y no es un caso rebuscado: sincronizar corre en cada foco de pantalla, o sea
+ * justo cuando volves del alta de un gasto.
+ *
+ * JavaScript es de un solo hilo, asi que no hacen falta locks de verdad: alcanza
+ * con encadenar las operaciones para que nunca haya dos a mitad de camino. El
+ * `.then(op, op)` corre la siguiente tanto si la anterior salio bien como si
+ * fallo -- si una escritura rota frenara la cadena, la cola quedaria trabada
+ * para siempre.
+ *
+ * OJO: las funciones que pasan por aca NO pueden llamarse entre si, o se
+ * esperarian a si mismas para siempre. Por eso `leerCola` y `escribirCola`
+ * quedan afuera y son las unicas que se usan adentro.
+ */
+let cadena: Promise<unknown> = Promise.resolve();
+
+function enSerie<T>(operacion: () => Promise<T>): Promise<T> {
+  const resultado = cadena.then(operacion, operacion);
+  // La cadena se queda con la version que nunca rechaza, para que un fallo no
+  // rompa las operaciones que vengan despues.
+  cadena = resultado.catch(() => undefined);
+  return resultado;
+}
+
 async function escribirCola(cola: GastoPendiente[]): Promise<void> {
   const f = archivo();
   // create() tira si el archivo ya existe, asi que se pregunta antes.
@@ -105,28 +143,42 @@ async function escribirCola(cola: GastoPendiente[]): Promise<void> {
  * app en el medio de la request. Escribiendo primero, el gasto existe desde el
  * instante en que se toca Guardar.
  */
-export async function encolar(gasto: GuardarGastoRequest): Promise<GastoPendiente> {
-  const pendiente: GastoPendiente = {
-    clienteId: nuevaClave(),
-    gasto,
-    encoladoEn: Date.now(),
-  };
-  await escribirCola([...(await leerCola()), pendiente]);
-  return pendiente;
+export function encolar(gasto: GuardarGastoRequest): Promise<GastoPendiente> {
+  return enSerie(async () => {
+    const pendiente: GastoPendiente = {
+      clienteId: nuevaClave(),
+      gasto,
+      encoladoEn: Date.now(),
+    };
+    await escribirCola([...(await leerCola()), pendiente]);
+    return pendiente;
+  });
 }
 
-export async function quitarDeLaCola(clienteId: string): Promise<void> {
-  await escribirCola((await leerCola()).filter((p) => p.clienteId !== clienteId));
+export function quitarDeLaCola(clienteId: string): Promise<void> {
+  return enSerie(async () => {
+    await escribirCola((await leerCola()).filter((p) => p.clienteId !== clienteId));
+  });
 }
 
 /** Marca un gasto como rechazado por el servidor. No se reintenta, no se borra. */
-export async function marcarRechazado(clienteId: string, error: string): Promise<void> {
-  await escribirCola(
-    (await leerCola()).map((p) => (p.clienteId === clienteId ? { ...p, error } : p)),
-  );
+export function marcarRechazado(clienteId: string, error: string): Promise<void> {
+  return enSerie(async () => {
+    await escribirCola(
+      (await leerCola()).map((p) => (p.clienteId === clienteId ? { ...p, error } : p)),
+    );
+  });
 }
 
-/** Descarta un gasto rechazado. Lo decide la persona, nunca la app sola. */
-export async function descartar(clienteId: string): Promise<void> {
-  await quitarDeLaCola(clienteId);
+/**
+ * Descarta un gasto rechazado. Lo decide la persona, nunca la app sola.
+ *
+ * Es `quitarDeLaCola` con otro nombre, y se escribe de nuevo en vez de
+ * delegar: llamarla desde aca seria una operacion en serie esperando a otra
+ * operacion en serie, o sea un bloqueo permanente.
+ */
+export function descartar(clienteId: string): Promise<void> {
+  return enSerie(async () => {
+    await escribirCola((await leerCola()).filter((p) => p.clienteId !== clienteId));
+  });
 }

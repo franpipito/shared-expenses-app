@@ -217,6 +217,7 @@ type PropsPozo = {
 };
 
 function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: PropsPozo) {
+  const router = useRouter();
   const [monto, setMonto] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -367,7 +368,18 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
           souvenir carisimo es hormiga aunque haya salido de la vaquita.
         */}
         {gastos.map((g) => (
-          <FilaGasto key={g.id} gasto={g} idUsuarioActual={idUsuarioActual} />
+          <FilaGasto
+            key={g.id}
+            gasto={g}
+            idUsuarioActual={idUsuarioActual}
+            // SE PUEDEN TOCAR, y no es un detalle: la lista del mes filtra los
+            // gastos del pozo con `sinPozo()`, asi que **esta pantalla es el
+            // unico lugar de la app donde aparecen**. Si las filas no abrieran
+            // la edicion, un gasto del viaje cargado mal quedaria mal para
+            // siempre -- justo lo que la pantalla de edicion vino a arreglar
+            // para los gastos normales.
+            onPress={() => router.push(`/gasto/${g.id}`)}
+          />
         ))}
       </View>
 

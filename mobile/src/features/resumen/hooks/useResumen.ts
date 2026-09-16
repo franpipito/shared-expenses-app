@@ -30,8 +30,8 @@ export function useResumen() {
       // el resumen que traigamos sin mandarlos primero seria viejo por
       // definicion, y la nutria opinaria sobre numeros incompletos.
       //
-      // No se hace `await` de nada que pueda romper la lectura: sincronizar()
-      // nunca rechaza, devuelve un resultado.
+      // sincronizar() nunca rechaza: un fallo al escribir la cola no tiene por
+      // que impedir que se lea el resumen.
       await sincronizar();
       setResumen(await traerResumen(mesActual()));
     } catch (e) {

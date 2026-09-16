@@ -477,6 +477,20 @@ Tres reglas del sincronizador que salieron de pensar el viaje:
 - **La cola no es invisible.** `AvisoDeCola` muestra cuantos hay pendientes. Una
   app que dice "guardado" y no muestra el gasto hace que la persona lo cargue de
   nuevo, o sea que lo duplique.
+- **`sincronizar()` nunca rechaza.** Las pantallas lo llaman antes de leer; si un
+  fallo de escritura se propagara, el resumen mostraria un error con el servidor
+  perfecto. Un problema en la cola no deja la app inutilizable.
+
+**Y toda mutacion de la cola pasa por un mutex**, porque sin eso pierde gastos.
+Cada una es leer-modificar-escribir, y entre el `await leerCola()` y el
+`escribirCola()` JavaScript cede el control: `sincronizar()` llama a
+`quitarDeLaCola(A)`, que lee `[A]` y cede; justo ahi alguien guarda el gasto B y
+se escribe `[A, B]`; `quitarDeLaCola` retoma con su copia vieja y escribe `[]`.
+**B desaparecio.** Y no es rebuscado: sincronizar corre en cada foco de pantalla,
+o sea justo al volver del alta.
+
+Es la misma carrera que en el backend se evita con `$push` atomico. Aca alcanza
+con encadenar las operaciones, porque JavaScript es de un solo hilo.
 
 El timeout de las lecturas es de 75s, generoso a proposito porque el arranque en
 frio de Render es de 40-60s. Se puede pagar esa espera **solo porque el alta ya
