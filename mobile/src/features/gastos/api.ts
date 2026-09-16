@@ -53,6 +53,36 @@ export async function crearGasto(gasto: GuardarGastoRequest): Promise<void> {
   void sincronizar();
 }
 
+export function traerGasto(id: string): Promise<GastoRespuesta> {
+  return pedir<GastoRespuesta>(`/gastos/${id}`);
+}
+
+/**
+ * Editar y borrar NO pasan por la cola, y es una decision, no un olvido.
+ *
+ * La cola existe para el camino rapido: cargar un gasto parado en un mostrador,
+ * donde esperar a la red es lo que hace que la gente abandone. Editar es lo
+ * contrario -- es una correccion deliberada, que se hace sentado y mirando la
+ * lista. Ahi esperar dos segundos no molesta a nadie.
+ *
+ * Y encolarlas costaria mucho mas de lo que parece: una cola de MODIFICACIONES
+ * necesita orden garantizado (editar y despues borrar no es lo mismo que al
+ * reves), resolver que pasa si editas algo que todavia no se mando, y decidir
+ * quien gana cuando el servidor tiene una version mas nueva. Es un log de
+ * operaciones, no una lista.
+ *
+ * El limite practico: **solo se pueden editar y borrar gastos que ya entraron al
+ * servidor.** Los que estan esperando en la cola no aparecen en la lista todavia
+ * -- se ven en el aviso de arriba -- asi que la situacion no se puede dar.
+ */
+export function editarGasto(id: string, gasto: GuardarGastoRequest): Promise<GastoRespuesta> {
+  return pedir<GastoRespuesta>(`/gastos/${id}`, { metodo: 'PUT', cuerpo: gasto });
+}
+
+export function borrarGasto(id: string): Promise<void> {
+  return pedir<void>(`/gastos/${id}`, { metodo: 'DELETE' });
+}
+
 /**
  * La fecha de hoy en `yyyy-MM-dd`, tomada del reloj local del telefono.
  *

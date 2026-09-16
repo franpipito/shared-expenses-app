@@ -70,6 +70,8 @@ export default function LayoutRaiz() {
               presentation: 'modal',
             }}
           />
+          {/* Editar es la misma clase de tarea, asi que se abre igual. */}
+          <Stack.Screen name="gasto/[id]" options={{ presentation: 'modal' }} />
         </Stack>
       </SesionProvider>
     </SafeAreaProvider>

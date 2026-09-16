@@ -77,7 +77,7 @@ public class GastoServicio {
         Usuario pagador = resolverPagador(req, actual);
 
         BigDecimal monto = normalizar(req.monto());
-        String pozoId = validarPozo(req, actual);
+        String pozoId = validarPozo(req, actual, null);
 
         Gasto gasto = new Gasto(
                 actual.getGrupoId(),
@@ -112,6 +112,18 @@ public class GastoServicio {
                 .toList();
     }
 
+    /**
+     * Un gasto por id, si lo podes ver.
+     *
+     * Devuelve 404 tanto si no existe como si es un PERSONAL de la otra
+     * persona: la regla de visibilidad ya esta adentro de la consulta, asi que
+     * desde aca los dos casos son indistinguibles. Un 403 confirmaria que el
+     * gasto existe, que es justo lo que no queremos para los regalos.
+     */
+    public GastoRespuesta buscar(String id) {
+        return GastoRespuesta.desde(buscarVisible(id, usuarioActual.requerido()));
+    }
+
     public GastoRespuesta actualizar(String id, GuardarGastoRequest req) {
         Usuario actual = usuarioActual.requerido();
         Gasto gasto = buscarVisible(id, actual);
@@ -136,7 +148,7 @@ public class GastoServicio {
         // Es la valvula de escape para el que se cargo al pozo sin querer, que
         // es el riesgo conocido de que el formulario abra con "Vaquita" puesto
         // durante el viaje.
-        gasto.setPozoId(validarPozo(req, actual));
+        gasto.setPozoId(validarPozo(req, actual, gasto.getPozoId()));
 
         // ACA HABIA UN gastos.flush() Y AHORA HAY UN save(), y el motivo de
         // fondo es el mismo que antes: hay que devolverle al cliente la version
@@ -267,7 +279,7 @@ public class GastoServicio {
      *    entrevista: un regalo sorpresa cargado por error con el pozo puesto.
      *    Un 400 es molesto; filtrar el regalo es romper el producto.
      */
-    private String validarPozo(GuardarGastoRequest req, Usuario actual) {
+    private String validarPozo(GuardarGastoRequest req, Usuario actual, String pozoActual) {
         if (req.pozoId() == null) {
             return null;
         }
@@ -281,7 +293,19 @@ public class GastoServicio {
                 .orElseThrow(() -> new ReglaDeNegocioException(
                         "No existe la vaquita " + req.pozoId()));
 
-        if (pozo.getEstado() != EstadoPozo.ABIERTO) {
+        // UNA VAQUITA CERRADA NO ACEPTA GASTOS NUEVOS, PERO SI CORRECCIONES DE
+        // LOS QUE YA TENIA.
+        //
+        // La diferencia importa de verdad: volviendo del viaje cierran la
+        // vaquita, y recien ahi alguien mira la lista y ve que una cena quedo
+        // cargada con un cero de mas. Si el cierre congelara tambien las
+        // ediciones, ese error seria permanente -- y un registro que no se puede
+        // corregir deja de ser confiable.
+        //
+        // Lo que sigue prohibido es METER un gasto en una vaquita cerrada, que
+        // es lo que cambiaria sus numeros despues de darlos por cerrados.
+        boolean loEstaMoviendo = !pozo.getId().equals(pozoActual);
+        if (pozo.getEstado() != EstadoPozo.ABIERTO && loEstaMoviendo) {
             throw new ReglaDeNegocioException("Esa vaquita ya esta cerrada");
         }
 

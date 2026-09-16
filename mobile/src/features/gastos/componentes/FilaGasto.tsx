@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { GastoRespuesta } from '../../../api/tipos';
 import { formatearMonto } from '../../../componentes/Monto';
@@ -40,9 +40,14 @@ type Props = {
   gasto: GastoRespuesta;
   /** Para no repetir "pago Franco" en cada fila propia: solo se nombra al otro. */
   idUsuarioActual: string | undefined;
+  /**
+   * Abre la edicion. Opcional: la lista del viaje, dentro de la vaquita,
+   * muestra las filas sin que se puedan tocar.
+   */
+  onPress?: () => void;
 };
 
-export function FilaGasto({ gasto, idUsuarioActual }: Props) {
+export function FilaGasto({ gasto, idUsuarioActual, onPress }: Props) {
   const compartido = gasto.tipo === 'COMPARTIDO';
   const loPagoElOtro = gasto.pagadoPor.id !== idUsuarioActual;
 
@@ -57,15 +62,23 @@ export function FilaGasto({ gasto, idUsuarioActual }: Props) {
     .filter(Boolean)
     .join(' · ');
 
+  // Pressable cuando se puede tocar y View cuando no. Un Pressable sin onPress
+  // se anuncia como boton igual a un lector de pantalla, y prometer una accion
+  // que no existe es peor que no ofrecerla.
+  const Contenedor = onPress ? Pressable : View;
+
   return (
-    <View
+    <Contenedor
+      onPress={onPress}
       style={[estilos.fila, gasto.esHormiga && estilos.filaHormiga]}
       // Sin esto, un lector de pantalla lee cuatro textos sueltos y la marca de
       // hormiga -- que es un color -- no se lee de ninguna forma.
       accessible
+      accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={
         `${gasto.descripcion}, ${formatearMonto(gasto.monto)}, ${detalle}` +
-        (gasto.esHormiga ? ', gasto evitable' : '')
+        (gasto.esHormiga ? ', gasto evitable' : '') +
+        (onPress ? '. Tocar para editar.' : '')
       }
     >
       {/* El filo ambar. Es la marca que hace scaneable la lista de un vistazo. */}
@@ -91,7 +104,7 @@ export function FilaGasto({ gasto, idUsuarioActual }: Props) {
           <Text style={estilos.parte}>tu parte {formatearMonto(parteMia(gasto, idUsuarioActual))}</Text>
         ) : null}
       </View>
-    </View>
+    </Contenedor>
   );
 }
 

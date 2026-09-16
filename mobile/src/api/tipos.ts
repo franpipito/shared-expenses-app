@@ -63,6 +63,15 @@ export type GastoRespuesta = {
   esHormiga: boolean;
   categoria: CategoriaRespuesta;
   pagadoPor: UsuarioRespuesta;
+  /**
+   * Que porcentaje le tocaba a quien pago, redondeado. Null en los PERSONAL.
+   *
+   * Campo derivado, igual que `deudaGenerada`. Lo calcula el backend para que la
+   * pantalla de edicion no tenga que dividir montoPagador por monto -- o sea,
+   * hacer aritmetica de plata con numeros que en JavaScript ya son punto
+   * flotante.
+   */
+  porcentajePagador: number | null;
   /** Bloqueo optimista: se recibe al leer y se devuelve al editar. */
   version: number;
   /** El pozo del que salio, o null si es un gasto de la vida normal. */

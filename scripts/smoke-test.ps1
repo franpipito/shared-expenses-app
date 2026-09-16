@@ -434,6 +434,24 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method 
     } | ConvertTo-Json) } `
     409 "editar con una version vieja da 409 Conflict"
 
+# --- GET por id, que es lo que usa la pantalla de edicion -------------------
+$traido = Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Headers $ella
+Chequear ($traido.id -eq $compartido.id) "GET /gastos/{id} trae el gasto"
+Chequear ($traido.porcentajePagador -eq 50) `
+    "y trae porcentajePagador derivado, para que la app no divida plata"
+
+# Un PERSONAL no tiene reparto que mostrar.
+$personalTraido = Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Headers $ella
+Chequear ($null -eq $personalTraido.porcentajePagador) "un PERSONAL no trae porcentaje"
+
+# La regla de visibilidad tambien aplica al GET por id: el personal de Ella no
+# lo puede traer Franco, y da 404 y no 403 -- un 403 confirmaria que existe.
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Headers $franco } `
+    404 "el gasto personal de otra persona da 404 por id, no 403"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/000000000000000000000000" -Headers $franco } `
+    404 "un id que no existe da 404"
+
 # ---------------------------------------------------------------------------
 Titulo "9. Idempotencia de la cola offline"
 
@@ -600,7 +618,8 @@ $pozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $franco
 Chequear ($pozo.restante -lt 0) "gastar mas de lo aportado se permite y deja el pozo en rojo"
 
 # --- cierre ----------------------------------------------------------------
-Invoke-RestMethod -Uri "$base/gastos/$($gastoPozo.id)" -Method Delete -Headers $franco | Out-Null
+# gastoPozo se deja vivo a proposito: abajo se prueba que un gasto de una
+# vaquita CERRADA todavia se puede corregir.
 Invoke-RestMethod -Uri "$base/gastos/$($gastoPasado.id)" -Method Delete -Headers $franco | Out-Null
 
 $cerrado = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/cerrar" -Method Post -Headers $franco
@@ -621,6 +640,22 @@ EsperarRegla { Crear $franco @{
 
 $sinPozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $ella
 Chequear ($null -eq $sinPozo) "despues de cerrarla, no hay vaquita activa"
+
+# CERRAR CONGELA LA VAQUITA, NO LOS GASTOS QUE YA TENIA.
+#
+# La diferencia importa: volviendo del viaje cierran la vaquita, y recien ahi
+# alguien mira la lista y ve que una cena quedo con un cero de mas. Si el cierre
+# bloqueara tambien las correcciones, ese error seria permanente.
+$corregido = Invoke-RestMethod -Uri "$base/gastos/$($gastoPozo.id)" -Method Put -Headers $franco `
+    -ContentType "application/json" -Body (@{
+        monto = 130000.00; categoriaId = $COMIDA; fecha = "2026-09-06"
+        descripcion = "cena en el centro civico (corregida)"; tipo = "COMPARTIDO"
+        esHormiga = $true; pozoId = $pozo.id; version = $gastoPozo.version
+    } | ConvertTo-Json)
+Chequear ($corregido.monto -eq 130000.00) "un gasto de una vaquita CERRADA se puede corregir"
+Chequear ($corregido.pozoId -eq $pozo.id) "y sigue perteneciendo a esa vaquita"
+
+Invoke-RestMethod -Uri "$base/gastos/$($gastoPozo.id)" -Method Delete -Headers $franco | Out-Null
 
 # Nota: el documento del pozo CERRADO queda en la base, igual que los usuarios.
 # No molesta para volver a correr el script, porque el indice unico solo aplica

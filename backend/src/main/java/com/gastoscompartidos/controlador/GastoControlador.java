@@ -63,6 +63,19 @@ public class GastoControlador {
     }
 
     /**
+     * GET /gastos/{id}
+     *
+     * Existe para la pantalla de edicion: sin esto tendria que recibir el gasto
+     * entero por parametro de navegacion, o traerse el mes completo para buscar
+     * uno. Lo primero es fragil (los parametros de ruta son texto) y lo segundo
+     * se rompe si el gasto es de otro mes.
+     */
+    @GetMapping("/{id}")
+    public GastoRespuesta buscar(@PathVariable String id) {
+        return servicio.buscar(id);
+    }
+
+    /**
      * PUT /gastos/{id}
      *
      * @PathVariable toma el {id} de la ruta.

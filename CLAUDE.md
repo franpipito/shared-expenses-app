@@ -581,8 +581,9 @@ con el lenguaje del producto.
       `GET /grupo` con los integrantes, y la pantalla de `/saldo` con las dos
       nutrias.
 
-      Lo que queda afuera y no bloquea el cierre: editar y borrar, y los filtros
-      por categoria y pagador del listado (el endpoint ya los acepta).
+      Lo que queda afuera y no bloquea el cierre: los filtros por categoria y
+      pagador del listado (el endpoint ya los acepta). Editar y borrar se
+      agregaron despues, en la 6.9.
 
       Nada de esto se probo en un telefono todavia: se verifico con
       `tsc --noEmit` y con `expo export`, que bundlea de verdad.
@@ -635,6 +636,42 @@ con el lenguaje del producto.
       **Falta probarlo en un telefono de verdad**, que es lo unico que prueba una
       cola offline: poner el telefono en modo avion, cargar tres gastos, sacarlo
       de avion y ver que entran los tres una sola vez.
+- [~] **6.9 — Editar y borrar desde la app.** En un viaje se carga parado y
+      rapido, asi que se erra un monto o se olvida el toggle de hormiga. Un
+      registro que no se puede corregir deja de ser confiable, y uno que no es
+      confiable se abandona.
+
+      Tocar una fila de la lista abre `app/gasto/[id].tsx`. **No hay swipe para
+      borrar**: el borrado vive adentro de la edicion, detras de una
+      confirmacion. Un swipe sobre una lista que se scrollea con el pulgar,
+      parado y con una mano, es como se borra un gasto sin querer.
+
+      El formulario se extrajo a `FormularioDeGasto` y lo comparten el alta y la
+      edicion. **No se duplico** porque adentro vive la inversion del porcentaje
+      cuando pago la otra persona, y tener esa cuenta escrita dos veces es como
+      el saldo termina al reves en una de las dos pantallas.
+
+      Tres cosas que salieron de hacerlo:
+      - **`GET /gastos/{id}`**, que no existia. Sin el, la pantalla tendria que
+        recibir el gasto por parametro de navegacion (texto) o traerse el mes
+        entero para buscar uno (se rompe si el gasto es de otro mes).
+      - **`GastoRespuesta.porcentajePagador`**, derivado como `deudaGenerada`.
+        Preseleccionar el chip de reparto en el cliente exigiria dividir
+        montoPagador por monto: aritmetica de plata en punto flotante, que es
+        justo lo que el proyecto evita de punta a punta.
+      - **Una vaquita cerrada ya no congela sus gastos.** Cerrar impide meter
+        gastos nuevos, pero permite corregir los que ya tenia. Si no, un cero de
+        mas visto al volver del viaje quedaria para siempre.
+
+      El PUT ahora manda `version` siempre, asi que el pendiente de volverlo
+      obligatorio en el backend se puede cerrar despues de probarlo en serio.
+
+      **Editar y borrar NO pasan por la cola offline**, y es una decision: la
+      cola protege el camino rapido (cargar parado en un mostrador), y editar es
+      una correccion deliberada que se hace sentado. Encolar modificaciones
+      necesitaria orden garantizado y resolucion de conflictos, o sea un log de
+      operaciones y no una lista.
+
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a

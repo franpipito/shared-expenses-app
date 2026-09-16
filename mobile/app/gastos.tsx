@@ -55,7 +55,17 @@ export default function Gastos() {
       <FlatList
         data={gastos ?? []}
         keyExtractor={(g) => g.id}
-        renderItem={({ item }) => <FilaGasto gasto={item} idUsuarioActual={usuario?.id} />}
+        renderItem={({ item }) => (
+          <FilaGasto
+            gasto={item}
+            idUsuarioActual={usuario?.id}
+            // Tocar la fila abre la edicion. No hay swipe para borrar: el borrado
+            // vive adentro de la pantalla de edicion, detras de una confirmacion.
+            // Un swipe sobre una lista que se scrollea con el pulgar, parado y con
+            // una mano, es como se borra un gasto sin querer.
+            onPress={() => router.push(`/gasto/${item.id}`)}
+          />
+        )}
         contentContainerStyle={[
           estilos.contenido,
           { paddingTop: insets.top + 16, paddingBottom: 24 },
