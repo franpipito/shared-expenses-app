@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (83 tests)
+    name: Backend (tests)
     runs-on: ubuntu-latest
 
     # UNA MONGO DE VERDAD, y no es un lujo.
