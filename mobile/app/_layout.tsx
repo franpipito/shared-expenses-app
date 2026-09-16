@@ -58,6 +58,7 @@ export default function LayoutRaiz() {
         >
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
+          <Stack.Screen name="registro" />
           <Stack.Screen name="resumen" />
           <Stack.Screen name="gastos" />
           <Stack.Screen name="saldo" />

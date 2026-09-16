@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -152,7 +152,22 @@ export function FormularioDeGasto({
   // desde un efecto asincrono.
   // Editando ya hay una eleccion hecha, asi que el default de la vaquita no
   // tiene que pisarla: arranca en true.
-  const [eligioAMano, setEligioAMano] = useState(inicial !== undefined);
+  /**
+   * Si la persona ya eligio el destino a mano.
+   *
+   * ES UN REF Y NO ESTADO, y el motivo es un bug real que tenia el codigo
+   * anterior: el efecto que trae la vaquita corre con `[]`, asi que capturaba
+   * el valor del PRIMER render y lo conservaba para siempre. Tocar el switch
+   * mientras la request estaba en vuelo no cambiaba lo que el efecto veia, y
+   * cuando contestaba pisaba la eleccion con VAQUITA.
+   *
+   * El comentario viejo decia que sacarlo de las dependencias evitaba pisar la
+   * eleccion. Hacia exactamente lo contrario.
+   *
+   * Un ref siempre lee el valor actual, sin re-ejecutar el efecto. Es
+   * justamente para lo que sirve.
+   */
+  const eligioAMano = useRef(inicial !== undefined);
   const [porcentaje, setPorcentaje] = useState(parteMia(inicial, usuario?.id));
   const [otro, setOtro] = useState<UsuarioRespuesta | null>(null);
   const [pagueYo, setPagueYo] = useState(
@@ -204,19 +219,18 @@ export function FormularioDeGasto({
       try {
         const activo = await traerPozoActivo();
         setPozo(activo);
-        if (activo?.vigente && !eligioAMano) setDestino('VAQUITA');
+        if (activo?.vigente && !eligioAMano.current) setDestino('VAQUITA');
       } catch {
         setPozo(null);
       }
     })();
-    // eligioAMano a proposito NO esta en las dependencias: este efecto tiene que
-    // correr una sola vez, al abrir. Si se re-ejecutara al tocar un chip,
-    // volveria a pisar la eleccion, que es justo lo que se quiere evitar.
+    // Corre una sola vez, al abrir. El ref de arriba es lo que hace que eso sea
+    // seguro: lee el valor actual sin necesidad de estar en las dependencias.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function elegirDestino(elegido: Destino) {
-    setEligioAMano(true);
+    eligioAMano.current = true;
     setDestino(elegido);
   }
 
@@ -231,7 +245,36 @@ export function FormularioDeGasto({
 
   const montoNumero = Number(monto.replace(',', '.'));
   const montoValido = monto.trim() !== '' && Number.isFinite(montoNumero) && montoNumero > 0;
-  const listo = montoValido && categoriaId !== null && descripcion.trim() !== '';
+  /**
+   * Quien es "la otra persona", sin depender de que haya contestado /grupo.
+   *
+   * ARREGLA UN BUG QUE DABA VUELTA EL SALDO. `otro` sale de una request async, y
+   * en modo edicion el boton Guardar esta activo desde el primer render, porque
+   * monto, categoria y descripcion vienen prellenados. Guardar en esa ventana
+   * mandaba `pagadoPorId: undefined`, y el backend interpreta eso como "pago
+   * quien carga" (`resolverPagador`). Como el porcentaje SI se invertia, el
+   * gasto quedaba exactamente al reves: una cena de $20.000 al 60% de Viole
+   * pasaba a ser 60% de Franco, un swing de $16.000 sin un solo error.
+   *
+   * Con Render dormido esa ventana son los 40-60 segundos del arranque en frio,
+   * o sea el formulario entero. Y si /grupo fallaba de verdad, era permanente.
+   *
+   * La salida es que editando NO hace falta /grupo para saber quien pago: ya
+   * esta en el gasto. /grupo solo hace falta para CAMBIAR el pagador.
+   */
+  const idDelOtro =
+    otro?.id ??
+    (inicial && inicial.pagadoPor.id !== usuario?.id ? inicial.pagadoPor.id : undefined);
+
+  const listo =
+    montoValido &&
+    categoriaId !== null &&
+    descripcion.trim() !== '' &&
+    // Y nunca se guarda un compartido que pago el otro sin saber quien es el
+    // otro. Es el cinturon ademas de los tirantes: si por algun camino que no
+    // previmos `idDelOtro` sigue sin resolverse, preferimos un boton
+    // deshabilitado antes que un gasto invertido.
+    !(destino === 'COMPARTIDO' && !pagueYo && !idDelOtro);
 
   async function guardar() {
     setError(null);
@@ -274,7 +317,7 @@ export function FormularioDeGasto({
         porcentajePagador:
           destino === 'COMPARTIDO' ? (pagueYo ? porcentaje : 100 - porcentaje) : undefined,
         // Ausente significa "lo pague yo", que es lo que el backend asume.
-        pagadoPorId: destino === 'COMPARTIDO' && !pagueYo ? otro?.id : undefined,
+        pagadoPorId: destino === 'COMPARTIDO' && !pagueYo ? idDelOtro : undefined,
         // EL POZO DEL GASTO GANA SOBRE EL ACTIVO, y es el arreglo de un bug
         // concreto: si el viaje ya se cerro, `traerPozoActivo()` devuelve null,
         // y mandar el id del activo sacaria el gasto de su vaquita en silencio

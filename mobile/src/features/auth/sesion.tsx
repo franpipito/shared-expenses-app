@@ -30,10 +30,25 @@ type Sesion = {
   /** true mientras se lee el token del Keychain, al arrancar la app. */
   cargando: boolean;
   entrar: (email: string, password: string) => Promise<void>;
+  registrarse: (datos: DatosDeRegistro) => Promise<void>;
   salir: () => Promise<void>;
 };
 
 const ContextoDeSesion = createContext<Sesion | null>(null);
+
+/**
+ * Lo que hace falta para crear una cuenta.
+ *
+ * El `codigoInvitacion` no es ceremonia: el backend va a estar publico, y sin el
+ * cualquiera que encuentre la URL se crearia una cuenta. Franco se lo pasa a
+ * Viole por fuera de la app.
+ */
+export type DatosDeRegistro = {
+  nombre: string;
+  email: string;
+  password: string;
+  codigoInvitacion: string;
+};
 
 export function SesionProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<UsuarioGuardado | null>(null);
@@ -72,6 +87,31 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     setUsuario(respuesta.usuario);
   }, []);
 
+  /**
+   * Crear la cuenta y quedar adentro, sin pasar por el login.
+   *
+   * `POST /auth/registro` devuelve el mismo `TokenRespuesta` que el login, asi
+   * que despues de registrarse ya hay sesion: obligar a volver al login y
+   * retipear la contraseña que acabas de elegir es fricción sin ninguna
+   * contrapartida.
+   *
+   * El primero que se registra crea el grupo; el segundo se suma; un tercero se
+   * rechaza, porque el modelo de reparto asume dos integrantes.
+   */
+  const registrarse = useCallback(async (datos: DatosDeRegistro) => {
+    const respuesta = await pedir<TokenRespuesta>('/auth/registro', {
+      metodo: 'POST',
+      cuerpo: datos,
+      sinToken: true,
+    });
+    await Promise.all([
+      guardarToken(respuesta.token),
+      guardarUsuario(respuesta.usuario),
+    ]);
+    fijarToken(respuesta.token);
+    setUsuario(respuesta.usuario);
+  }, []);
+
   const salir = useCallback(async () => {
     // Solo local. NO se llama a /auth/cerrar-sesiones, que incrementa
     // token_version e invalida el token de TODOS los dispositivos: eso es el
@@ -82,8 +122,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const valor = useMemo<Sesion>(
-    () => ({ usuario, cargando, entrar, salir }),
-    [usuario, cargando, entrar, salir],
+    () => ({ usuario, cargando, entrar, registrarse, salir }),
+    [usuario, cargando, entrar, registrarse, salir],
   );
 
   return <ContextoDeSesion.Provider value={valor}>{children}</ContextoDeSesion.Provider>;

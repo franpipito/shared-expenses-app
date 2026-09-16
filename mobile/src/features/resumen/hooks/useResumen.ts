@@ -25,6 +25,11 @@ export function useResumen() {
 
   const recargar = useCallback(async () => {
     setError(null);
+    // `cargando` tiene que volver a true aca, y no solo al montar: si no, el
+    // spinner del pull-to-refresh rebota y desaparece al instante, y durante los
+    // 40-60 segundos que tarda Render en despertar no hay ninguna senial de que
+    // algo este pasando. La reaccion natural es tirar otra vez, y otra.
+    setCargando(true);
     try {
       // Vaciar la cola ANTES de leer, y no despues: si hay gastos esperando,
       // el resumen que traigamos sin mandarlos primero seria viejo por

@@ -93,6 +93,14 @@ export default function Vaquita() {
 
         {error ? <Text style={estilos.error}>{error}</Text> : null}
 
+        {/*
+          `error ? null` antes del estado vacio, igual que hace la lista de
+          gastos. Sin esto, un fallo de red dibuja el formulario de "abrir la
+          vaquita" -- porque el estado vacio ES ese formulario -- y alguien sin
+          senial en la ruta a Bariloche concluye que la vaquita se perdio y
+          trata de crear otra. Confundir "fallo" con "no hay" es peor que
+          mostrar un error.
+        */}
         {pozo ? (
           <PozoAbierto
             pozo={pozo}
@@ -101,7 +109,7 @@ export default function Vaquita() {
             onCambio={fijarPozo}
             onRecargar={recargar}
           />
-        ) : (
+        ) : error ? null : (
           <SinVaquita onCreada={fijarPozo} />
         )}
       </ScrollView>

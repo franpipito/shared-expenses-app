@@ -33,22 +33,34 @@ export default function EditarGasto() {
   const router = useRouter();
 
   const [gasto, setGasto] = useState<GastoRespuesta | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /**
+   * DOS ESTADOS DE ERROR DISTINTOS, y no es prolijidad.
+   *
+   * `errorDeCarga` reemplaza la pantalla entera, porque sin el gasto no hay nada
+   * que dibujar. `errorDeBorrado` se muestra DENTRO del formulario.
+   *
+   * Cuando eran uno solo: corregias el monto de 40.000 a 4.000, te arrepentias,
+   * tocabas borrar, el DELETE fallaba por senial, y la pantalla entera se
+   * reemplazaba por "No se pudo borrar / Volver". La correccion del monto se
+   * perdia y no habia forma de reintentar.
+   */
+  const [errorDeCarga, setErrorDeCarga] = useState<string | null>(null);
+  const [errorDeBorrado, setErrorDeBorrado] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         setGasto(await traerGasto(id));
       } catch (e) {
-        setError(e instanceof ErrorDeApi ? e.message : 'No se pudo traer el gasto.');
+        setErrorDeCarga(e instanceof ErrorDeApi ? e.message : 'No se pudo traer el gasto.');
       }
     })();
   }, [id]);
 
-  if (error) {
+  if (errorDeCarga) {
     return (
       <View style={estilos.pantallaDeError}>
-        <Text style={estilos.error}>{error}</Text>
+        <Text style={estilos.error}>{errorDeCarga}</Text>
         <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={12}>
           <Text style={estilos.volver}>Volver</Text>
         </Pressable>
@@ -83,7 +95,9 @@ export default function EditarGasto() {
                 await borrarGasto(id);
                 router.back();
               } catch (e) {
-                setError(e instanceof ErrorDeApi ? e.message : 'No se pudo borrar el gasto.');
+                setErrorDeBorrado(
+                  e instanceof ErrorDeApi ? e.message : 'No se pudo borrar el gasto.',
+                );
               }
             })();
           },
@@ -104,9 +118,12 @@ export default function EditarGasto() {
       // hay dos ninguno es el principal. Ademas la accion destructiva no deberia
       // competir en peso visual con la que la gente viene a hacer.
       pieExtra={
-        <Pressable onPress={confirmarBorrado} accessibilityRole="button" hitSlop={8}>
-          <Text style={estilos.borrar}>Borrar este gasto</Text>
-        </Pressable>
+        <>
+          {errorDeBorrado ? <Text style={estilos.error}>{errorDeBorrado}</Text> : null}
+          <Pressable onPress={confirmarBorrado} accessibilityRole="button" hitSlop={8}>
+            <Text style={estilos.borrar}>Borrar este gasto</Text>
+          </Pressable>
+        </>
       }
     />
   );

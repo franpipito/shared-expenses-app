@@ -3,6 +3,7 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -90,6 +91,18 @@ export default function Login() {
             cargando={enviando}
             deshabilitado={!email.trim() || !password}
           />
+
+          {/*
+            El camino al registro. Sin esto la unica forma de crear una cuenta
+            era un curl desde la compu de Franco.
+          */}
+          <Pressable
+            onPress={() => router.push('/registro')}
+            accessibilityRole="button"
+            hitSlop={8}
+          >
+            <Text style={estilos.crearCuenta}>Todavia no tengo cuenta</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -170,5 +183,12 @@ const estilos = StyleSheet.create({
     fontFamily: fuentes.cuerpo,
     fontSize: 14,
     color: colores.terracotaProfunda,
+  },
+  crearCuenta: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 15,
+    color: colores.rioProfundo,
+    textAlign: 'center',
+    paddingTop: 8,
   },
 });
