@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
 import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
+import { useMes } from '../src/features/mes/mes';
 import { useSaldo } from '../src/features/saldo/hooks/useSaldo';
 import { colores } from '../src/tema/colores';
 import { fuentes, numerosTabulares } from '../src/tema/tipografia';
@@ -29,6 +30,7 @@ import { Cargando } from './_layout';
  */
 export default function Saldo() {
   const { saldo, cargando, error, recargar } = useSaldo();
+  const { esElMesActual } = useMes();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -79,7 +81,9 @@ export default function Saldo() {
               <>
                 <Text style={estilos.aMano}>Estan a mano</Text>
                 <Text style={estilos.bajada}>
-                  Ningun gasto compartido quedo sin equilibrar este mes.
+                  {esElMesActual
+                    ? 'Ningun gasto compartido quedo sin equilibrar este mes.'
+                    : 'Ningun gasto compartido quedo sin equilibrar ese mes.'}
                 </Text>
               </>
             ) : (

@@ -11,6 +11,7 @@ import { FilaGasto } from '../src/features/gastos/componentes/FilaGasto';
 import { useGastos } from '../src/features/gastos/hooks/useGastos';
 import { AvisoDeCola } from '../src/features/gastos/componentes/AvisoDeCola';
 import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
+import { useMes } from '../src/features/mes/mes';
 import { colores } from '../src/tema/colores';
 import { fuentes } from '../src/tema/tipografia';
 import { Cargando } from './_layout';
@@ -31,6 +32,7 @@ import { Cargando } from './_layout';
 export default function Gastos() {
   const { usuario } = useSesion();
   const { gastos, cargando, error, recargar } = useGastos();
+  const { esElMesActual } = useMes();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -119,7 +121,9 @@ export default function Gastos() {
           error ? null : (
             <View style={estilos.vacio}>
               <Nutria animo="TRANQUILA" tamano={120} />
-              <Text style={estilos.vacioTitulo}>Todavia no cargaste nada este mes</Text>
+              <Text style={estilos.vacioTitulo}>
+                {esElMesActual ? 'Todavia no cargaste nada este mes' : 'No cargaste nada ese mes'}
+              </Text>
               <Text style={estilos.vacioBajada}>
                 Los gastos que cargues van a aparecer aca, con los evitables marcados.
               </Text>

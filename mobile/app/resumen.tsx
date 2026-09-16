@@ -11,6 +11,7 @@ import { Monto, formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
+import { useMes } from '../src/features/mes/mes';
 import { useResumen } from '../src/features/resumen/hooks/useResumen';
 import { AvisoDeCola } from '../src/features/gastos/componentes/AvisoDeCola';
 import { colores } from '../src/tema/colores';
@@ -52,14 +53,26 @@ const FRASES = {
  * El arreglo va en el copy y NO en la regla: la regla esta bien y tiene sus
  * tests. Con cero hormiga se dice lo que es verdad sin inventar una comparacion.
  */
-function fraseDelAnimo(animo: AnimoNutria, totalHormiga: number): string {
-  if (totalHormiga === 0) return 'Todavia no anotaste ningun gasto evitable este mes.';
+function fraseDelAnimo(
+  animo: AnimoNutria,
+  totalHormiga: number,
+  esElMesActual: boolean,
+): string {
+  // El "todavia" solo vale en el mes en curso. Mirando agosto en octubre, decir
+  // "todavia no anotaste" promete algo que ya no puede pasar: ese mes cerro.
+  // Es el precio de que ahora se pueda navegar a meses anteriores.
+  if (totalHormiga === 0) {
+    return esElMesActual
+      ? 'Todavia no anotaste ningun gasto evitable este mes.'
+      : 'No anotaste ningun gasto evitable ese mes.';
+  }
   return FRASES[animo];
 }
 
 export default function Resumen() {
   const { usuario, salir } = useSesion();
   const { resumen, cargando, error, recargar } = useResumen();
+  const { esElMesActual } = useMes();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -139,7 +152,7 @@ export default function Resumen() {
               >
                 {formatearMonto(resumen.totalHormiga)}
               </Text>
-              <Text style={estilos.comparacion}>{fraseDelAnimo(resumen.animo, resumen.totalHormiga)}</Text>
+              <Text style={estilos.comparacion}>{fraseDelAnimo(resumen.animo, resumen.totalHormiga, esElMesActual)}</Text>
               <Text style={estilos.detalleComparacion}>
                 Mismo tramo del mes pasado: {formatearMonto(resumen.totalHormigaMesAnterior)}
               </Text>
@@ -224,7 +237,7 @@ export default function Resumen() {
                 ))}
               </View>
             ) : (
-              <Text style={estilos.vacio}>Todavia no cargaste nada este mes.</Text>
+              <Text style={estilos.vacio}>{esElMesActual ? 'Todavia no cargaste nada este mes.' : 'No cargaste nada ese mes.'}</Text>
             )}
           </>
         ) : null}

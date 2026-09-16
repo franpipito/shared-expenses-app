@@ -588,6 +588,23 @@ borra cuando cambia la PERSONA, no cuando se muere el TOKEN.
   El default vuelve a PERSONAL: lo compartido se elige, nunca se asume.
 
 
+### El hueco de cobertura que queda: la capa de servicio
+Los 52 tests son todos de clases puras -- `Periodo`, `CalculadorDeAnimo`, `Pozo`,
+`PoliticaDeContrasenas`, `ValidacionDeConfiguracion`. **Los servicios no tienen
+un solo test unitario**, y ahi es donde viven las reglas que mas duelen si se
+rompen: la visibilidad de un PERSONAL, el centavo del reparto, que un gasto
+personal no pueda salir de la vaquita.
+
+Hoy lo unico que las cubre es `scripts/smoke-test.ps1`, que necesita Mongo
+corriendo y la app levantada. Eso esta bien como prueba de integracion, pero es
+lenta, no corre en CI y no se puede pedir en una entrevista.
+
+Mockito 5.23 y AssertJ **ya estan en el classpath de test**, asi que un
+`GastoServicioTest` con los repositorios mockeados no necesita ninguna
+dependencia nueva. Es lo mas valioso que le queda por hacer al backend, y no se
+hizo todavia a proposito: es una tanda de trabajo que merece su propia sesion,
+no colarse en un merge.
+
 ### Pendiente de decidir
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
   cliente lo manda, se verifica; si no, gana la ultima escritura. Conviene
@@ -813,11 +830,42 @@ con el lenguaje del producto.
       evita un bug de la version propia (con `View` el `style` como funcion no se
       evalua); y `registrarse` toma un objeto y no cuatro `string` sueltos.
 
+      **Y el selector de mes obligo a revisar la copy.** Cuatro textos decian
+      "este mes" en presente -- "todavia no cargaste nada este mes" -- que era
+      cierto mientras solo se podia ver el mes en curso. Mirando agosto en
+      octubre, "todavia" promete algo que ya no puede pasar: ese mes cerro. Las
+      pantallas ahora eligen la frase con `esElMesActual`. El backend no hizo
+      falta tocarlo: `Periodo.transcurridoDe` ya distinguia mes en curso, mes
+      cerrado y mes futuro desde la sesion 3.
+
+      **Los tres chequeos que fallaron en la primera corrida del smoke test eran
+      del script, no del backend**, y valen como recordatorio de que un test que
+      falla no siempre acusa al codigo:
+      - `/pozos/activo` sin vaquita devuelve 204, y el script hacia
+        `$null -eq $respuesta`. Ante un 204, `Invoke-RestMethod` de PowerShell 5.1
+        devuelve un string vacio y no `$null`, asi que la comparacion daba falso
+        hiciera lo que hiciera el backend. Ahora se chequea el CODIGO, que ademas
+        es el contrato que se queria probar: 204 y no 404.
+      - El aporte de cero se chequeaba con `EsperarValidacion`, que exige un
+        cuerpo con `errores` -- la forma de Bean Validation. Pero el cero lo
+        rechaza `PozoServicio` con una `ReglaDeNegocioException`, cuyo cuerpo es
+        solo `{"mensaje"}`. Va con `EsperarRegla`. Y la regla esta donde
+        corresponde: Bean Validation no tiene un `@NotZero`, y una anotacion
+        propia para un solo campo es mas maquinaria que regla.
+
       Verificado: **52 tests puros en verde** (`PozoTest`, `CalculadorDeAnimoTest`,
       `PeriodoTest`, `PoliticaDeContrasenasTest` y el `ValidacionDeConfiguracionTest`
-      que sumo Franco) y `tsc --noEmit` limpio. Lo que falta, y hay que hacerlo en
-      la PC: `contextLoads` y el smoke test, que necesitan Mongo corriendo, y
-      **la app en un telefono**.
+      que sumo Franco), `tsc --noEmit` limpio -- tambien con `--noUnusedLocals`,
+      que es lo que atrapa los restos de un merge -- y `expo export` bundleando.
+      Y el smoke test contra Mongo local: **98 de 101**, con los 3 que fallaban
+      corregidos despues (eran del script). Falta re-correrlo para verlos en
+      verde, pero ya cumplio lo que mas importaba: que el backend arranque y
+      sirva 98 chequeos prueba que el grafo de beans del merge resuelve, que es
+      mejor senial que `contextLoads` porque ademas ejercita los endpoints.
+
+      Lo que sigue sin probarse es **la app en un telefono**: la cola en modo
+      avion, la direccion de la deuda en un compartido al 70/30, y la vaquita
+      real con los dos aportes.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a
