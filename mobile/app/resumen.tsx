@@ -1,4 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
+import LogOut from 'lucide-react-native/icons/log-out';
 import { useCallback } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { IconoCategoria } from '../src/componentes/IconoCategoria';
 import { Monto, formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
+import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
 import { useResumen } from '../src/features/resumen/hooks/useResumen';
 import { AvisoDeCola } from '../src/features/gastos/componentes/AvisoDeCola';
 import { colores } from '../src/tema/colores';
@@ -84,14 +86,33 @@ export default function Resumen() {
         }
       >
         <View style={estilos.encabezado}>
-          <View>
-            <Text style={estilos.saludo}>Hola, {usuario?.nombre ?? ''}</Text>
+          <View style={estilos.encabezadoTexto}>
+            {/*
+              Sin nombre, "Hola," con la coma colgando se ve roto. Con el arreglo
+              del token vencido esto no deberia pasar mas, pero el saludo no tiene
+              por que depender de que ningun otro arreglo siga funcionando.
+            */}
+            <Text style={estilos.saludo}>{usuario?.nombre ? `Hola, ${usuario.nombre}` : 'Hola'}</Text>
             <Text style={estilos.seccion}>Tus gastos del mes</Text>
           </View>
-          <Pressable onPress={salir} hitSlop={12} accessibilityRole="button">
-            <Text style={estilos.salir}>Salir</Text>
+          <Pressable
+            // `() => salir()` y no `salir` a secas: onPress le pasa el evento
+            // del toque al handler, y `salir` recibe el MOTIVO de la salida.
+            // Pasado directo, el motivo seria un GestureResponderEvent, la
+            // comparacion con 'manual' daria false, y la cola no se limpiaria
+            // al cerrar sesion a mano -- que es justo cuando hay que limpiarla.
+            onPress={() => void salir('manual')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar sesion"
+            style={({ pressed }) => [estilos.cerrarSesion, pressed && estilos.cerrarSesionPresionado]}
+          >
+            <LogOut size={16} color={colores.rioProfundo} strokeWidth={1.75} />
+            <Text style={estilos.cerrarSesionTexto}>Cerrar sesion</Text>
           </Pressable>
         </View>
+
+        <SelectorDeMes />
 
         <AvisoDeCola />
 
@@ -144,17 +165,25 @@ export default function Resumen() {
             </Pressable>
 
             {/*
-              La entrada a la seccion de pareja. El texto es el encuadre del
-              producto, no un titulo generico: no tienen economia compartida, asi
-              que la pregunta que contesta esa pantalla es "quien le debe a
-              quien" y no "cuanto tenemos".
+              La entrada a la seccion de pareja.
+
+              El LINK dice "Gastos compartidos" y el TITULO de esa pantalla sigue
+              diciendo "Quien le debe a quien". No es indecision: un link dice
+              adonde vas, y para eso sirve un sustantivo; el titulo dice que
+              contesta la pantalla, y para eso sirve la pregunta. "Quien le debe a
+              quien" como link se leia como una pregunta suelta en el medio del
+              resumen.
+
+              Lo que NO puede decir es "nuestra plata" ni nada que sugiera
+              economia compartida: tienen ingresos separados, y ese encuadre es
+              del producto, no del copy.
             */}
             <Pressable
               onPress={() => router.push('/saldo')}
               accessibilityRole="button"
               style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
             >
-              <Text style={estilos.verGastos}>Quien le debe a quien</Text>
+              <Text style={estilos.verGastos}>Gastos compartidos</Text>
               <Text style={estilos.flecha}>›</Text>
             </Pressable>
 
@@ -221,7 +250,25 @@ const estilos = StyleSheet.create({
     color: colores.textoSuave,
     marginTop: 4,
   },
-  salir: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.rioProfundo },
+  encabezadoTexto: { flex: 1 },
+  // Pastilla con borde en vez de un texto suelto: Salir a secas se leia como
+  // un link mas de la pantalla, al lado de los otros dos que si navegan. Un
+  // boton que cierra la sesion tiene que verse como un boton y decir que hace.
+  cerrarSesion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colores.tarjeta,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    // 36 y no 44: es una accion secundaria y no queremos que le compita al
+    // saludo. El hitSlop le suma el area tactil que le falta.
+    minHeight: 36,
+  },
+  cerrarSesionPresionado: { backgroundColor: colores.arena },
+  cerrarSesionTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 13, color: colores.rioProfundo },
 
   tarjetaHormiga: {
     backgroundColor: colores.tarjeta,

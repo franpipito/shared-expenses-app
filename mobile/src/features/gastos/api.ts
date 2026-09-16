@@ -65,6 +65,15 @@ export async function crearGasto(gasto: GuardarGastoRequest): Promise<void> {
   void sincronizar();
 }
 
+/**
+ * Un gasto por id, con su `version` al dia.
+ *
+ * La pantalla de edicion lo pide en vez de arrastrar el objeto desde la lista
+ * por parametros de navegacion. La diferencia importa: la lista pudo haberse
+ * cargado hace rato, y editar contra una copia vieja es exactamente lo que el
+ * bloqueo optimista viene a detectar. Trayendolo de nuevo, el 409 queda para los
+ * conflictos de verdad y no para uno que nos provocamos solos.
+ */
 export function traerGasto(id: string): Promise<GastoRespuesta> {
   return pedir<GastoRespuesta>(`/gastos/${id}`);
 }
@@ -86,6 +95,9 @@ export function traerGasto(id: string): Promise<GastoRespuesta> {
  * El limite practico: **solo se pueden editar y borrar gastos que ya entraron al
  * servidor.** Los que estan esperando en la cola no aparecen en la lista todavia
  * -- se ven en el aviso de arriba -- asi que la situacion no se puede dar.
+ *
+ * `version` viaja adentro de `gasto` y el cliente la manda SIEMPRE, aunque el
+ * backend la acepte ausente: sin ella gana la ultima escritura, en silencio.
  */
 export function editarGasto(id: string, gasto: GuardarGastoRequest): Promise<GastoRespuesta> {
   return pedir<GastoRespuesta>(`/gastos/${id}`, { metodo: 'PUT', cuerpo: gasto });

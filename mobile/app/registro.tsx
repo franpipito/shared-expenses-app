@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorDeApi } from '../src/api/cliente';
 import { Boton } from '../src/componentes/Boton';
 import { Nutria } from '../src/componentes/Nutria';
+import { Campo } from '../src/features/auth/componentes/Campo';
 import { useSesion } from '../src/features/auth/sesion';
 import { colores } from '../src/tema/colores';
 import { fuentes } from '../src/tema/tipografia';
@@ -22,26 +22,20 @@ import { fuentes } from '../src/tema/tipografia';
 /**
  * Crear la cuenta.
  *
- * ESTA PANTALLA FALTABA, y era el bloqueante mas grande del proyecto: toda la
- * app existe para Viole, y la unica forma de darle una cuenta era que Franco
- * corriera un `curl` desde la compu -- o sea, eligiendole y tipeandole el la
- * contraseña. Una usuaria que arranca su app sin saber su propia clave es un
- * arranque roto.
+ * ESTA PANTALLA FALTABA, y era el agujero mas grande de la app: el backend tiene
+ * `POST /auth/registro` desde la sesion 4, pero el cliente solo sabia hacer
+ * login. O sea que Viole no podia crearse la cuenta desde el telefono -- hacia
+ * falta que alguien corriera un curl por ella. Una app de dos usuarios donde uno
+ * de los dos no puede entrar no esta terminada.
  *
- * Se usa dos veces en la vida del producto y vale la pena igual.
+ * El codigo de invitacion se pide aca y no se esconde: el registro esta cerrado
+ * a proposito porque el backend es publico, y quien llega a esta pantalla tiene
+ * que saber que necesita ese dato. Ocultarlo hasta que falle seria peor.
  *
- * EL MINIMO DE LA CONTRASEÑA SE DICE ANTES, no despues de que la rechacen.
- * `PoliticaDeContrasenas` exige 12 caracteres y ademas rechaza las comunes y las
- * que contienen tu nombre o tu email. Es una politica deliberada (NIST SP
- * 800-63B: largo en vez de reglas de composicion), pero para alguien que nunca
- * uso una app de finanzas, un rechazo en la primera pantalla es justo donde no
- * conviene poner fricción. Anunciar la regla cuesta una linea de texto.
- *
- * Ojo con una inconsistencia del backend: el DTO valida `min = 8` y la politica
- * exige 12. Manda la politica, asi que la pantalla dice 12.
+ * El minimo de 12 caracteres se dice ANTES de tipear. Es la recomendacion de
+ * NIST SP 800-63B que ya sigue el backend: la regla se muestra de entrada, en
+ * vez de rechazar despues de que la persona eligio.
  */
-const MINIMO_CONTRASENA = 12;
-
 export default function Registro() {
   const { registrarse } = useSesion();
   const router = useRouter();
@@ -54,11 +48,12 @@ export default function Registro() {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  // La validacion de verdad vive en el backend (`PoliticaDeContrasenas`), que es
+  // el unico que puede garantizarla. Esto es solo para no habilitar el boton
+  // cuando ya se sabe que va a fallar: ahorra un viaje de ida y vuelta, no
+  // reemplaza nada.
   const listo =
-    nombre.trim() !== '' &&
-    email.trim() !== '' &&
-    password.length >= MINIMO_CONTRASENA &&
-    codigo.trim() !== '';
+    nombre.trim() !== '' && email.trim() !== '' && password.length >= 12 && codigo.trim() !== '';
 
   async function alRegistrarse() {
     setError(null);
@@ -66,17 +61,13 @@ export default function Registro() {
     try {
       await registrarse({
         nombre: nombre.trim(),
-        // En minuscula y sin espacios: el backend normaliza asi para buscar, y
-        // una mayuscula de iOS dejaria a esa persona sin poder entrar despues.
-        email: email.trim().toLowerCase(),
+        email: email.trim(),
         password,
         codigoInvitacion: codigo.trim(),
       });
-      // Ya hay sesion: el registro devuelve token. `replace` para que el gesto
-      // de "atras" no vuelva al registro estando adentro.
       router.replace('/resumen');
     } catch (e) {
-      setError(e instanceof ErrorDeApi ? e.message : 'No se pudo crear la cuenta.');
+      setError(e instanceof ErrorDeApi ? e.message : 'Algo salio mal. Proba de nuevo.');
     } finally {
       setEnviando(false);
     }
@@ -90,18 +81,18 @@ export default function Registro() {
       <ScrollView
         contentContainerStyle={[
           estilos.contenido,
-          { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 24 },
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
         ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={estilos.encabezado}>
-          <Nutria animo="CONTENTA" tamano={120} />
-          <Text style={estilos.marca}>Crear tu cuenta</Text>
-          <Text style={estilos.bajada}>Son dos personas y una sola vez</Text>
+          <Nutria animo="NOSOTROS" tamano={120} />
+          <Text style={estilos.marca}>Sumate</Text>
+          <Text style={estilos.bajada}>La nutria los espera a los dos.</Text>
         </View>
 
         <View style={estilos.campos}>
-          <Campo etiqueta="Como te llamas" valor={nombre} alCambiar={setNombre} autoComplete="name" />
+          <Campo etiqueta="Nombre" valor={nombre} alCambiar={setNombre} autoComplete="name" />
           <Campo
             etiqueta="Email"
             valor={email}
@@ -115,60 +106,31 @@ export default function Registro() {
             alCambiar={setPassword}
             secreto
             autoComplete="new-password"
+            ayuda="Minimo 12 caracteres. Una frase que te acuerdes sirve mejor que algo corto y raro."
           />
-          <Text style={estilos.ayuda}>
-            Al menos {MINIMO_CONTRASENA} caracteres. Mejor una frase que te acuerdes
-            que algo con simbolos raros, y que no tenga tu nombre ni tu email.
-          </Text>
-
-          <Campo etiqueta="Codigo de invitacion" valor={codigo} alCambiar={setCodigo} />
-          <Text style={estilos.ayuda}>Te lo pasa la otra persona.</Text>
+          <Campo
+            etiqueta="Codigo de invitacion"
+            valor={codigo}
+            alCambiar={setCodigo}
+            autoComplete="off"
+            ayuda="Te lo pasa quien ya esta adentro."
+          />
 
           {error ? <Text style={estilos.error}>{error}</Text> : null}
 
           <Boton
-            titulo="Crear la cuenta"
+            titulo="Crear mi cuenta"
             onPress={alRegistrarse}
             cargando={enviando}
             deshabilitado={!listo}
           />
 
-          <Pressable onPress={() => router.replace('/login')} accessibilityRole="button" hitSlop={8}>
+          <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
             <Text style={estilos.volver}>Ya tengo cuenta</Text>
           </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
-  );
-}
-
-type CampoProps = {
-  etiqueta: string;
-  valor: string;
-  alCambiar: (v: string) => void;
-  secreto?: boolean;
-  teclado?: 'default' | 'email-address';
-  autoComplete?: 'name' | 'email' | 'new-password';
-};
-
-function Campo({ etiqueta, valor, alCambiar, secreto, teclado = 'default', autoComplete }: CampoProps) {
-  return (
-    <View style={estilos.campo}>
-      <Text style={estilos.etiqueta}>{etiqueta}</Text>
-      <TextInput
-        value={valor}
-        onChangeText={alCambiar}
-        secureTextEntry={secreto}
-        keyboardType={teclado}
-        autoComplete={autoComplete}
-        // Igual que en el login: sin esto iOS pone mayuscula al primer caracter
-        // del email y despues no se entiende por que no entra.
-        autoCapitalize={autoComplete === 'name' ? 'words' : 'none'}
-        autoCorrect={false}
-        style={estilos.input}
-        placeholderTextColor={colores.textoSuave}
-      />
-    </View>
   );
 }
 
@@ -179,32 +141,12 @@ const estilos = StyleSheet.create({
   marca: { fontFamily: fuentes.displayBold, fontSize: 30, color: colores.texto, marginTop: 8 },
   bajada: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.textoSuave, marginTop: 4 },
   campos: { gap: 16 },
-  campo: { gap: 6 },
-  etiqueta: {
-    fontFamily: fuentes.cuerpoSemi,
-    fontSize: 12,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colores.textoSuave,
-  },
-  input: {
-    backgroundColor: colores.tarjeta,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    minHeight: 52,
-    fontFamily: fuentes.cuerpo,
-    fontSize: 17,
-    color: colores.texto,
-  },
-  ayuda: { fontFamily: fuentes.cuerpo, fontSize: 13, color: colores.textoSuave, marginTop: -8 },
   error: { fontFamily: fuentes.cuerpo, fontSize: 14, color: colores.terracotaProfunda },
   volver: {
     fontFamily: fuentes.cuerpoSemi,
     fontSize: 15,
     color: colores.rioProfundo,
     textAlign: 'center',
-    paddingTop: 8,
+    paddingVertical: 8,
   },
 });

@@ -65,14 +65,15 @@ public class GastoControlador {
     /**
      * GET /gastos/{id}
      *
-     * Existe para la pantalla de edicion: sin esto tendria que recibir el gasto
-     * entero por parametro de navegacion, o traerse el mes completo para buscar
-     * uno. Lo primero es fragil (los parametros de ruta son texto) y lo segundo
-     * se rompe si el gasto es de otro mes.
+     * Lo necesita la pantalla de edicion: sin esto tendria que recibir el gasto
+     * entero por parametro de navegacion (texto, fragil) o traerse el mes
+     * completo para buscar uno -- que ademas se rompe si el gasto es de otro
+     * mes. Y para editar hace falta la `version` al dia, no la que tenia la
+     * lista cuando se cargo.
      */
     @GetMapping("/{id}")
-    public GastoRespuesta buscar(@PathVariable String id) {
-        return servicio.buscar(id);
+    public GastoRespuesta porId(@PathVariable String id) {
+        return servicio.porId(id);
     }
 
     /**

@@ -184,11 +184,18 @@ export function descartar(clienteId: string): Promise<void> {
 }
 
 /**
- * Vacia la cola entera. Solo al cerrar sesion.
+ * Vacia la cola entera. Solo al cerrar sesion A MANO.
  *
  * La cola es del grupo de quien estaba adentro: si quedan gastos pendientes y
  * despues entra la otra persona en el mismo telefono, el sincronizador los
  * mandaria con SU token y quedarian a su nombre.
+ *
+ * Pero el cierre de sesion automatico por token vencido (ver `MotivoDeSalida`
+ * en `features/auth/sesion.tsx`) NO pasa por aca, y la diferencia importa: un
+ * 401 no es un cambio de persona, es la misma con el token viejo. Borrar ahi
+ * seria tirar los gastos que todavia no se mandaron -- justo lo que esta cola
+ * existe para evitar, y justo cuando mas probable es que haya (un token se vence
+ * despues de 30 dias sin usarse, o sea con la app cerrada un buen rato).
  */
 export function borrarCola(): Promise<void> {
   return enSerie(async () => {

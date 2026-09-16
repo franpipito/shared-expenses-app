@@ -65,5 +65,47 @@ public class ValidacionDeConfiguracion {
             throw new IllegalStateException(
                     "MONGO_URI trae la contrasena de desarrollo, que esta publicada en el repo.");
         }
+
+        // La cadena que Atlas te da para copiar NO trae el nombre de la base:
+        // termina en "mongodb.net/?retryWrites=true...". Si se pega tal cual, el
+        // driver cae al default, que es `test`.
+        //
+        // Y entonces la app arranca perfecto contra una base vacia: el sembrador
+        // crea las seis categorias ahi, el registro funciona, todo "anda". El
+        // problema aparece el dia que alguien busca los datos en `gastos` y no
+        // hay nada, o cuando se cambia la URI y los datos "desaparecen".
+        //
+        // Es exactamente la clase de fallo silencioso contra la que Mongo no
+        // tiene defensas propias: sin esquema, una base equivocada es
+        // indistinguible de una base nueva.
+        if (sinNombreDeBase(mongoUri)) {
+            throw new IllegalStateException("""
+                    MONGO_URI no dice contra que base conectarse, asi que el driver usaria `test`.
+                    La cadena que da Atlas no lo incluye: hay que agregarlo a mano entre el host
+                    y el signo de pregunta.
+                        mal:  mongodb+srv://usuario:clave@cluster.mongodb.net/?retryWrites=true
+                        bien: mongodb+srv://usuario:clave@cluster.mongodb.net/gastos?retryWrites=true""");
+        }
+    }
+
+    /**
+     * Si la URI trae un nombre de base entre el host y los parametros.
+     *
+     * Se busca el ULTIMO `@` y no el primero: la contrasena puede tener uno
+     * adentro, y el host nunca. A partir de ahi se corta en el `?` para no
+     * confundir una barra de los parametros con la de la base.
+     */
+    private static boolean sinNombreDeBase(String uri) {
+        int finDeCredenciales = uri.lastIndexOf('@');
+        String hostYResto = (finDeCredenciales >= 0) ? uri.substring(finDeCredenciales + 1) : uri;
+
+        int inicioDeParametros = hostYResto.indexOf('?');
+        if (inicioDeParametros >= 0) {
+            hostYResto = hostYResto.substring(0, inicioDeParametros);
+        }
+
+        int barra = hostYResto.indexOf('/');
+        // Sin barra no hay base; con la barra al final ("host/") tampoco.
+        return barra < 0 || barra == hostYResto.length() - 1;
     }
 }

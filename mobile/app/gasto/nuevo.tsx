@@ -4,14 +4,20 @@ import { FormularioDeGasto } from '../../src/features/gastos/componentes/Formula
 import { crearGasto } from '../../src/features/gastos/api';
 
 /**
- * Cargar un gasto.
+ * Ruta de alta. El formulario vive en `features/gastos/componentes/` porque lo
+ * comparte con la edicion: son la misma pantalla con dos modos.
  *
  * Quedo asi de corta porque el formulario vive en `FormularioDeGasto`, que
  * comparte con la pantalla de edicion. Esta decide una sola cosa: que pasa al
  * guardar.
  *
- * Y lo que pasa es que **se encola**. `crearGasto` escribe en el telefono y
- * vuelve en el acto, sin esperar a la red.
+ * Tenerlo una sola vez no es prolijidad. La inversion del `porcentajePagador`
+ * -- el calculo mas facil de romper de la app -- esta escrita ahi adentro, y
+ * duplicar el formulario significaria duplicarla, con la garantia de que algun
+ * dia las dos copias dejen de coincidir.
+ *
+ * Y lo que pasa al guardar es que **se encola**. `crearGasto` escribe en el
+ * telefono y vuelve en el acto, sin esperar a la red.
  */
 export default function NuevoGasto() {
   const router = useRouter();

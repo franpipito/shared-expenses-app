@@ -116,7 +116,7 @@ export default function Viaje() {
             key={g.id}
             gasto={g}
             idUsuarioActual={usuario?.id}
-            onPress={() => router.push(`/gasto/${g.id}`)}
+            alTocar={() => router.push(`/gasto/${g.id}`)}
           />
         ))}
       </View>

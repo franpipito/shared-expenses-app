@@ -124,12 +124,19 @@ public class GastoServicio {
     /**
      * Un gasto por id, si lo podes ver.
      *
+     * Faltaba, y se nota recien cuando el cliente quiere EDITAR: la pantalla de
+     * edicion necesita los datos del gasto y su `version` actual. La alternativa
+     * era arrastrar el objeto entero desde la lista por parametros de
+     * navegacion, pero entonces se editaria contra una copia que puede estar
+     * vieja -- y el bloqueo optimista existe justamente para eso.
+     *
      * Devuelve 404 tanto si no existe como si es un PERSONAL de la otra
-     * persona: la regla de visibilidad ya esta adentro de la consulta, asi que
-     * desde aca los dos casos son indistinguibles. Un 403 confirmaria que el
-     * gasto existe, que es justo lo que no queremos para los regalos.
+     * persona: la regla de visibilidad ya esta adentro de la consulta (ver
+     * `buscarVisible`), asi que desde aca los dos casos son indistinguibles. Un
+     * 403 confirmaria que el gasto existe, que es justo lo que no queremos para
+     * los regalos.
      */
-    public GastoRespuesta buscar(String id) {
+    public GastoRespuesta porId(String id) {
         return GastoRespuesta.desde(buscarVisible(id, usuarioActual.requerido()));
     }
 

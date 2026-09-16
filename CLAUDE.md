@@ -384,7 +384,9 @@ va:
 
 Donde SI aplica la idea de "credencial en el cliente": **como guarda el token la
 app mobile**. `AsyncStorage` no esta cifrado; va `expo-secure-store`, que usa el
-Keychain. Pendiente para la sesion 6.
+Keychain en iOS y el Keystore en Android. **Hecho en la sesion 6**, en
+`mobile/src/almacenamiento/sesion.ts`. Limite conocido: SecureStore no existe en
+web, asi que cuando llegue `web/` esa capa necesita otra implementacion.
 
 ### Los agregados se calculan al vuelo, no se materializan
 El saldo y el resumen no se guardan en ningun lado: son un `SUM` sobre el indice
@@ -526,6 +528,50 @@ Corolario que vale mas que el caso: **en React Native no se asume que el bundler
 descarta lo que no se usa.** Un `import { X } from 'libreria'` de una libreria
 grande merece que alguien mire cuanto pesa el bundle antes y despues.
 
+### Un 404 salia como 401, y la app cerraba sesion sola
+Bug real, encontrado probando en el telefono. Vale como historia porque la causa
+no esta en ningun lado obvio.
+
+Cuando una request **autenticada** pega contra una ruta que no existe, Spring MVC
+responde 404 y Boot lo reenvia internamente a `/error`. Ese reenvio **vuelve a
+pasar por la cadena de filtros de Spring Security**, pero `FiltroJwt` NO se
+ejecuta la segunda vez: hereda de `OncePerRequestFilter`, que trae
+`shouldNotFilterErrorDispatch()` en `true` por defecto. Sin nadie autenticado en
+ese segundo paso, `/error` cae en `anyRequest().authenticated()` y el 404 sale
+por la puerta convertido en **401**.
+
+El sintoma en la app fue peor que el bug: el cliente llamo a `GET /grupo`, que el
+backend deployado todavia no tenia, recibio "Falta el token, o no es valido", y
+**cerro la sesion sola** aunque el token estuviera perfecto.
+
+Se arregla con `.requestMatchers("/error").permitAll()`. No abre nada: `/error`
+no devuelve datos, es adonde Boot reenvia para renderizar un error ya decidido.
+Cubierto por el smoke test: *"una ruta inexistente da 404 y no 401, aun con token
+valido"*.
+
+### La sesion se cierra sola cuando el backend rechaza el token
+Un JWT de esta app dura 30 dias y vive en el Keychain, asi que al abrir la app
+hay token guardado mucho despues de que dejo de servir. Antes el cliente asumia
+que token guardado = token valido: entraba al resumen, cada pantalla se comia un
+401 y no habia forma de salir. Un estado zombi.
+
+Ahora `cliente.ts` avisa cuando un 401 llega en una request **con** token, y el
+provider de sesion cierra sesion y navega al login. La condicion importa: el 401
+del login es "esa contrasena esta mal" y ahi no hay sesion que cerrar.
+
+La alternativa era validar al arrancar con un `GET /auth/yo`, que no existe.
+Reaccionar al 401 no necesita endpoint nuevo y ademas cubre el token que se
+invalida con la app ya abierta.
+
+**Y eso choco de frente con la cola offline al juntar las dos ramas.** El cierre
+automatico llamaba al mismo `salir()` que el boton, y `salir()` vacia la cola
+para que los gastos de uno no se manden con el token del otro. Combinado: se
+vence el token, la app sincroniza al abrir, recibe 401, cierra sesion y **borra
+los gastos que todavia no habia mandado** -- justo lo que la cola existe para
+evitar, y justo cuando mas probable es que haya (un token se vence despues de 30
+dias sin usarse). Por eso `salir()` ahora recibe un `MotivoDeSalida`: la cola se
+borra cuando cambia la PERSONA, no cuando se muere el TOKEN.
+
 ### Tres huecos que encontraron las auditorias de la sesion 6.10
 - **Una vaquita cerrada quedaba inalcanzable.** Sus gastos no salen en la lista
   del mes (`sinPozo()`) y `/pozos/activo` deja de devolverla al cerrarse, asi que
@@ -540,6 +586,7 @@ grande merece que alguien mire cuanto pesa el bundle antes y despues.
   VAQUITA desde dos semanas antes del viaje -- y VAQUITA es COMPARTIDO, o sea
   visible para los dos. Un regalo sorpresa cargado rapido se publicaba solo.
   El default vuelve a PERSONAL: lo compartido se elige, nunca se asume.
+
 
 ### Pendiente de decidir
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
@@ -566,15 +613,17 @@ grande merece que alguien mire cuanto pesa el bundle antes y despues.
 /mobile       Expo. Por features, no por capas: ver docs/diseno.md
 /web          React + Vite (despues del MVP)
 docker-compose.yml       MongoDB local
+render.yaml              el servicio de Render, versionado y no en un panel
 scripts/
   smoke-test.ps1         chequeos de la API contra el backend corriendo
 docs/
   entrevista-usuaria.md  fuente de verdad de las decisiones de producto
   diseno.md              colores, tipografias, nutrias y estructura de carpetas
-  deploy.md              runbook del deploy
+  deploy.md              runbook del deploy (Render + Atlas)
   vaquita.md             el pozo del viaje: modelo, invariante y lo descartado
   atajo-ios.md           atajo de Atajos que le pega a POST /gastos con Back Tap
   aprendizaje/           notas de Java y Spring para el autor
+
 ```
 
 Nombres de dominio en espanol (Gasto, Usuario, Grupo, Categoria), consistente
@@ -603,23 +652,42 @@ con el lenguaje del producto.
       JWT, alta de gasto, resumen con el animo de la nutria, y baja. El bean
       `Clock` quedo probado en serio: el contenedor corre en UTC y el corte de
       mes igual cayo en la fecha de Buenos Aires. Ver **`docs/deploy.md`**.
-- [x] **6 — App Expo minima.** Contra la API deployada, no localhost. Estan el
-      login, el resumen con el animo de la nutria, el alta de gasto y **la lista
-      de gastos del mes**, que es donde se ve la marca de hormiga gasto por
-      gasto. Los iconos de categoria ya se dibujan con Lucide y no como texto.
+- [x] **6 — App Expo con el MVP completo.** Contra la API deployada, no
+      localhost. Cinco pantallas: login, resumen con el animo de la nutria, alta
+      de gasto, **lista de gastos del mes** (donde se ve la marca de hormiga
+      gasto por gasto, o sea el producto) y **saldo** (la seccion de pareja, con
+      las dos nutrias). El alta carga PERSONAL y COMPARTIDO, con reparto y con
+      quien pago. Los iconos de categoria se dibujan con Lucide y no como texto.
+      El token va en `expo-secure-store`, nunca en AsyncStorage.
 
-      **La seccion de pareja quedo cerrada**: el alta permite marcar el gasto
-      como COMPARTIDO con su reparto (chips de 50/60/70/80/100 y quien pago,
-      con revelacion progresiva para no ensuciar el camino rapido), hay
-      `GET /grupo` con los integrantes, y la pantalla de `/saldo` con las dos
-      nutrias.
+      Se agrego `GET /grupo` en el backend, que era lo unico que le faltaba al
+      cliente para armar un COMPARTIDO completo: el login dice quien sos vos y
+      nada mas. El endpoint **no acepta un id** -- devuelve siempre el grupo de
+      quien pregunta, que sale del token -- asi que por construccion no puede
+      filtrar datos de otro grupo.
 
-      Lo que queda afuera y no bloquea el cierre: los filtros por categoria y
-      pagador del listado (el endpoint ya los acepta). Editar y borrar se
-      agregaron despues, en la 6.9.
+      **OJO CON UNA COSA, que es el punto mas facil de romper de la app:** el
+      campo `porcentajePagador` es la parte de QUIEN PAGO, y los chips del alta
+      preguntan por TU parte. Cuando pago la otra persona hay que invertir el
+      numero (`100 - x`). Sin eso, el saldo sale al reves. Vive en
+      `FormularioDeGasto`, en un solo lugar y a proposito.
 
-      Nada de esto se probo en un telefono todavia: se verifico con
-      `tsc --noEmit` y con `expo export`, que bundlea de verdad.
+      **Lo que esta verificado y lo que no.** El backend, entero: 25 tests y los
+      64 chequeos del smoke test en verde. La app, NO en un telefono -- solo
+      `tsc --noEmit` y `expo export`, que bundlea de verdad y prueba que todo el
+      grafo de imports resuelve, pero no que algo se vea bien. **Contra la regla
+      1 de este documento, esta sesion se cierra sin esa prueba.** El recorrido
+      que ejercita lo nuevo: cargar un compartido con "pago la otra persona" y
+      reparto 70/30, ver "tu parte" en la lista, y confirmar la direccion de la
+      deuda en la pantalla de saldo.
+
+
+      Quedo afuera a proposito: **el tab bar**, que segun `docs/diseno.md` nace
+      con la pantalla de saldo. Cambia el layout del resumen (el boton de abajo
+      pasa a convivir con la barra y el `insets.bottom` se cuenta dos veces), y
+      eso hay que verlo en pantalla para ajustarlo. Saldo quedo como push, igual
+      que la lista. Tambien quedaron afuera editar y borrar, y los filtros por
+      categoria y pagador del listado (el endpoint ya los acepta).
 - [x] **6.5 — Migracion a MongoDB.** El motivo es de busqueda laboral: la
       postulacion pide relacional y no relacional, y MatchPoint ya cubre
       Postgres. Se rehicieron modelo, repositorios y los dos servicios que tocan
@@ -632,6 +700,10 @@ con el lenguaje del producto.
       no se duerma. El arranque en frio de Spring Boot es de 40-60s, y la app
       tiene un requisito duro de velocidad de carga: el ping es lo que hace que
       Viole nunca se lo coma. Atlas y Render **en la misma region**.
+
+      Preparado: el runbook en **`docs/deploy.md`** y **`render.yaml`** en la
+      raiz, que deja la configuracion versionada en vez de en un panel. Falta
+      ejecutarlo (crear las cuentas, deployar y verificar).
 - [~] **6.7 — La vaquita del viaje.** Un pozo compartido al que los dos aportan
       y del que salen los gastos de un viaje (Bariloche: $800.000, $400.000 cada
       uno). Un documento `Pozo` con los aportes embebidos mas un `pozoId`
@@ -644,21 +716,18 @@ con el lenguaje del producto.
       **El backend esta hecho**: cinco endpoints bajo `/pozos`, los aportes con
       `$push` atomico, un indice parcial unico que garantiza un solo pozo abierto
       por grupo, y el filtro `sinPozo()` en los tres agregados mensuales. Mas 13
-      tests puros nuevos en `PozoTest` (37 en total) y 30 chequeos nuevos en el
-      smoke test.
+      tests puros nuevos en `PozoTest` y 30 chequeos nuevos en el smoke test.
 
       **La pantalla en mobile tambien esta**: `app/vaquita.tsx` con los dos
       modos (el estado vacio ES el formulario para abrirla), y el tercer chip en
       el alta. El booleano `esCompartido` paso a ser un tipo `Destino` de tres
       valores; `VAQUITA` no existe en el backend, donde sigue siendo un
-      COMPARTIDO con `pozoId`. Con una vaquita vigente el alta abre con Vaquita
-      puesta, que es **mas rapido** que Compartido: no hay reparto ni quien pago.
+      COMPARTIDO con `pozoId`.
 
       Nada de esto se probo contra una base ni en un telefono. El backend se
       verifico compilando y con los tests puros; el mobile con `tsc --noEmit` y
-      `expo export`, que bundlea de verdad (2,7 MB de iOS, contra 2,63 antes).
-      Lo que lo prueba en serio es `scripts/smoke-test.ps1`, que necesita la app
-      corriendo.
+      `expo export`, que bundlea de verdad. Lo que lo prueba en serio es
+      `scripts/smoke-test.ps1`, que necesita la app corriendo.
 - [~] **6.8 — La cola offline.** El alta de gasto ya no espera a la red: se
       escribe en un archivo del telefono y se manda despues. Obligo a agregar
       `Gasto.clienteId` con indice unico parcial, porque una cola que reintenta
@@ -704,14 +773,57 @@ con el lenguaje del producto.
       una correccion deliberada que se hace sentado. Encolar modificaciones
       necesitaria orden garantizado y resolucion de conflictos, o sea un log de
       operaciones y no una lista.
+- [~] **6.10 — Probarla en el telefono, auditar, y juntar las dos ramas.**
+      Esta sesion se trabajo en paralelo desde dos lados y termino en dos ramas
+      que habia que reconciliar. Vale como sesion aparte porque lo que encontro
+      no lo encuentra escribir features.
 
+      **Lo que salio de probar la app en un telefono de verdad** (Franco):
+      - **El 404 que salia como 401**, y por eso la app cerraba sesion sola con
+        un token perfecto. Ver la seccion de arriba: la causa esta en
+        `OncePerRequestFilter`, no en nada que se vea leyendo el codigo propio.
+      - **La sesion zombi** con token vencido, que ahora se cierra sola y navega
+        al login.
+      - **"Cerrar sesion" no navegaba**, asi que parecia no andar.
+      - **No habia pantalla de registro.** El backend sabe registrar desde la
+        sesion 4, pero el cliente solo sabia loguear: Viole no podia crearse la
+        cuenta desde el telefono. Una app de dos usuarios donde uno no puede
+        entrar no esta terminada.
+      - **Solo se veia el mes en curso.** El 1 de octubre, septiembre se volvia
+        invisible. Ahora hay un selector de mes (`MesProvider` + `SelectorDeMes`)
+        compartido por resumen, lista y saldo.
+
+      **Lo que salio de auditar la vaquita**: los tres huecos que estan mas
+      arriba (vaquita cerrada inalcanzable, aporte sin deshacer, y el default
+      automatico a VAQUITA que publicaba los regalos sorpresa).
+
+      **Lo que salio de juntar las dos ramas**, que es lo mas interesante de los
+      tres porque **no estaba roto en ninguna de las dos por separado**: el
+      cierre de sesion automatico por 401 llamaba al mismo `salir()` que vacia la
+      cola de gastos pendientes. Token vencido + gastos sin mandar = gastos
+      borrados en silencio. De ahi sale `MotivoDeSalida`. La leccion, que sirve
+      para la entrevista: **dos cambios correctos por separado pueden producir un
+      bug al juntarse**, y el unico momento en que se puede ver es leyendo el
+      merge, no cada rama.
+
+      Otras decisiones de la reconciliacion: se unifico en `gasto/[id].tsx` (y no
+      `gasto/editar?id=`) despues de verificar en `expo-router/build/sortRoutes.js`
+      que las rutas estaticas ganan sobre las dinamicas, asi que `gasto/nuevo` no
+      compite; `FilaGasto` quedo con el `Pressable` + `disabled` de Franco, que
+      evita un bug de la version propia (con `View` el `style` como funcion no se
+      evalua); y `registrarse` toma un objeto y no cuatro `string` sueltos.
+
+      Verificado: **52 tests puros en verde** (`PozoTest`, `CalculadorDeAnimoTest`,
+      `PeriodoTest`, `PoliticaDeContrasenasTest` y el `ValidacionDeConfiguracionTest`
+      que sumo Franco) y `tsc --noEmit` limpio. Lo que falta, y hay que hacerlo en
+      la PC: `contextLoads` y el smoke test, que necesitan Mongo corriendo, y
+      **la app en un telefono**.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a
       la App Store es App Review de verdad, y una app con login sin usuario
       demo se rechaza por la guideline 2.1. Ver tambien **`docs/atajo-ios.md`**:
       un atajo con Back Tap que le pega a `POST /gastos` sin abrir la app.
-
 ## Comandos
 
 > **El autor trabaja en PowerShell 5.1 en Windows.** Ahi NO funcionan `&&`,

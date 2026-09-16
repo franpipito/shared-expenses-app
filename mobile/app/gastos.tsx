@@ -3,13 +3,14 @@ import { useCallback } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { mesActual, nombreDelMes } from '../src/api/periodo';
+
 import { Boton } from '../src/componentes/Boton';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { FilaGasto } from '../src/features/gastos/componentes/FilaGasto';
 import { useGastos } from '../src/features/gastos/hooks/useGastos';
 import { AvisoDeCola } from '../src/features/gastos/componentes/AvisoDeCola';
+import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
 import { colores } from '../src/tema/colores';
 import { fuentes } from '../src/tema/tipografia';
 import { Cargando } from './_layout';
@@ -63,7 +64,7 @@ export default function Gastos() {
             // vive adentro de la pantalla de edicion, detras de una confirmacion.
             // Un swipe sobre una lista que se scrollea con el pulgar, parado y con
             // una mano, es como se borra un gasto sin querer.
-            onPress={() => router.push(`/gasto/${item.id}`)}
+            alTocar={() => router.push(`/gasto/${item.id}`)}
           />
         )}
         contentContainerStyle={[
@@ -79,23 +80,30 @@ export default function Gastos() {
         }
         ListHeaderComponent={
           <>
-          <View style={estilos.encabezado}>
-            <View style={estilos.encabezadoTexto}>
-              <Text style={estilos.seccion}>Gastos de {nombreDelMes(mesActual())}</Text>
-              <Text style={estilos.titulo}>
-                {cuantos === 0
-                  ? 'Nada cargado'
-                  : `${cuantos} ${cuantos === 1 ? 'gasto' : 'gastos'}`}
-              </Text>
-              {cuantosHormiga > 0 ? (
-                <Text style={estilos.cuantosHormiga}>
-                  {cuantosHormiga} {cuantosHormiga === 1 ? 'evitable' : 'evitables'}
+          <View style={estilos.cabecera}>
+            <View style={estilos.encabezado}>
+              <View style={estilos.encabezadoTexto}>
+                {/* Dice "del mes" y no el nombre del mes porque el selector de
+                    abajo ya lo dice, y decirlo dos veces en cuatro centimetros
+                    es ruido. */}
+                <Text style={estilos.seccion}>Gastos del mes</Text>
+                <Text style={estilos.titulo}>
+                  {cuantos === 0
+                    ? 'Nada cargado'
+                    : `${cuantos} ${cuantos === 1 ? 'gasto' : 'gastos'}`}
                 </Text>
-              ) : null}
+                {cuantosHormiga > 0 ? (
+                  <Text style={estilos.cuantosHormiga}>
+                    {cuantosHormiga} {cuantosHormiga === 1 ? 'evitable' : 'evitables'}
+                  </Text>
+                ) : null}
+              </View>
+              <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
+                <Text style={estilos.volver}>Resumen</Text>
+              </Pressable>
             </View>
-            <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
-              <Text style={estilos.volver}>Resumen</Text>
-            </Pressable>
+
+            <SelectorDeMes />
           </View>
           {/*
             El aviso va DENTRO del header de la lista y no flotando arriba: si
@@ -134,11 +142,11 @@ const estilos = StyleSheet.create({
   contenidoVacio: { flexGrow: 1 },
 
   aviso: { marginBottom: 12 },
+  cabecera: { marginBottom: 20, gap: 16 },
   encabezado: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
   },
   encabezadoTexto: { flex: 1 },
   seccion: {

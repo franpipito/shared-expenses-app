@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorDeApi } from '../../../api/cliente';
 import { sincronizar } from '../../gastos/sincronizador';
-import { mesActual } from '../../../api/periodo';
+import { useMes } from '../../mes/mes';
 import type { ResumenRespuesta } from '../../../api/tipos';
 import { traerResumen } from '../api';
 
@@ -19,6 +19,7 @@ import { traerResumen } from '../api';
  * cache que invalidar entre pantallas, ahi la discusion cambia.
  */
 export function useResumen() {
+  const { mes } = useMes();
   const [resumen, setResumen] = useState<ResumenRespuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +39,14 @@ export function useResumen() {
       // sincronizar() nunca rechaza: un fallo al escribir la cola no tiene por
       // que impedir que se lea el resumen.
       await sincronizar();
-      setResumen(await traerResumen(mesActual()));
+      setResumen(await traerResumen(mes));
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo traer el resumen.');
     } finally {
       setCargando(false);
     }
-  }, []);
+    // `mes` en las dependencias: cambiar de mes tiene que volver a pedir.
+  }, [mes]);
 
   useEffect(() => {
     void recargar();

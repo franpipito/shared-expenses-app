@@ -427,7 +427,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
             // la edicion, un gasto del viaje cargado mal quedaria mal para
             // siempre -- justo lo que la pantalla de edicion vino a arreglar
             // para los gastos normales.
-            onPress={() => router.push(`/gasto/${g.id}`)}
+            alTocar={() => router.push(`/gasto/${g.id}`)}
           />
         ))}
       </View>

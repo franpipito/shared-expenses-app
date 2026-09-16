@@ -101,7 +101,25 @@ justifique pagar, ese es el primer upgrade a hacer.
 
 ## 3. Crear el servicio en Render
 
-**New → Web Service**, conectá el repo de GitHub.
+**`render.yaml` está en la raíz del repo**, así que el camino corto es:
+
+1. **New → Blueprint**, y conectar el repo `shared-expenses-app`.
+2. Render lee el archivo y propone el servicio `minutria-api` ya configurado:
+   Docker, el contexto en `backend/`, el health check en `/actuator/health`, la
+   región y el plan free.
+3. Te pide a mano los tres valores marcados `sync: false`, que son los del paso
+   4: `MONGO_URI`, `JWT_SECRETO` y `CODIGO_INVITACION`.
+
+Tener la configuración en un archivo versionado y no en un panel es la única
+forma de que dentro de seis meses se pueda leer por qué está como está —- y de
+poder rehacer el servicio sin acordarse de nada.
+
+> **Ojo con la región.** En `render.yaml` está puesta en `virginia`. Si el
+> cluster de Atlas quedó en otra, cambiala acá para que coincidan: base y app en
+> continentes distintos son 150 ms extra en cada consulta.
+
+Si por lo que sea hay que hacerlo a mano (**New → Web Service**), estos son los
+mismos valores:
 
 | Campo | Valor |
 |---|---|
@@ -274,6 +292,34 @@ apunta a una URL fija: si lo armás antes, lo hacés dos veces.
   `ValidacionDeConfiguracion` se negó a arrancar contra una base vacía. Un
   servicio muerto y ruidoso es infinitamente mejor que uno vivo escribiendo en
   una base equivocada.
+
+## Apagar Railway, y recién ahí
+
+No antes de que el smoke test pase contra Render y la app funcione apuntando
+ahí. Si hubiera datos que valga la pena conservar:
+
+```powershell
+mongodump --uri="LA-URI-DE-RAILWAY" --out=backup
+mongorestore --uri="LA-URI-DE-ATLAS" backup
+```
+
+Para este proyecto no hace falta: como explica el paso 0, el deploy de Railway
+quedó de antes de la migración a Mongo, así que **no hay nada que traer**.
+
+## Diferencias con Railway que conviene tener presentes
+
+| | Railway | Render free |
+|---|---|---|
+| Se duerme | no (mientras haya crédito) | **sí, a los 15 min** |
+| Arranque en frío | no aplica | 40-60 s |
+| Config versionada | en el panel | `render.yaml` en el repo |
+| Base | del mismo proveedor | Atlas, cuenta aparte |
+| IP de salida | fija | no, de ahí el `0.0.0.0/0` en Atlas |
+
+La incomodidad de fondo es que **la base ya no está al lado del backend**: son
+dos proveedores, dos paneles y dos cuentas que pueden vencer por separado. A
+cambio, Atlas M0 es gratis para siempre y no depende de que Render siga siendo
+generoso.
 
 ## Pendientes conocidos para después del deploy
 

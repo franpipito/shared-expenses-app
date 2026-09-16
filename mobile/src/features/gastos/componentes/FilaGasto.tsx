@@ -41,13 +41,15 @@ type Props = {
   /** Para no repetir "pago Franco" en cada fila propia: solo se nombra al otro. */
   idUsuarioActual: string | undefined;
   /**
-   * Abre la edicion. Opcional: la lista del viaje, dentro de la vaquita,
-   * muestra las filas sin que se puedan tocar.
+   * Abrir la edicion. La fila entera es el area tactil, no un iconito al costado.
+   *
+   * Opcional: la lista del viaje, adentro de la vaquita, muestra las filas sin
+   * que se puedan tocar.
    */
-  onPress?: () => void;
+  alTocar?: () => void;
 };
 
-export function FilaGasto({ gasto, idUsuarioActual, onPress }: Props) {
+export function FilaGasto({ gasto, idUsuarioActual, alTocar }: Props) {
   const compartido = gasto.tipo === 'COMPARTIDO';
   const loPagoElOtro = gasto.pagadoPor.id !== idUsuarioActual;
 
@@ -62,23 +64,28 @@ export function FilaGasto({ gasto, idUsuarioActual, onPress }: Props) {
     .filter(Boolean)
     .join(' · ');
 
-  // Pressable cuando se puede tocar y View cuando no. Un Pressable sin onPress
-  // se anuncia como boton igual a un lector de pantalla, y prometer una accion
-  // que no existe es peor que no ofrecerla.
-  const Contenedor = onPress ? Pressable : View;
-
   return (
-    <Contenedor
-      onPress={onPress}
-      style={[estilos.fila, gasto.esHormiga && estilos.filaHormiga]}
+    <Pressable
+      onPress={alTocar}
+      // `disabled` y no un View aparte: un Pressable deshabilitado no responde
+      // al toque y tampoco se anuncia como boton, que es lo que hace falta.
+      // Cambiar el componente segun la prop obligaba ademas a que `style` fuera
+      // un objeto y no una funcion, y con eso se perdia el estado `pressed`.
+      disabled={!alTocar}
+      style={({ pressed }) => [
+        estilos.fila,
+        gasto.esHormiga && estilos.filaHormiga,
+        pressed && estilos.filaPresionada,
+      ]}
       // Sin esto, un lector de pantalla lee cuatro textos sueltos y la marca de
       // hormiga -- que es un color -- no se lee de ninguna forma.
       accessible
-      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityRole={alTocar ? 'button' : undefined}
+      accessibilityHint={alTocar ? 'Abre el gasto para editarlo o borrarlo' : undefined}
       accessibilityLabel={
         `${gasto.descripcion}, ${formatearMonto(gasto.monto)}, ${detalle}` +
         (gasto.esHormiga ? ', gasto evitable' : '') +
-        (onPress ? '. Tocar para editar.' : '')
+        (alTocar ? '. Tocar para editar.' : '')
       }
     >
       {/* El filo ambar. Es la marca que hace scaneable la lista de un vistazo. */}
@@ -104,7 +111,7 @@ export function FilaGasto({ gasto, idUsuarioActual, onPress }: Props) {
           <Text style={estilos.parte}>tu parte {formatearMonto(parteMia(gasto, idUsuarioActual))}</Text>
         ) : null}
       </View>
-    </Contenedor>
+    </Pressable>
   );
 }
 
@@ -138,6 +145,7 @@ const estilos = StyleSheet.create({
     overflow: 'hidden',
   },
   filaHormiga: { backgroundColor: colores.hormigaSuave, borderColor: colores.hormiga },
+  filaPresionada: { opacity: 0.6 },
   filo: {
     position: 'absolute',
     left: 0,

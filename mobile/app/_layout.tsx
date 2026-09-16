@@ -15,6 +15,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SesionProvider } from '../src/features/auth/sesion';
+import { MesProvider } from '../src/features/mes/mes';
 import { colores } from '../src/tema/colores';
 
 /**
@@ -47,6 +48,7 @@ export default function LayoutRaiz() {
   return (
     <SafeAreaProvider>
       <SesionProvider>
+        <MesProvider>
         <StatusBar style="dark" />
         <Stack
           screenOptions={{
@@ -72,9 +74,17 @@ export default function LayoutRaiz() {
               presentation: 'modal',
             }}
           />
-          {/* Editar es la misma clase de tarea, asi que se abre igual. */}
+          {/* Editar es la misma tarea que cargar, asi que se abre igual.
+
+              La ruta es `gasto/[id]` y NO `gasto/editar?id=`, aunque el segmento
+              dinamico conviva con la ruta estatica `gasto/nuevo`. No compiten:
+              el comparador de expo-router (`sortRoutes`) ordena las estaticas
+              ANTES que las dinamicas, asi que /gasto/nuevo siempre resuelve al
+              alta y "nuevo" nunca se toma como un id. Verificado leyendo
+              `expo-router/build/sortRoutes.js`, no asumido. */}
           <Stack.Screen name="gasto/[id]" options={{ presentation: 'modal' }} />
         </Stack>
+        </MesProvider>
       </SesionProvider>
     </SafeAreaProvider>
   );
