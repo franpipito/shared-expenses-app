@@ -79,6 +79,22 @@ function EsperarValidacion($bloque, $campo, $texto) {
     }
 }
 
+# Sin contenido: 204 con el cuerpo vacio.
+#
+# Chequea el CODIGO y no el cuerpo, y la diferencia no es cosmetica: ante un 204
+# Invoke-RestMethod de PowerShell 5.1 devuelve un string vacio, no $null, asi que
+# un `$null -eq $respuesta` da falso y el chequeo falla aunque el backend haya
+# hecho exactamente lo que debia. Ademas el contrato que queremos probar es
+# justamente ese: **204 y no 404**, porque no tener vaquita es un estado normal
+# de la app y no un error.
+#
+# Hace falta Invoke-WebRequest y no Invoke-RestMethod porque el segundo devuelve
+# el cuerpo ya deserializado y se come el codigo de estado.
+function EsperarSinContenido($uri, $headers, $texto) {
+    $r = Invoke-WebRequest -Uri $uri -Headers $headers -UseBasicParsing
+    Chequear ($r.StatusCode -eq 204) "$texto (dio $($r.StatusCode), esperaba 204)"
+}
+
 # Reglas de negocio: 400 con un `mensaje`, no con `errores`.
 function EsperarRegla($bloque, $textoEsperado, $texto) {
     try {
@@ -541,8 +557,7 @@ Titulo "10. La vaquita"
 
 # Sin pozo abierto, /pozos/activo devuelve 204 y no 404: no tener vaquita es un
 # estado normal de la app, no un error.
-$sinPozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $franco
-Chequear ($null -eq $sinPozo) "sin vaquita abierta, /pozos/activo no devuelve nada"
+EsperarSinContenido "$base/pozos/activo" $franco "sin vaquita abierta, /pozos/activo da 204 y no 404"
 
 # Se crea SIN fechas a proposito: asi `vigente` no depende del dia en que se
 # corra el script. El rango de fechas lo cubren los tests puros de PozoTest.
@@ -592,9 +607,12 @@ Chequear ($corregido.aportado -eq 800000.00) "y se deshace con un aporte negativ
 Chequear (($corregido.aportes | Measure-Object).Count -eq 4) `
     "quedan los dos asientos, no se borra ninguno"
 
-EsperarValidacion { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+# EsperarRegla y no EsperarValidacion: el cero lo rechaza PozoServicio, no una
+# anotacion. Es donde va -- Bean Validation no tiene un @NotZero, y escribir una
+# anotacion propia para un solo campo es mas maquinaria que regla.
+EsperarRegla { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
     -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
-    "monto" "un aporte de cero se rechaza: no es aporte ni correccion"
+    "no puede ser cero" "un aporte de cero se rechaza: no es aporte ni correccion"
 
 $pozo = $corregido
 
@@ -683,8 +701,7 @@ EsperarRegla { Crear $franco @{
         descripcion = "tarde"; tipo = "COMPARTIDO"; pozoId = $pozo.id
     } } "ya esta cerrada" "no se puede cargar un gasto a una vaquita cerrada"
 
-$sinPozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $ella
-Chequear ($null -eq $sinPozo) "despues de cerrarla, no hay vaquita activa"
+EsperarSinContenido "$base/pozos/activo" $ella "despues de cerrarla, no hay vaquita activa"
 
 # GET /pozos es lo que hace alcanzable una vaquita cerrada. Sin el, sus gastos
 # quedaban sin ninguna pantalla desde la cual llegar: no salen en la lista del

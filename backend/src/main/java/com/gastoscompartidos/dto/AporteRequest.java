@@ -1,7 +1,6 @@
 package com.gastoscompartidos.dto;
 
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 
 import java.math.BigDecimal;
