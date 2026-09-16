@@ -1,0 +1,109 @@
+# Corre los tests en cada push y en cada pull request.
+#
+# POR QUE EXISTE. Los 82 tests, el `tsc` y el `expo export` estaban corriendo
+# solo cuando alguien se acordaba, y los dos bugs mas feos de la sesion 6.10
+# -- la validacion de produccion que no corria, y la cola que se borraba al
+# vencerse el token -- vivieron un buen rato justamente porque nadie ejercitaba
+# esos caminos en el momento correcto.
+#
+# Un test que no corre solo es documentacion, no una red.
+#
+# OJO, Y ES IMPORTANTE: esto NO es el cron que mantiene despierto a Render.
+# `docs/deploy.md` explica por que ese ping no puede vivir en GitHub Actions
+# (los workflows programados se retrasan y se cancelan cuando el runner esta
+# ocupado, asi que el servicio se dormiria igual). Correr en cada push es otra
+# cosa, y es exactamente para lo que Actions sirve.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Si llegan dos pushes seguidos, cancelar el anterior: interesa el ultimo.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (83 tests)
+    runs-on: ubuntu-latest
+
+    # UNA MONGO DE VERDAD, y no es un lujo.
+    #
+    # De los 83 tests, 82 son puros o con mocks y no la necesitan. El que si es
+    # `contextLoads`, que levanta el contexto entero de Spring -- y es el unico
+    # que prueba que el grafo de beans resuelva. Sin base no puede correr, y
+    # justamente esa clase de fallo (un repositorio que no se puede construir)
+    # no lo caza ningun test unitario.
+    #
+    # Las credenciales son las mismas que docker-compose.yml para que la URI por
+    # defecto de application.properties funcione tal cual, sin variables de
+    # entorno. Son de juguete y viven en un contenedor efimero.
+    services:
+      mongo:
+        image: mongo:8
+        env:
+          MONGO_INITDB_ROOT_USERNAME: gastos
+          MONGO_INITDB_ROOT_PASSWORD: gastos_local
+          MONGO_INITDB_DATABASE: gastos
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval db.adminCommand('ping')"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          # Cachea ~/.m2 usando el pom.xml como clave. Sin esto cada corrida se
+          # baja Spring Boot entero de nuevo.
+          cache: maven
+
+      - name: Tests
+        working-directory: backend
+        run: ./mvnw -B test
+
+  mobile:
+    name: Mobile (tipos y bundle)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      # `npm ci` y no `npm install`: instala exactamente lo que dice el
+      # package-lock y falla si los dos archivos no coinciden. En CI eso es lo
+      # que se quiere -- que la corrida use las mismas versiones que la maquina
+      # de al lado, y no las que npm decida resolver hoy.
+      - name: Dependencias
+        working-directory: mobile
+        run: npm ci
+
+      # --noUnusedLocals no esta en el tsconfig a proposito: molesta mientras
+      # escribis codigo. Pero en CI es lo que atrapa los restos de un merge --
+      # un import que quedo colgado de una rama que perdio.
+      - name: Tipos
+        working-directory: mobile
+        run: npx tsc --noEmit --noUnusedLocals --noUnusedParameters
+
+      # Bundlea de verdad con Metro. Es mas lento que tsc pero prueba otra cosa:
+      # que TODO el grafo de imports resuelva en runtime. Un import a un archivo
+      # que no existe compila sin chistar en TypeScript si el tipo calza, y
+      # revienta recien cuando la pantalla se abre en el telefono.
+      - name: Bundle
+        working-directory: mobile
+        run: npx expo export --platform ios

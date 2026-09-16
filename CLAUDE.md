@@ -160,8 +160,9 @@ Maven, el script baja la version que el proyecto declara.
 > Diferencias visibles: el starter web ahora es `spring-boot-starter-webmvc`
 > (antes `spring-boot-starter-web`) y los starters de test estan separados por
 > modulo (antes uno solo, `spring-boot-starter-test`). Las anotaciones del dia
-> a dia (`@Entity`, `@RestController`, `@Service`, `@Repository`, Spring Data
-> JPA) no cambiaron.
+> a dia (`@RestController`, `@Service`, `@Repository`, Spring Data) no
+> cambiaron. Ojo que esta nota es de cuando el backend era Postgres: `@Entity`
+> se fue con la migracion a Mongo en la 6.5.
 
 ## Decisiones de diseno tomadas
 
@@ -606,19 +607,36 @@ borra cuando cambia la PERSONA, no cuando se muere el TOKEN.
 
 
 ### Los tests: dos capas, y que prueba cada una
-**82 tests**, y conviene saber por que estan partidos en dos clases de cosas.
+**107 tests, y corren solos en cada push** (`.github/workflows/ci.yml`). Conviene
+saber por que estan partidos en dos clases de cosas.
 
 **Clases puras** (`Periodo`, `CalculadorDeAnimo`, `Pozo`, `PoliticaDeContrasenas`,
 `ValidacionDeConfiguracion`): no tocan Spring ni la base, se construyen a mano y
 corren en milisegundos.
 
-**Servicios con mocks** (`GastoServicioTest`, `PozoServicioTest`): los
-repositorios son objetos falsos de Mockito, programados con
-`when(...).thenReturn(...)`. Asi se ejercita la LOGICA sin que exista una base.
-Cubren lo que mas duele si se rompe: el centavo del reparto, que un PERSONAL
-ajeno de 404 y no 403, que editar sin `pagadoPorId` **conserve** el pagador en
-vez de apropiarselo, que un reintento con `clienteId` devuelva el mismo gasto, y
-que un PERSONAL no pueda salir de la vaquita.
+**Servicios con mocks** (`GastoServicioTest`, `PozoServicioTest`,
+`AutenticacionServicioTest`, `ResumenServicioTest`): los repositorios son objetos
+falsos de Mockito, programados con `when(...).thenReturn(...)`. Asi se ejercita
+la LOGICA sin que exista una base. Cubren lo que mas duele si se rompe: el
+centavo del reparto, que un PERSONAL ajeno de 404 y no 403, que editar sin
+`pagadoPorId` **conserve** el pagador en vez de apropiarselo, que un reintento
+con `clienteId` devuelva el mismo gasto, que un PERSONAL no pueda salir de la
+vaquita, que el tercer integrante se rechace, y que el total del resumen sea MI
+parte y no el total del grupo.
+
+Dos decisiones de los tests de auth que vale la pena poder explicar:
+
+- **El `PasswordEncoder` es un spy de un BCrypt de verdad, no un mock.**
+  Mockeandolo, un servicio que comparara contrasenas en texto plano pasaria los
+  tests igual -- justo lo que no puede pasar nunca. El spy da BCrypt real y
+  ademas permite contar las llamadas.
+- **El hash senuelo se verifica contando la llamada, no midiendo el tiempo.**
+  La primera version hacia `assertThat(ms).isGreaterThan(30)` y era un flake
+  esperando a pasar: BCrypt tarda distinto en cada maquina, asi que en un runner
+  rapido el mismo codigo correcto fallaria. Y un test que falla sin que nadie
+  haya roto nada ensucia justamente la senial que el CI viene a dar. Contar que
+  `matches()` se llamo igual prueba el mecanismo; el costo en tiempo es
+  consecuencia.
 
 **Lo que un mock NO prueba**, y por eso el smoke test no sobra: que la consulta
 de Mongo este bien escrita, que el indice parcial unico exista de verdad, que
@@ -629,6 +647,12 @@ alla que la base entienda lo que le pedimos.
 Un detalle que salio de escribirlos: los mocks de `save()` devuelven el
 documento **con id**, porque es lo que hace Mongo. Con id null, lo que se rompe
 tres lineas despues no tiene nada que ver con la regla que se estaba probando.
+
+**El CI corre las dos capas y ademas levanta una Mongo de verdad** como service
+container, para que `contextLoads` -- el unico test que prueba que el grafo de
+beans resuelva -- pueda correr. De paso se arreglo que `backend/mvnw` estaba
+versionado sin permiso de ejecucion (`100644`): en Windows no se nota, pero en
+cualquier runner Linux `./mvnw` da "Permission denied".
 
 ### Pendiente de decidir
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
@@ -644,7 +668,7 @@ tres lineas despues no tiene nada que ver con la regla que se estaba probando.
 ```
 /backend      Spring Boot
   src/main/java/com/gastoscompartidos/
-    modelo/       entidades JPA
+    modelo/       documentos de Mongo (@Document) y sus snapshots embebidos
     repositorio/  interfaces de Spring Data
     servicio/     logica de negocio, unico lugar con reglas
     controlador/  endpoints REST, finitos: reciben, delegan, devuelven
@@ -654,6 +678,7 @@ tres lineas despues no tiene nada que ver con la regla que se estaba probando.
     config/       conversores de Mongo y el sembrador de categorias
 /mobile       Expo. Por features, no por capas: ver docs/diseno.md
 /web          React + Vite (despues del MVP)
+.github/workflows/ci.yml tests, tipos y bundle en cada push
 docker-compose.yml       MongoDB local
 render.yaml              el servicio de Render, versionado y no en un panel
 scripts/
@@ -898,9 +923,13 @@ con el lenguaje del producto.
         dependia, asi que Mongo explotaba primero. Encontrado arrancando el jar
         con el perfil `produccion` y sin secretos, que es exactamente lo que va a
         pasar la primera vez que Render levante el contenedor.
-      - **Los servicios tienen tests.** `GastoServicioTest` (21) y
-        `PozoServicioTest` (9) con los repositorios mockeados. **82 tests en
-        total**, contra 52. Ver "Los tests: dos capas" mas arriba.
+      - **Los servicios tienen tests.** `GastoServicioTest` (21),
+        `PozoServicioTest` (9), `AutenticacionServicioTest` (14) y
+        `ResumenServicioTest` (10), con los repositorios mockeados. **107 tests
+        en total**, contra 52.
+      - **Y ahora corren solos**, en cada push y cada PR
+        (`.github/workflows/ci.yml`), con una Mongo de verdad para que
+        `contextLoads` tambien entre. Ver "Los tests: dos capas" mas arriba.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a

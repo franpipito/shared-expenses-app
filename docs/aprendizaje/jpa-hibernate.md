@@ -1,5 +1,25 @@
 # JPA e Hibernate
 
+> **Esta nota describe el stack que el proyecto usó hasta la sesión 6.4.**
+>
+> En la **6.5** el backend migró de PostgreSQL a MongoDB, así que hoy no hay
+> `@Entity`, ni Hibernate, ni sesión de persistencia, ni dirty checking. Lo que
+> hay es Spring Data MongoDB con `@Document`, y objetos de Java comunes: si
+> querés que un cambio se guarde, llamás a `save()`.
+>
+> **No se borra, y el motivo es que sigue sirviendo para dos cosas.** La
+> primera es entender qué se perdió: `CLAUDE.md` explica que la pérdida más
+> seria de la migración fue quedarse sin esquema y sin migraciones versionadas,
+> y eso sólo se entiende sabiendo qué daban `@Entity` + Flyway + `ddl-auto=validate`.
+> La segunda es que JPA es lo que vas a encontrar en la mayoría de las
+> búsquedas de trabajo con Java: es el estándar del ecosistema, y el proyecto se
+> fue de ahí por un motivo puntual (la postulación pedía relacional **y** no
+> relacional, y Postgres ya estaba cubierto por MatchPoint).
+>
+> Lo que sí cambió de verdad está en `CLAUDE.md`: "El modelado: snapshots
+> embebidos", "No hay `@Transactional` en ningún servicio" y "Schema: no hay.
+> Es MongoDB."
+
 ## Las tres capas que se confunden todo el tiempo
 
 Cuando la gente dice "JPA" o "Hibernate" suele mezclar tres cosas distintas:
