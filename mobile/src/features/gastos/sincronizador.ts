@@ -1,6 +1,12 @@
 import { ErrorDeApi, pedir } from '../../api/cliente';
 import type { GastoRespuesta } from '../../api/tipos';
-import { leerCola, marcarRechazado, quitarDeLaCola, type GastoPendiente } from '../../almacenamiento/cola';
+import {
+  leerCola,
+  limpiarRechazo,
+  marcarRechazado,
+  quitarDeLaCola,
+  type GastoPendiente,
+} from '../../almacenamiento/cola';
 
 /**
  * Vacia la cola de gastos contra el servidor.
@@ -42,6 +48,18 @@ let enCurso: Promise<ResultadoDeEnvio> | null = null;
  * no tiene por que dejar la app inutilizable: en el peor caso los gastos siguen
  * esperando y se reintentan en el proximo foco.
  */
+/**
+ * Vuelve a poner en cola un gasto que el servidor habia rechazado.
+ *
+ * Existe porque un 4xx puede dejar de serlo: la vaquita se cerro y la
+ * reabrieron, o el gasto se rechazo por algo que ya se arreglo. Sin esto, la
+ * unica salida de un rechazo era descartarlo -- o sea, tirar el gasto.
+ */
+export async function reintentar(clienteId: string): Promise<ResultadoDeEnvio> {
+  await limpiarRechazo(clienteId);
+  return sincronizar();
+}
+
 export function sincronizar(): Promise<ResultadoDeEnvio> {
   // Sin esto, entrar al resumen y que la lista tambien pida foco dispararia dos
   // envios simultaneos del mismo gasto. La clave de idempotencia lo salvaria en
@@ -72,7 +90,15 @@ async function enviarTodo(): Promise<ResultadoDeEnvio> {
       // estado 0 = no llegamos al servidor. 5xx = llegamos y se rompio del otro
       // lado. Los dos pueden andar en el proximo intento, asi que se frena aca y
       // la cola queda intacta.
-      if (estado === 0 || estado >= 500) break;
+      //
+      // 401 Y 403 TAMBIEN FRENAN, y esto arregla una perdida de datos real: un
+      // 401 no dice "este gasto esta mal", dice "vos no estas logueado". El
+      // gasto sigue siendo perfectamente valido. Como los tokens duran 30 dias,
+      // si uno vence en medio del viaje TODOS los pendientes quedaban marcados
+      // como rechazados de forma permanente, y la unica accion que ofrecia la
+      // pantalla era "Descartarlo": exactamente la perdida de datos que la cola
+      // vino a evitar, producida por la regla que la protege.
+      if (estado === 0 || estado === 401 || estado === 403 || estado >= 500) break;
 
       // 4xx: el servidor lo rechazo y lo va a rechazar siempre.
       await marcarRechazado(

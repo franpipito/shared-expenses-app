@@ -24,7 +24,7 @@ import { useCola } from '../hooks/useCola';
  * color de "mira esto".
  */
 export function AvisoDeCola() {
-  const { enCamino, rechazados, enviar, descartarUno } = useCola();
+  const { enCamino, rechazados, enviar, reintentarUno, descartarUno } = useCola();
 
   if (enCamino.length === 0 && rechazados.length === 0) return null;
 
@@ -64,13 +64,29 @@ export function AvisoDeCola() {
             {formatearMonto(p.gasto.monto)} · {p.gasto.descripcion}
           </Text>
           <Text style={estilos.motivo}>{p.error}</Text>
-          <Pressable
-            onPress={() => void descartarUno(p.clienteId)}
-            accessibilityRole="button"
-            hitSlop={8}
-          >
-            <Text style={estilos.descartar}>Descartarlo</Text>
-          </Pressable>
+          {/*
+            DOS SALIDAS, no una. Antes la unica accion era descartar, o sea
+            tirar el gasto -- y un 4xx puede dejar de serlo (la vaquita se
+            cerro y la reabrieron, o el token vencio y volviste a entrar).
+            Ofrecer solo "descartar" convertia un problema temporal en perdida
+            de datos.
+          */}
+          <View style={estilos.acciones}>
+            <Pressable
+              onPress={() => void reintentarUno(p.clienteId)}
+              accessibilityRole="button"
+              hitSlop={12}
+            >
+              <Text style={estilos.reintentar}>Reintentar</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void descartarUno(p.clienteId)}
+              accessibilityRole="button"
+              hitSlop={12}
+            >
+              <Text style={estilos.descartar}>Descartarlo</Text>
+            </Pressable>
+          </View>
         </View>
       ))}
     </View>
@@ -106,11 +122,14 @@ const estilos = StyleSheet.create({
     color: colores.terracotaProfunda,
   },
   motivo: { fontFamily: fuentes.cuerpo, fontSize: 13, color: colores.texto },
+  // 12 de padding + hitSlop 12 para llegar comodo a los 44pt de area tactil.
+  acciones: { flexDirection: 'row', gap: 20, paddingTop: 4 },
+  reintentar: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.rioProfundo, paddingVertical: 12 },
   descartar: {
     fontFamily: fuentes.cuerpoSemi,
     fontSize: 14,
     color: colores.terracotaProfunda,
-    paddingTop: 6,
+    paddingVertical: 12,
   },
 
   bajada: { fontFamily: fuentes.cuerpo, fontSize: 13, color: colores.textoSuave, marginTop: 2 },

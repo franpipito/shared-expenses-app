@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { AnimoNutria } from '../src/api/tipos';
 import { Boton } from '../src/componentes/Boton';
 import { IconoCategoria } from '../src/componentes/IconoCategoria';
 import { Monto, formatearMonto } from '../src/componentes/Monto';
@@ -30,6 +31,29 @@ const FRASES = {
   TRANQUILA: 'Vas parecido al mes pasado a esta altura.',
   PREOCUPADA: 'Vas gastando un poco mas que el mes pasado.',
 } as const;
+
+/**
+ * CONTENTA significa DOS cosas distintas y la pantalla tenia una sola frase.
+ *
+ * `CalculadorDeAnimo` devuelve CONTENTA tanto cuando bajaste 10% o mas respecto
+ * del mes pasado como cuando **no anotaste ni un gasto evitable** -- y esa
+ * segunda regla aplica aunque no haya historia con que comparar, que es una
+ * decision deliberada y testeada ("sin gasto hormiga la nutria esta contenta,
+ * aunque no haya historia").
+ *
+ * El problema es que la frase de CONTENTA afirma una comparacion. El dia que
+ * Viole abre la app por primera vez, con la base vacia, leia **"Vas mejor que el
+ * mes pasado a esta altura"** arriba de un "Mismo tramo del mes pasado: $0,00".
+ * La primera pantalla que ve en su vida le afirmaba algo falso, que es la peor
+ * forma de empezar a creerle a una app de plata.
+ *
+ * El arreglo va en el copy y NO en la regla: la regla esta bien y tiene sus
+ * tests. Con cero hormiga se dice lo que es verdad sin inventar una comparacion.
+ */
+function fraseDelAnimo(animo: AnimoNutria, totalHormiga: number): string {
+  if (totalHormiga === 0) return 'Todavia no anotaste ningun gasto evitable este mes.';
+  return FRASES[animo];
+}
 
 export default function Resumen() {
   const { usuario, salir } = useSesion();
@@ -94,7 +118,7 @@ export default function Resumen() {
               >
                 {formatearMonto(resumen.totalHormiga)}
               </Text>
-              <Text style={estilos.comparacion}>{FRASES[resumen.animo]}</Text>
+              <Text style={estilos.comparacion}>{fraseDelAnimo(resumen.animo, resumen.totalHormiga)}</Text>
               <Text style={estilos.detalleComparacion}>
                 Mismo tramo del mes pasado: {formatearMonto(resumen.totalHormigaMesAnterior)}
               </Text>

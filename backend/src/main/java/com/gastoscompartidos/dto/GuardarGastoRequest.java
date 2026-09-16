@@ -39,7 +39,19 @@ import java.time.LocalDate;
 public record GuardarGastoRequest(
 
         @NotNull(message = "el monto es obligatorio")
-        @Positive(message = "el monto tiene que ser mayor a cero")
+        /*
+         * @DecimalMin y no @Positive: @Positive acepta 0.001, y despues
+         * normalizar() lo lleva a 0.00 con HALF_UP. Quedaba un gasto de cero
+         * pesos guardado, con el mensaje de validacion diciendo lo contrario.
+         *
+         * @Digits reemplaza al NUMERIC(12,2) que ponia Postgres y que Mongo no
+         * tiene como declarar. Sin el, un monto de 35 digitos revienta al
+         * escribir con NumberFormatException ("Conversion to Decimal128 would
+         * require inexact rounding") y sale como 500 en vez del 400 que
+         * corresponde: el error es del input, no del servidor.
+         */
+        @DecimalMin(value = "0.01", message = "el monto tiene que ser mayor a cero")
+        @Digits(integer = 12, fraction = 2, message = "el monto es demasiado grande")
         BigDecimal monto,
 
         @NotNull(message = "la categoria es obligatoria")
@@ -91,7 +103,17 @@ public record GuardarGastoRequest(
          *
          * Opcional a proposito: un cliente que no la mande funciona igual.
          */
+        /*
+         * @Pattern ademas de @Size: un clienteId vacio pasaba, y Spring Data SI
+         * escribe el string vacio (solo omite los null). Con dos gastos
+         * mandando "" los dos entran al indice parcial unico, el segundo choca,
+         * y guardarUnaSolaVez lo interpreta como "ya estaba": devuelve el primer
+         * gasto con 201 y el segundo **nunca se guarda**. Es el espejo exacto
+         * del bug que la clave de idempotencia existe para evitar, y lo dispara
+         * un `?? ''` mal puesto en el cliente.
+         */
         @Size(max = 64, message = "el id de cliente no puede pasar de 64 caracteres")
+        @Pattern(regexp = "[A-Za-z0-9_.:-]+", message = "el id de cliente tiene caracteres invalidos")
         String clienteId
 ) {
 }

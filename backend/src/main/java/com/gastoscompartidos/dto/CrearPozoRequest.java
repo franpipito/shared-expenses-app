@@ -1,7 +1,8 @@
 package com.gastoscompartidos.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -28,7 +29,8 @@ public record CrearPozoRequest(
         @Size(max = 60, message = "el nombre no puede pasar de 60 caracteres")
         String nombre,
 
-        @Positive(message = "el objetivo tiene que ser mayor a cero")
+        @DecimalMin(value = "0.01", message = "el objetivo tiene que ser mayor a cero")
+        @Digits(integer = 12, fraction = 2, message = "el objetivo es demasiado grande")
         BigDecimal objetivo,
 
         LocalDate desde,

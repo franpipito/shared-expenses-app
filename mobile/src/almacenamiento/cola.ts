@@ -182,3 +182,29 @@ export function descartar(clienteId: string): Promise<void> {
     await escribirCola((await leerCola()).filter((p) => p.clienteId !== clienteId));
   });
 }
+
+/**
+ * Vacia la cola entera. Solo al cerrar sesion.
+ *
+ * La cola es del grupo de quien estaba adentro: si quedan gastos pendientes y
+ * despues entra la otra persona en el mismo telefono, el sincronizador los
+ * mandaria con SU token y quedarian a su nombre.
+ */
+export function borrarCola(): Promise<void> {
+  return enSerie(async () => {
+    await escribirCola([]);
+  });
+}
+
+/** Saca la marca de rechazo para que el gasto se vuelva a intentar. */
+export function limpiarRechazo(clienteId: string): Promise<void> {
+  return enSerie(async () => {
+    // `error: undefined` alcanza: JSON.stringify no escribe las claves
+    // undefined, asi que el gasto vuelve al archivo sin la marca.
+    await escribirCola(
+      (await leerCola()).map((p) =>
+        p.clienteId === clienteId ? { ...p, error: undefined } : p,
+      ),
+    );
+  });
+}

@@ -2,7 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 
 import { descartar, leerCola, type GastoPendiente } from '../../../almacenamiento/cola';
-import { sincronizar } from '../sincronizador';
+import { reintentar, sincronizar } from '../sincronizador';
 
 /**
  * Los gastos que todavia no entraron al servidor.
@@ -27,6 +27,21 @@ export function useCola() {
     await sincronizar();
     await releer();
   }, [releer]);
+
+  /**
+   * Vuelve a intentar un gasto rechazado.
+   *
+   * Sin esto, la unica salida de un rechazo era descartarlo, o sea tirar el
+   * gasto. Y un 4xx puede dejar de serlo: la vaquita se cerro y la reabrieron,
+   * o el gasto se rechazo por algo que ya se arreglo.
+   */
+  const reintentarUno = useCallback(
+    async (clienteId: string) => {
+      await reintentar(clienteId);
+      await releer();
+    },
+    [releer],
+  );
 
   const descartarUno = useCallback(
     async (clienteId: string) => {
@@ -62,6 +77,7 @@ export function useCola() {
     rechazados: pendientes.filter((p) => p.error),
     releer,
     enviar,
+    reintentarUno,
     descartarUno,
   };
 }

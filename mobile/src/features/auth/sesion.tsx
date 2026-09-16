@@ -1,3 +1,5 @@
+import { borrarCatalogo } from '../../almacenamiento/catalogo';
+import { borrarCola } from '../../almacenamiento/cola';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -116,7 +118,11 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     // Solo local. NO se llama a /auth/cerrar-sesiones, que incrementa
     // token_version e invalida el token de TODOS los dispositivos: eso es el
     // boton de "perdi el celular", no el de "cerrar sesion".
-    await Promise.all([borrarToken(), borrarUsuario()]);
+    // Tambien se limpia el catalogo y la cola: son del grupo de quien estaba
+    // adentro. Si Franco se desloguea con gastos pendientes y despues entra
+    // Viole en ese telefono, el sincronizador los mandaria con el token de ella
+    // y quedarian a su nombre.
+    await Promise.all([borrarToken(), borrarUsuario(), borrarCatalogo(), borrarCola()]);
     fijarToken(null);
     setUsuario(null);
   }, []);

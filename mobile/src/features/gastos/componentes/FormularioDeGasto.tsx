@@ -179,7 +179,8 @@ export function FormularioDeGasto({
   useEffect(() => {
     (async () => {
       try {
-        setCategorias(await traerCategorias());
+        const { dato } = await traerCategorias();
+        setCategorias(dato ?? []);
       } catch (e) {
         setError(e instanceof ErrorDeApi ? e.message : 'No se pudieron traer las categorias.');
       }
@@ -193,8 +194,8 @@ export function FormularioDeGasto({
   useEffect(() => {
     (async () => {
       try {
-        const grupo = await traerGrupo();
-        setOtro(grupo.integrantes.find((u) => u.id !== usuario?.id) ?? null);
+        const { dato: grupo } = await traerGrupo();
+        setOtro(grupo?.integrantes.find((u) => u.id !== usuario?.id) ?? null);
       } catch {
         setOtro(null);
       }
@@ -217,9 +218,36 @@ export function FormularioDeGasto({
   useEffect(() => {
     (async () => {
       try {
-        const activo = await traerPozoActivo();
+        const { dato: activo } = await traerPozoActivo();
         setPozo(activo);
-        if (activo?.vigente && !eligioAMano.current) setDestino('VAQUITA');
+
+        // ACA HABIA UN DEFAULT AUTOMATICO A VAQUITA Y SE SACO. Vale contar por
+        // que, porque parecia una buena optimizacion.
+        //
+        // La idea era que en Bariloche el 90% de los gastos salen del pozo, asi
+        // que abrir el formulario ya en Vaquita ahorraba un tap. El diseño lo
+        // ataba a las fechas del viaje (`vigente`) justamente para que no
+        // aplicara fuera de el.
+        //
+        // El problema: la pantalla que abre la vaquita **no pide fechas**, y sin
+        // fechas `Pozo.vigenteEl()` devuelve true siempre mientras este abierta.
+        // O sea que desde que abren la vaquita -- dos semanas antes del viaje --
+        // hasta que la cierren, CADA alta abria en VAQUITA. Y en esta app
+        // VAQUITA significa COMPARTIDO, o sea **visible para los dos**.
+        //
+        // Cruzalo con la respuesta 16 de la entrevista ("si, mas que nada cuando
+        // te hago regalitos"), con la categoria "regalos" que existe, y con el
+        // requisito de velocidad que empuja a guardar sin revisar: un regalo
+        // sorpresa cargado rapido se publicaba solo en la lista de la vaquita.
+        //
+        // Era una regresion contra el UNICO pedido de privacidad de toda la
+        // entrevista, y la que menos se iba a notar hasta que pasara.
+        //
+        // El default vuelve a ser PERSONAL, que es el seguro: lo compartido se
+        // elige, nunca se asume. Cuesta un tap por gasto durante los cinco dias
+        // del viaje. Si algun dia la vaquita pide fechas de verdad, se puede
+        // reconsiderar -- pero recien ahi.
+        void activo;
       } catch {
         setPozo(null);
       }

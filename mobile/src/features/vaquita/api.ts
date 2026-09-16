@@ -1,3 +1,4 @@
+import { pozoConRespaldo } from '../../almacenamiento/catalogo';
 import { pedir } from '../../api/cliente';
 import type {
   AporteRequest,
@@ -28,7 +29,17 @@ import type {
  * normal de la app, no un error, asi que esto NO tira -- devuelve null y la
  * pantalla dibuja el estado vacio.
  */
-export async function traerPozoActivo(): Promise<PozoRespuesta | null> {
+export function traerPozoActivo() {
+  return pozoConRespaldo(async () => (await pedir<PozoRespuesta | undefined>('/pozos/activo')) ?? null);
+}
+
+/**
+ * La pantalla de la vaquita quiere el pozo pelado y que un fallo sea un fallo,
+ * no un caché: ahi mostrar numeros viejos de plata seria peor que un error.
+ * El respaldo es solo para el formulario de alta, que necesita saber que el
+ * chip Vaquita existe.
+ */
+export async function traerPozoActivoFresco(): Promise<PozoRespuesta | null> {
   return (await pedir<PozoRespuesta | undefined>('/pozos/activo')) ?? null;
 }
 

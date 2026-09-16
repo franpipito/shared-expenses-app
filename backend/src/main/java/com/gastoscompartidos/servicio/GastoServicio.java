@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -58,17 +59,20 @@ public class GastoServicio {
     private final UsuarioRepositorio usuarios;
     private final PozoRepositorio pozos;
     private final UsuarioActual usuarioActual;
+    private final Clock reloj;
 
     public GastoServicio(GastoRepositorio gastos,
                          CategoriaRepositorio categorias,
                          UsuarioRepositorio usuarios,
                          PozoRepositorio pozos,
-                         UsuarioActual usuarioActual) {
+                         UsuarioActual usuarioActual,
+                         Clock reloj) {
         this.gastos = gastos;
         this.categorias = categorias;
         this.usuarios = usuarios;
         this.pozos = pozos;
         this.usuarioActual = usuarioActual;
+        this.reloj = reloj;
     }
 
     public GastoRespuesta crear(GuardarGastoRequest req) {
@@ -98,7 +102,12 @@ public class GastoServicio {
 
     public List<GastoRespuesta> listar(YearMonth mes, String categoriaId, String pagadoPorId) {
         Usuario actual = usuarioActual.requerido();
-        YearMonth periodo = (mes != null) ? mes : YearMonth.now();
+        // YearMonth.now(reloj) y NO YearMonth.now(): era el unico now() sin reloj
+        // de todo el backend. El contenedor corre en UTC, asi que el 30 de
+        // septiembre a las 21:30 de Buenos Aires ya es 1 de octubre alla: un
+        // GET /gastos sin ?mes= devolvia octubre (vacio) mientras el resumen,
+        // que si usa el Clock, devolvia septiembre con sus totales.
+        YearMonth periodo = (mes != null) ? mes : YearMonth.now(reloj);
 
         return gastos.buscarVisibles(
                         actual.getGrupoId(),
@@ -137,7 +146,7 @@ public class GastoServicio {
         BigDecimal monto = normalizar(req.monto());
 
         gasto.setCategoria(referencia(buscarCategoria(req.categoriaId())));
-        gasto.setPagadoPor(resolverPagador(req, actual).comoReferencia());
+        gasto.setPagadoPor(resolverPagadorAlEditar(req, actual, gasto).comoReferencia());
         gasto.setMonto(monto);
         gasto.setMontoPagador(montoPagadorDe(req, monto));
         gasto.setTipo(req.tipo());
@@ -216,6 +225,62 @@ public class GastoServicio {
         return otro;
     }
 
+    /**
+     * Quien pago, al EDITAR. No es lo mismo que al crear, y confundirlos costaba
+     * dos bugs graves.
+     *
+     * BUG 1: "pagadoPorId ausente significa lo pague yo" es correcto al CREAR.
+     * Al editar significa otra cosa: **reasignar el pagador a quien esta
+     * editando**. Franco carga un super de $20.000 al 50/50 (Viole le debe
+     * $10.000); Viole abre el gasto -- puede, es COMPARTIDO -- le corrige la
+     * descripcion con un PUT sin `pagadoPorId`, que es lo que manda cualquier
+     * cliente que siga el contrato documentado del POST, y el saldo pasa a decir
+     * que Franco le debe $10.000 a ella. Swing de $20.000, respuesta 200, cero
+     * errores.
+     *
+     * La app mobile se salvaba por casualidad porque reenvia el pagador. O sea
+     * que la unica defensa contra invertir el saldo vivia en el cliente, justo
+     * al reves de la regla de este proyecto.
+     *
+     * BUG 2, peor: con `tipo: PERSONAL` y `pagadoPorId` ausente, un gasto
+     * COMPARTIDO ajeno se volvia PERSONAL de quien edita. Alcanzable con dos
+     * taps: Viole carga "regalo $50.000, compartido"; Franco lo abre, toca el
+     * chip Personal y guarda. Desde ese momento `visiblesPara()` lo excluye para
+     * ella: no esta en su lista, `GET /gastos/{id}` le da 404, y **no hay forma
+     * de recuperarlo**. El gasto que ella cargo desaparecio de su app para
+     * siempre.
+     *
+     * Es exactamente lo que el javadoc de {@link #resolverPagador} dice querer
+     * evitar, pero al reves: no creas un gasto privado ajeno, te quedas con el
+     * de la otra persona.
+     *
+     * LAS DOS REGLAS QUE FALTABAN:
+     *  1. Sin `pagadoPorId`, se CONSERVA el pagador que ya tenia. Editar no es
+     *     apropiarse.
+     *  2. Un gasto solo puede volverse PERSONAL si ya era tuyo. Hacer privado
+     *     algo ajeno es borrarselo a la otra persona sin avisarle.
+     */
+    private Usuario resolverPagadorAlEditar(GuardarGastoRequest req, Usuario actual, Gasto gasto) {
+        String pagadorActual = gasto.getPagadoPor().usuarioId();
+        String pedido = (req.pagadoPorId() != null) ? req.pagadoPorId() : pagadorActual;
+
+        if (req.tipo() == TipoGasto.PERSONAL && !pedido.equals(actual.getId())) {
+            throw new ReglaDeNegocioException(
+                    "Un gasto personal solo lo puede tener quien lo pago");
+        }
+
+        if (pedido.equals(actual.getId())) {
+            return actual;
+        }
+
+        Usuario otro = usuarios.findById(pedido)
+                .orElseThrow(() -> new ReglaDeNegocioException("No existe el usuario " + pedido));
+        if (!otro.getGrupoId().equals(actual.getGrupoId())) {
+            throw new ReglaDeNegocioException("Ese usuario no es de tu grupo");
+        }
+        return otro;
+    }
+
     /** Ausente o null significa "no es hormiga". */
     private boolean esHormiga(GuardarGastoRequest req) {
         return Boolean.TRUE.equals(req.esHormiga());
@@ -254,6 +319,12 @@ public class GastoServicio {
         try {
             return gastos.save(gasto);
         } catch (DuplicateKeyException e) {
+            // Sin clienteId no hay indice de idempotencia que violar, asi que un
+            // duplicado aca es otra cosa y no hay que taparlo: buscar por
+            // cliente_id null matchearia TODOS los gastos viejos del grupo y
+            // devolveria uno cualquiera como si fuera el recien creado.
+            if (gasto.getClienteId() == null) throw e;
+
             return gastos.findByGrupoIdAndClienteId(actual.getGrupoId(), gasto.getClienteId())
                     // Si el indice dijo que hay duplicado, el gasto TIENE que
                     // estar. Si no aparece, algo mas se rompio y no queremos

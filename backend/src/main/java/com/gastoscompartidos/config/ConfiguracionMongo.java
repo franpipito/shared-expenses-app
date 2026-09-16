@@ -6,6 +6,7 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.convert.ReadingConverter;
 import org.springframework.data.convert.WritingConverter;
 import org.springframework.data.mongodb.core.convert.MongoCustomConversions;
+import org.springframework.data.mongodb.core.convert.MongoCustomConversions.BigDecimalRepresentation;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -25,12 +26,36 @@ import java.util.List;
 @Configuration
 public class ConfiguracionMongo {
 
+    /**
+     * OJO CON ESTE BEAN: declararlo APAGA una propiedad de application.properties.
+     *
+     * `DataMongoConfiguration.mongoCustomConversions()` de Spring Boot esta
+     * anotado `@ConditionalOnMissingBean`. Al declarar el nuestro, el de Boot no
+     * se crea, y con el se va el unico lugar que aplica
+     * `spring.data.mongodb.representation.big-decimal=decimal128`: el default
+     * del adaptador es UNSPECIFIED.
+     *
+     * Hoy los montos igual se guardan como Decimal128, pero **por otro motivo**:
+     * con UNSPECIFIED el BigDecimal llega crudo al driver y ahi lo agarra
+     * `BigDecimalCodec`. O sea que la garantia que el CLAUDE.md atribuye a la
+     * propiedad la estaba dando el codec del driver. Dos consecuencias feas:
+     * cambiar la propiedad no hacia nada (alguien podia creer que probo algo), y
+     * con UNSPECIFIED quedaban registrados los DOS conversores de lectura, asi
+     * que un documento con la plata guardada como texto se leia en silencio en
+     * vez de fallar -- lo contrario de lo que queremos.
+     *
+     * `create(...)` en vez del constructor deja pedir la representacion explicita
+     * y registrar los conversores propios en la misma pasada.
+     */
     @Bean
     public MongoCustomConversions mongoCustomConversions() {
-        return new MongoCustomConversions(List.of(
-                new LocalDateATexto(),
-                new TextoALocalDate()
-        ));
+        return MongoCustomConversions.create(adaptador -> {
+            adaptador.bigDecimal(BigDecimalRepresentation.DECIMAL128);
+            adaptador.registerConverters(List.of(
+                    new LocalDateATexto(),
+                    new TextoALocalDate()
+            ));
+        });
     }
 
     /**

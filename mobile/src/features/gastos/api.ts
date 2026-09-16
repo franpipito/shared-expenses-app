@@ -1,3 +1,4 @@
+import { categoriasConRespaldo, grupoConRespaldo } from '../../almacenamiento/catalogo';
 import { encolar } from '../../almacenamiento/cola';
 import { pedir } from '../../api/cliente';
 import type {
@@ -8,8 +9,19 @@ import type {
 } from '../../api/tipos';
 import { sincronizar } from './sincronizador';
 
-export function traerCategorias(): Promise<CategoriaRespuesta[]> {
-  return pedir<CategoriaRespuesta[]>('/categorias');
+/**
+ * Las categorias, con respaldo en disco.
+ *
+ * SIN ESTO LA COLA OFFLINE NO SERVIA PARA NADA, y es el agujero mas grande que
+ * tenia. La sesion 6.8 logro que el POST no espere a la red, pero nadie miro que
+ * necesita la PANTALLA antes de poder encolar algo: sin categorias no hay chip
+ * que tocar, `categoriaId` se queda en null, y el boton Guardar nunca se
+ * habilita. O sea que sin senial no habia nada que encolar.
+ *
+ * Devuelve `esDeCache` para que quien llama sepa si esta mirando datos frescos.
+ */
+export function traerCategorias() {
+  return categoriasConRespaldo(() => pedir<CategoriaRespuesta[]>('/categorias'));
 }
 
 /**
@@ -109,6 +121,6 @@ export function hoyLocal(): string {
  * El endpoint no acepta un id: devuelve siempre el grupo de quien pregunta, que
  * sale del token. Un endpoint sin id no puede filtrar datos de otro grupo.
  */
-export function traerGrupo(): Promise<GrupoRespuesta> {
-  return pedir<GrupoRespuesta>('/grupo');
+export function traerGrupo() {
+  return grupoConRespaldo(() => pedir<GrupoRespuesta>('/grupo'));
 }

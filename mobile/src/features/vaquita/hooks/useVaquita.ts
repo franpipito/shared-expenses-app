@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorDeApi } from '../../../api/cliente';
 import { sincronizar } from '../../gastos/sincronizador';
 import type { GastoRespuesta, PozoRespuesta } from '../../../api/tipos';
-import { traerGastosDelPozo, traerPozoActivo } from '../api';
+import { traerGastosDelPozo, traerPozoActivoFresco } from '../api';
 
 /**
  * El "controlador" de la pantalla de la vaquita.
@@ -44,7 +44,7 @@ export function useVaquita() {
       // impedir la lectura.
     }
     try {
-      const activo = await traerPozoActivo();
+      const activo = await traerPozoActivoFresco();
       setPozo(activo);
       // Sin pozo no hay gastos que pedir, y pedirlos igual seria una request de
       // mas en el caso mas comun (todavia no abrieron ninguna vaquita).
