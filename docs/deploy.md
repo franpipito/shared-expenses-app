@@ -262,16 +262,31 @@ apunta a una URL fija: si lo armás antes, lo hacés dos veces.
 
 ## Si algo falla
 
+**Primero lo importante: casi todos los errores de configuración se ven al
+arrancar, con nombre y apellido.** `ValidacionAlArrancar` corre antes de que
+exista un solo bean y antes de que nada se conecte a ningún lado, así que si
+falta una variable el contenedor muere en segundos diciendo cuál. Si ves un
+stack trace largo de Mongo en vez de un mensaje corto, el problema ya no es una
+variable que falta.
+
 | Síntoma | Causa probable |
 |---|---|
-| El build no encuentra el Dockerfile | Falta **Root Directory = `backend`** |
-| El build dice `BUILD SUCCESS` pero el servicio no responde | El build no es el problema: el contenedor arranca y muere. Casi siempre son las variables sin cargar — sin `JWT_SECRETO` la app sale con código 1. Los logs que sirven son los de **runtime**, no los de build |
-| `IllegalStateException: Falta la variable de entorno JWT_SECRETO` | Funcionó la validación: falta cargar la variable |
-| `IllegalStateException: Falta la variable de entorno MONGO_URI` | Idem, o la URI quedó apuntando a localhost |
-| `Command createIndexes requires authentication` | La URI no se bindeó. Revisar que sea `spring.mongodb.uri` y no `spring.data.mongodb.uri` |
-| `MongoTimeoutException` / no conecta a Atlas | Network Access sin `0.0.0.0/0`, o la password sin URL-encodear |
-| La app anda pero la base está vacía en Atlas | Falta `/gastos` en el path de la URI: los datos se fueron a `test` |
+| El build no encuentra el Dockerfile | Falta **Root Directory = `backend`** (o el `dockerContext` del blueprint) |
+| `Falta la variable de entorno JWT_SECRETO` | Funcionó el guardián: cargar la variable |
+| `Falta la variable de entorno CODIGO_INVITACION` | Idem. Ojo que el de desarrollo (`nutrias`) también se rechaza |
+| `Falta la variable de entorno MONGO_URI` | Idem, o la URI quedó apuntando a localhost |
+| `MONGO_URI no dice contra qué base conectarse` | Es **la trampa de Atlas**: la cadena que te da para copiar no trae el nombre de la base. Agregá `/gastos` entre el host y el `?` |
+| `MONGO_URI trae la contraseña de desarrollo` | Se pegó la URI local en vez de la de Atlas |
+| El build dice `BUILD SUCCESS` pero el servicio no responde | El contenedor arranca y muere. Los logs que sirven son los de **runtime**, no los de build |
+| `MongoTimeoutException` / no conecta a Atlas | La URI está bien formada pero no llega: Network Access sin `0.0.0.0/0`, o la password sin URL-encodear |
+| `Command createIndexes requires authentication` | Llegó a Atlas pero sin credenciales válidas: revisar usuario y password de la URI |
 | Primera request de 60 segundos | El servicio estaba dormido. Es el paso 5 |
+
+> **Lo que ya no puede pasar, y antes sí:** que la app arranque perfecto contra
+> una base equivocada y nadie se entere. Los tres casos que llevaban ahí —- URI a
+> localhost, URI sin nombre de base, URI con las credenciales de desarrollo —-
+> ahora **impiden el arranque**. Antes el guardián existía pero no llegaba a
+> correr: el driver de Mongo fallaba primero y se comía el mensaje útil.
 
 ## Cosas que se aprendieron deployando
 
