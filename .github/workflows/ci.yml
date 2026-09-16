@@ -50,8 +50,23 @@ jobs:
           MONGO_INITDB_DATABASE: gastos
         ports:
           - 27017:27017
+        # OJO CON LAS COMILLAS, que costaron la primera corrida del CI.
+        #
+        # docker-compose.yml usa la forma de lista (["CMD", "mongosh", ...]),
+        # que no pasa por ningun shell. Aca `options` es una linea de comandos,
+        # asi que docker corre el health-cmd con `/bin/sh -c` -- y el shell se
+        # come las comillas simples de `db.adminCommand('ping')`. mongosh
+        # terminaba recibiendo `ping` como una VARIABLE sin definir, fallaba, y
+        # el contenedor nunca pasaba a healthy. Mongo arrancaba perfecto: en el
+        # log se lo ve en "Waiting for connections" justo antes de que Actions
+        # lo diera por muerto.
+        #
+        # La forma de abajo no tiene comillas anidadas: `{ping:1}` no necesita
+        # ninguna, y las simples de afuera las consume el shell como
+        # corresponde. `ping` ademas no pide autenticacion, asi que funciona
+        # aunque el contenedor arranque con usuario y contrasena.
         options: >-
-          --health-cmd "mongosh --quiet --eval db.adminCommand('ping')"
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
