@@ -3,12 +3,13 @@ import { useCallback } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { mesActual, nombreDelMes } from '../src/api/periodo';
+
 import { Boton } from '../src/componentes/Boton';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { FilaGasto } from '../src/features/gastos/componentes/FilaGasto';
 import { useGastos } from '../src/features/gastos/hooks/useGastos';
+import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
 import { colores } from '../src/tema/colores';
 import { fuentes } from '../src/tema/tipografia';
 import { Cargando } from './_layout';
@@ -54,7 +55,13 @@ export default function Gastos() {
       <FlatList
         data={gastos ?? []}
         keyExtractor={(g) => g.id}
-        renderItem={({ item }) => <FilaGasto gasto={item} idUsuarioActual={usuario?.id} />}
+        renderItem={({ item }) => (
+          <FilaGasto
+            gasto={item}
+            idUsuarioActual={usuario?.id}
+            alTocar={() => router.push({ pathname: '/gasto/editar', params: { id: item.id } })}
+          />
+        )}
         contentContainerStyle={[
           estilos.contenido,
           { paddingTop: insets.top + 16, paddingBottom: 24 },
@@ -67,23 +74,27 @@ export default function Gastos() {
           <RefreshControl refreshing={cargando} onRefresh={recargar} tintColor={colores.rio} />
         }
         ListHeaderComponent={
-          <View style={estilos.encabezado}>
-            <View style={estilos.encabezadoTexto}>
-              <Text style={estilos.seccion}>Gastos de {nombreDelMes(mesActual())}</Text>
-              <Text style={estilos.titulo}>
-                {cuantos === 0
-                  ? 'Nada cargado'
-                  : `${cuantos} ${cuantos === 1 ? 'gasto' : 'gastos'}`}
-              </Text>
-              {cuantosHormiga > 0 ? (
-                <Text style={estilos.cuantosHormiga}>
-                  {cuantosHormiga} {cuantosHormiga === 1 ? 'evitable' : 'evitables'}
+          <View style={estilos.cabecera}>
+            <View style={estilos.encabezado}>
+              <View style={estilos.encabezadoTexto}>
+                <Text style={estilos.seccion}>Gastos del mes</Text>
+                <Text style={estilos.titulo}>
+                  {cuantos === 0
+                    ? 'Nada cargado'
+                    : `${cuantos} ${cuantos === 1 ? 'gasto' : 'gastos'}`}
                 </Text>
-              ) : null}
+                {cuantosHormiga > 0 ? (
+                  <Text style={estilos.cuantosHormiga}>
+                    {cuantosHormiga} {cuantosHormiga === 1 ? 'evitable' : 'evitables'}
+                  </Text>
+                ) : null}
+              </View>
+              <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
+                <Text style={estilos.volver}>Resumen</Text>
+              </Pressable>
             </View>
-            <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
-              <Text style={estilos.volver}>Resumen</Text>
-            </Pressable>
+
+            <SelectorDeMes />
           </View>
         }
         ListEmptyComponent={
@@ -112,11 +123,11 @@ const estilos = StyleSheet.create({
   contenido: { paddingHorizontal: 20 },
   contenidoVacio: { flexGrow: 1 },
 
+  cabecera: { marginBottom: 20, gap: 16 },
   encabezado: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
   },
   encabezadoTexto: { flex: 1 },
   seccion: {

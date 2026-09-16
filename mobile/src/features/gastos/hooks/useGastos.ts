@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorDeApi } from '../../../api/cliente';
-import { mesActual } from '../../../api/periodo';
 import type { GastoRespuesta } from '../../../api/tipos';
+import { useMes } from '../../mes/mes';
 import { traerGastos } from '../api';
 
 /**
@@ -18,6 +18,7 @@ import { traerGastos } from '../api';
  * pide sus datos cuando se muestra.
  */
 export function useGastos() {
+  const { mes } = useMes();
   const [gastos, setGastos] = useState<GastoRespuesta[] | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,13 +26,13 @@ export function useGastos() {
   const recargar = useCallback(async () => {
     setError(null);
     try {
-      setGastos(await traerGastos(mesActual()));
+      setGastos(await traerGastos(mes));
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudieron traer los gastos.');
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [mes]);
 
   useEffect(() => {
     void recargar();

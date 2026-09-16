@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { GastoRespuesta } from '../../../api/tipos';
 import { formatearMonto } from '../../../componentes/Monto';
@@ -40,9 +40,11 @@ type Props = {
   gasto: GastoRespuesta;
   /** Para no repetir "pago Franco" en cada fila propia: solo se nombra al otro. */
   idUsuarioActual: string | undefined;
+  /** Abrir la edicion. La fila entera es el area tactil, no un iconito al costado. */
+  alTocar?: () => void;
 };
 
-export function FilaGasto({ gasto, idUsuarioActual }: Props) {
+export function FilaGasto({ gasto, idUsuarioActual, alTocar }: Props) {
   const compartido = gasto.tipo === 'COMPARTIDO';
   const loPagoElOtro = gasto.pagadoPor.id !== idUsuarioActual;
 
@@ -58,11 +60,19 @@ export function FilaGasto({ gasto, idUsuarioActual }: Props) {
     .join(' · ');
 
   return (
-    <View
-      style={[estilos.fila, gasto.esHormiga && estilos.filaHormiga]}
+    <Pressable
+      onPress={alTocar}
+      disabled={!alTocar}
+      style={({ pressed }) => [
+        estilos.fila,
+        gasto.esHormiga && estilos.filaHormiga,
+        pressed && estilos.filaPresionada,
+      ]}
       // Sin esto, un lector de pantalla lee cuatro textos sueltos y la marca de
       // hormiga -- que es un color -- no se lee de ninguna forma.
       accessible
+      accessibilityRole={alTocar ? 'button' : undefined}
+      accessibilityHint={alTocar ? 'Abre el gasto para editarlo o borrarlo' : undefined}
       accessibilityLabel={
         `${gasto.descripcion}, ${formatearMonto(gasto.monto)}, ${detalle}` +
         (gasto.esHormiga ? ', gasto evitable' : '')
@@ -91,7 +101,7 @@ export function FilaGasto({ gasto, idUsuarioActual }: Props) {
           <Text style={estilos.parte}>tu parte {formatearMonto(parteMia(gasto, idUsuarioActual))}</Text>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -125,6 +135,7 @@ const estilos = StyleSheet.create({
     overflow: 'hidden',
   },
   filaHormiga: { backgroundColor: colores.hormigaSuave, borderColor: colores.hormiga },
+  filaPresionada: { opacity: 0.6 },
   filo: {
     position: 'absolute',
     left: 0,

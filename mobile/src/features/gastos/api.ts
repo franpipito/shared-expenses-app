@@ -59,3 +59,33 @@ export function hoyLocal(): string {
 export function traerGrupo(): Promise<GrupoRespuesta> {
   return pedir<GrupoRespuesta>('/grupo');
 }
+
+/**
+ * Un gasto por id, con su `version` al dia.
+ *
+ * La pantalla de edicion lo pide en vez de arrastrar el objeto desde la lista
+ * por parametros de navegacion. La diferencia importa: la lista pudo haberse
+ * cargado hace rato, y editar contra una copia vieja es exactamente lo que el
+ * bloqueo optimista viene a detectar. Trayendolo de nuevo, el 409 queda para los
+ * conflictos de verdad y no para uno que nos provocamos solos.
+ */
+export function traerGasto(id: string): Promise<GastoRespuesta> {
+  return pedir<GastoRespuesta>(`/gastos/${id}`);
+}
+
+/**
+ * Guardar los cambios de un gasto.
+ *
+ * `version` viaja adentro de `gasto` y NO es opcional aca aunque el backend la
+ * acepte ausente: si no se manda, gana la ultima escritura en silencio. Al
+ * mandarla, si la otra persona edito el mismo gasto mientras tanto, el backend
+ * responde 409 y la app puede avisar en vez de pisar el cambio ajeno.
+ */
+export function actualizarGasto(id: string, gasto: GuardarGastoRequest): Promise<GastoRespuesta> {
+  return pedir<GastoRespuesta>(`/gastos/${id}`, { metodo: 'PUT', cuerpo: gasto });
+}
+
+/** Borrar. El backend responde 204 sin cuerpo. */
+export function eliminarGasto(id: string): Promise<void> {
+  return pedir<void>(`/gastos/${id}`, { metodo: 'DELETE' });
+}

@@ -57,6 +57,30 @@ public class ConfiguracionSeguridad {
                         // show-details=never en application.properties evita que
                         // publique el estado de la base y las demas piezas.
                         .requestMatchers("/actuator/health").permitAll()
+
+                        // ESTO ARREGLA UN BUG QUE HACIA QUE TODO 404 PARECIERA UN 401.
+                        //
+                        // Cuando una request autenticada pega contra una ruta que
+                        // no existe, Spring MVC responde 404 y Boot la reenvia
+                        // internamente a /error. Ese reenvio vuelve a pasar por la
+                        // cadena de filtros -- pero FiltroJwt NO se ejecuta, porque
+                        // OncePerRequestFilter trae shouldNotFilterErrorDispatch()
+                        // en true. O sea que en el segundo paso no hay nadie
+                        // autenticado, /error cae en anyRequest().authenticated() y
+                        // el 404 sale por la puerta como 401.
+                        //
+                        // El sintoma es feo y desorienta: el cliente recibe "Falta
+                        // el token, o no es valido" cuando su token esta perfecto y
+                        // lo unico que pasa es que pidio una URL que no existe. La
+                        // app mobile llego a cerrar la sesion sola por esto, al
+                        // llamar a un endpoint que el backend deployado todavia no
+                        // tenia.
+                        //
+                        // Permitir /error no abre nada: no es una ruta que alguien
+                        // pueda pedir para obtener datos, es adonde Boot reenvia
+                        // para renderizar el error que ya decidio.
+                        .requestMatchers("/error").permitAll()
+
                         .anyRequest().authenticated())
 
                 // Spring Security corta ANTES de que exista un controlador, asi

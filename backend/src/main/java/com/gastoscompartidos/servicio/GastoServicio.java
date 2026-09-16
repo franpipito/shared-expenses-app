@@ -102,6 +102,22 @@ public class GastoServicio {
                 .toList();
     }
 
+    /**
+     * Un gasto por id.
+     *
+     * Faltaba, y se nota recien cuando el cliente quiere EDITAR: la pantalla de
+     * edicion necesita los datos del gasto y su `version` actual. La alternativa
+     * era que la app arrastrara el objeto entero desde la lista por parametros
+     * de navegacion, pero entonces editaria contra una copia que puede estar
+     * vieja -- y el bloqueo optimista existe justamente para eso.
+     *
+     * Devuelve 404 tanto si no existe como si es PERSONAL de la otra persona.
+     * Ver `buscarVisible`: un 403 confirmaria que el gasto existe.
+     */
+    public GastoRespuesta porId(String id) {
+        return GastoRespuesta.desde(buscarVisible(id, usuarioActual.requerido()));
+    }
+
     public GastoRespuesta actualizar(String id, GuardarGastoRequest req) {
         Usuario actual = usuarioActual.requerido();
         Gasto gasto = buscarVisible(id, actual);

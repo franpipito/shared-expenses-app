@@ -3,9 +3,10 @@ import { useCallback } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { mesActual, nombreDelMes } from '../src/api/periodo';
+
 import { formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
+import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
 import { useSaldo } from '../src/features/saldo/hooks/useSaldo';
 import { colores } from '../src/tema/colores';
 import { fuentes, numerosTabulares } from '../src/tema/tipografia';
@@ -58,13 +59,15 @@ export default function Saldo() {
       >
         <View style={estilos.encabezado}>
           <View style={estilos.encabezadoTexto}>
-            <Text style={estilos.seccion}>La cuenta de {nombreDelMes(mesActual())}</Text>
+            <Text style={estilos.seccion}>La cuenta del mes</Text>
             <Text style={estilos.titulo}>Quien le debe a quien</Text>
           </View>
           <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
             <Text style={estilos.volver}>Resumen</Text>
           </Pressable>
         </View>
+
+        <SelectorDeMes />
 
         {error ? <Text style={estilos.error}>{error}</Text> : null}
 

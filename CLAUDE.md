@@ -147,7 +147,7 @@ mockup, no un elemento de la app: el animo lo decide el backend.
 |----------|-----------------------------------------------|--------|
 | Backend  | Java 21 + Spring Boot 4.1.1 + MongoDB 8       | en curso |
 | DB local | Docker Compose (`docker compose up -d`)       | en curso |
-| Mobile   | Expo + React Native + TypeScript              | pendiente |
+| Mobile   | Expo + React Native + TypeScript              | MVP escrito, sin probar en celular |
 | Web      | React + Vite + TypeScript + Tailwind          | pendiente |
 | Deploy   | Railway (se acaba el credito) -> Render + Atlas | a migrar |
 
@@ -384,7 +384,9 @@ va:
 
 Donde SI aplica la idea de "credencial en el cliente": **como guarda el token la
 app mobile**. `AsyncStorage` no esta cifrado; va `expo-secure-store`, que usa el
-Keychain. Pendiente para la sesion 6.
+Keychain en iOS y el Keystore en Android. **Hecho en la sesion 6**, en
+`mobile/src/almacenamiento/sesion.ts`. Limite conocido: SecureStore no existe en
+web, asi que cuando llegue `web/` esa capa necesita otra implementacion.
 
 ### Los agregados se calculan al vuelo, no se materializan
 El saldo y el resumen no se guardan en ningun lado: son un `SUM` sobre el indice
@@ -460,6 +462,41 @@ Corolario que vale mas que el caso: **en React Native no se asume que el bundler
 descarta lo que no se usa.** Un `import { X } from 'libreria'` de una libreria
 grande merece que alguien mire cuanto pesa el bundle antes y despues.
 
+### Un 404 salia como 401, y la app cerraba sesion sola
+Bug real, encontrado probando en el telefono. Vale como historia porque la causa
+no esta en ningun lado obvio.
+
+Cuando una request **autenticada** pega contra una ruta que no existe, Spring MVC
+responde 404 y Boot lo reenvia internamente a `/error`. Ese reenvio **vuelve a
+pasar por la cadena de filtros de Spring Security**, pero `FiltroJwt` NO se
+ejecuta la segunda vez: hereda de `OncePerRequestFilter`, que trae
+`shouldNotFilterErrorDispatch()` en `true` por defecto. Sin nadie autenticado en
+ese segundo paso, `/error` cae en `anyRequest().authenticated()` y el 404 sale
+por la puerta convertido en **401**.
+
+El sintoma en la app fue peor que el bug: el cliente llamo a `GET /grupo`, que el
+backend deployado todavia no tenia, recibio "Falta el token, o no es valido", y
+**cerro la sesion sola** aunque el token estuviera perfecto.
+
+Se arregla con `.requestMatchers("/error").permitAll()`. No abre nada: `/error`
+no devuelve datos, es adonde Boot reenvia para renderizar un error ya decidido.
+Cubierto por el smoke test: *"una ruta inexistente da 404 y no 401, aun con token
+valido"*.
+
+### La sesion se cierra sola cuando el backend rechaza el token
+Un JWT de esta app dura 30 dias y vive en el Keychain, asi que al abrir la app
+hay token guardado mucho despues de que dejo de servir. Antes el cliente asumia
+que token guardado = token valido: entraba al resumen, cada pantalla se comia un
+401 y no habia forma de salir. Un estado zombi.
+
+Ahora `cliente.ts` avisa cuando un 401 llega en una request **con** token, y el
+provider de sesion cierra sesion y navega al login. La condicion importa: el 401
+del login es "esa contrasena esta mal" y ahi no hay sesion que cerrar.
+
+La alternativa era validar al arrancar con un `GET /auth/yo`, que no existe.
+Reaccionar al 401 no necesita endpoint nuevo y ademas cubre el token que se
+invalida con la app ya abierta.
+
 ### Pendiente de decidir
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
   cliente lo manda, se verifica; si no, gana la ultima escritura. Conviene
@@ -485,8 +522,9 @@ grande merece que alguien mire cuanto pesa el bundle antes y despues.
 /mobile       Expo. Por features, no por capas: ver docs/diseno.md
 /web          React + Vite (despues del MVP)
 docker-compose.yml       MongoDB local
+render.yaml              el servicio de Render, versionado y no en un panel
 scripts/
-  smoke-test.ps1         57 chequeos de la API contra el backend corriendo
+  smoke-test.ps1         69 chequeos de la API contra el backend corriendo
 ```
 
 Nombres de dominio en espanol (Gasto, Usuario, Grupo, Categoria), consistente
@@ -515,36 +553,83 @@ con el lenguaje del producto.
       JWT, alta de gasto, resumen con el animo de la nutria, y baja. El bean
       `Clock` quedo probado en serio: el contenedor corre en UTC y el corte de
       mes igual cayo en la fecha de Buenos Aires. Ver **`docs/deploy.md`**.
-- [~] **6 — App Expo minima.** Contra la API deployada, no localhost. Estan el
-      login, el resumen con el animo de la nutria, el alta de gasto y **la lista
-      de gastos del mes**, que es donde se ve la marca de hormiga gasto por
-      gasto. Los iconos de categoria ya se dibujan con Lucide y no como texto.
+- [x] **6 — App Expo con el MVP completo.** Contra la API deployada, no
+      localhost. Cinco pantallas: login, resumen con el animo de la nutria, alta
+      de gasto, **lista de gastos del mes** (donde se ve la marca de hormiga
+      gasto por gasto, o sea el producto) y **saldo** (la seccion de pareja, con
+      las dos nutrias). El alta carga PERSONAL y COMPARTIDO, con reparto y con
+      quien pago. El token va en `expo-secure-store`, nunca en AsyncStorage.
 
-      **Para cerrar la sesion falta la seccion de pareja**, que son dos cosas
-      encadenadas: el alta hoy manda `tipo: 'PERSONAL'` fijo, asi que sin poder
-      cargar un COMPARTIDO la pantalla de saldo mostraria cero siempre. Primero
-      el tipo compartido en el alta (con el reparto), despues `/saldo`.
+      Se agrego `GET /grupo` en el backend, que era lo unico que le faltaba al
+      cliente para armar un COMPARTIDO completo: el login dice quien sos vos y
+      nada mas. El endpoint **no acepta un id** -- devuelve siempre el grupo de
+      quien pregunta, que sale del token -- asi que por construccion no puede
+      filtrar datos de otro grupo.
 
-      Lo que queda afuera y no bloquea el cierre: editar y borrar, y los filtros
-      por categoria y pagador del listado (el endpoint ya los acepta).
+      **OJO CON UNA COSA, que es el punto mas facil de romper de la app:** el
+      campo `porcentajePagador` es la parte de QUIEN PAGO, y los chips del alta
+      preguntan por TU parte. Cuando pago la otra persona hay que invertir el
+      numero (`100 - x`). Sin eso, el saldo sale al reves. Esta comentado con un
+      ejemplo en `app/gasto/nuevo.tsx`.
 
-      Bug conocido: el numero grande del resumen se parte en dos lineas cuando
-      no entra.
+      **Lo que esta verificado y lo que no.** El backend, entero: 25 tests y los
+      64 chequeos del smoke test en verde. La app, NO en un telefono -- solo
+      `tsc --noEmit` y `expo export`, que bundlea de verdad y prueba que todo el
+      grafo de imports resuelve, pero no que algo se vea bien. **Contra la regla
+      1 de este documento, esta sesion se cierra sin esa prueba.** El recorrido
+      que ejercita lo nuevo: cargar un compartido con "pago la otra persona" y
+      reparto 70/30, ver "tu parte" en la lista, y confirmar la direccion de la
+      deuda en la pantalla de saldo.
 
-      Nada de esto se probo en un telefono todavia: se verifico con
-      `tsc --noEmit` y con `expo export`, que bundlea de verdad.
+      Quedo afuera a proposito: **el tab bar**, que segun `docs/diseno.md` nace
+      con la pantalla de saldo. Cambia el layout del resumen (el boton de abajo
+      pasa a convivir con la barra y el `insets.bottom` se cuenta dos veces), y
+      eso hay que verlo en pantalla para ajustarlo. Saldo quedo como push, igual
+      que la lista. Tambien quedaron afuera editar y borrar, y los filtros por
+      categoria y pagador del listado (el endpoint ya los acepta).
 - [x] **6.5 — Migracion a MongoDB.** El motivo es de busqueda laboral: la
       postulacion pide relacional y no relacional, y MatchPoint ya cubre
       Postgres. Se rehicieron modelo, repositorios y los dos servicios que tocan
       agregados. **No se toco `seguridad/` ni `error/`, y `CalculadorDeAnimo` y
       `Periodo` siguen igual** —- los 24 tests puros pasaron sin cambios. Ver las
       secciones de modelado, transacciones y conversores mas arriba.
+- [x] **6.7 — Revision e2e y cierre de huecos funcionales.** Salio de probar la
+      app en el telefono por primera vez. Lo que se encontro y se arreglo:
+
+      **Bugs.** El 404 que salia como 401 (ver mas arriba), la sesion zombi con
+      token vencido, y "Cerrar sesion" que limpiaba el estado pero no navegaba,
+      asi que parecia no andar.
+
+      **Huecos funcionales, que eran mas graves que los bugs:**
+      - **No habia pantalla de registro.** El backend sabe registrar desde la
+        sesion 4, pero el cliente solo sabia loguear: Viole no podia crearse la
+        cuenta desde el telefono. Una app de dos usuarios donde uno no puede
+        entrar no esta terminada.
+      - **No se podia editar ni borrar.** Un monto mal tipeado quedaba para
+        siempre y corrompia el total hormiga, que es EL numero del producto.
+        Se agrego `GET /gastos/{id}` en el backend, que faltaba: para editar hace
+        falta el gasto y su `version` al dia.
+      - **Solo se veia el mes en curso.** El 1 de octubre, septiembre se volvia
+        invisible. Ahora hay un selector de mes (`MesProvider` + `SelectorDeMes`)
+        compartido por resumen, lista y saldo.
+
+      El formulario de alta y el de edicion son **el mismo componente** con dos
+      modos. No es prolijidad: la inversion del `porcentajePagador` vive ahi
+      adentro, y duplicarla garantizaba que algun dia las copias no coincidieran.
+
+      Verificado: 36 tests, **69 chequeos del smoke test**, `tsc --noEmit` y
+      `expo export`. Sigue sin probarse en un telefono lo agregado en esta tanda.
+
 - [ ] **6.6 — Salir de Railway.** El credito de $5 se acaba y no hay tier gratis
       permanente. Destino elegido: **Render (Docker) + MongoDB Atlas M0**, los dos
       gratis, con un cron externo pegandole cada 10 minutos para que el servicio
       no se duerma. El arranque en frio de Spring Boot es de 40-60s, y la app
       tiene un requisito duro de velocidad de carga: el ping es lo que hace que
       Viole nunca se lo coma. Atlas y Render **en la misma region**.
+
+      Preparado: **`docs/deploy-render.md`** con el paso a paso y `render.yaml`
+      en la raiz, que deja la configuracion versionada en vez de en un panel.
+      Falta ejecutarlo (crear las cuentas, deployar y verificar).
 - [ ] **7 — Build EAS y TestFlight.**
 
 ## Comandos

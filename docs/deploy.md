@@ -1,5 +1,16 @@
 # Deploy del backend en Railway
 
+> **Este documento es histórico.** El deploy vigente es
+> **[`deploy-render.md`](deploy-render.md)** (Render + MongoDB Atlas). Se migró
+> porque el crédito de Railway se acabó y no tiene tier gratis permanente.
+>
+> Se conserva porque varias secciones siguen valiendo en cualquier proveedor: la
+> generación del secreto del JWT, por qué el perfil `produccion` no es opcional,
+> y sobre todo "Cosas que se aprendieron deployando".
+>
+> Ojo que las partes de Postgres y Flyway quedaron viejas también por otro
+> motivo: la base pasó a MongoDB en la sesión 6.5.
+
 ## Qué se deploya
 
 El backend se construye con `backend/Dockerfile` (build multi-stage: compila con

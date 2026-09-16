@@ -1,0 +1,58 @@
+# Blueprint de Render.
+#
+# Render puede leer este archivo y crear el servicio solo ("New > Blueprint").
+# La ventaja sobre configurar todo a mano en la web es que la configuracion
+# queda versionada: dentro de seis meses, por que el health check apunta a
+# /actuator/health esta escrito aca y no en la memoria de alguien.
+#
+# Lo que NO vive aca son los secretos. Las variables marcadas `sync: false` se
+# cargan a mano en el panel de Render y nunca tocan el repo.
+services:
+  - type: web
+    name: minutria-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    # El contexto es backend/ porque el Dockerfile copia `pom.xml` y `src/` con
+    # rutas relativas a el. Con el contexto en la raiz del repo no los
+    # encontraria.
+    dockerContext: ./backend
+    plan: free
+
+    # OJO: esta region tiene que ser LA MISMA que la del cluster de Atlas.
+    # Si el backend queda en Virginia y la base en Oregon, cada consulta cruza
+    # el continente ida y vuelta. La app hace varias consultas por pantalla, asi
+    # que eso se nota, y se nota justo en la carga de un gasto -- que es el
+    # requisito duro del producto.
+    region: virginia
+
+    # Render no manda trafico al servicio nuevo hasta que esto responde 200.
+    # Importa mas que en Railway: el arranque en frio de Spring Boot es de 40 a
+    # 60 segundos, y sin health check Render daria por vivo un contenedor que
+    # todavia no levanto.
+    healthCheckPath: /actuator/health
+
+    envVars:
+      # Sin esto no se activa ValidacionDeConfiguracion, y la app arrancaria
+      # feliz con el secreto de desarrollo que esta publicado en el repo.
+      - key: SPRING_PROFILES_ACTIVE
+        value: produccion
+
+      # Los tres secretos. `sync: false` = "pedirlos en el panel, no guardarlos
+      # aca". Render los marca como pendientes al crear el blueprint.
+      #
+      # MONGO_URI tiene que terminar con el nombre de la base (`/gastos`): la
+      # cadena que da Atlas no lo trae, y sin el, el driver usa `test` en
+      # silencio. ValidacionDeConfiguracion ahora se niega a arrancar si falta.
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRETO
+        sync: false
+      - key: CODIGO_INVITACION
+        sync: false
+
+      # ZONA_HORARIA no se declara: el default de la app ya es
+      # America/Argentina/Buenos_Aires, y es el que define donde cae el corte de
+      # mes. Render corre en UTC, igual que Railway.
+      #
+      # PORT tampoco: Render la inyecta sola y la app la lee en
+      # server.port=${PORT:8080}.

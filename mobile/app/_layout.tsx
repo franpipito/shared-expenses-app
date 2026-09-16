@@ -15,6 +15,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SesionProvider } from '../src/features/auth/sesion';
+import { MesProvider } from '../src/features/mes/mes';
 import { colores } from '../src/tema/colores';
 
 /**
@@ -47,6 +48,7 @@ export default function LayoutRaiz() {
   return (
     <SafeAreaProvider>
       <SesionProvider>
+        <MesProvider>
         <StatusBar style="dark" />
         <Stack
           screenOptions={{
@@ -58,6 +60,7 @@ export default function LayoutRaiz() {
         >
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
+          <Stack.Screen name="registro" />
           <Stack.Screen name="resumen" />
           <Stack.Screen name="gastos" />
           <Stack.Screen name="saldo" />
@@ -69,7 +72,10 @@ export default function LayoutRaiz() {
               presentation: 'modal',
             }}
           />
+          {/* Editar es la misma tarea que cargar, asi que se abre igual. */}
+          <Stack.Screen name="gasto/editar" options={{ presentation: 'modal' }} />
         </Stack>
+        </MesProvider>
       </SesionProvider>
     </SafeAreaProvider>
   );

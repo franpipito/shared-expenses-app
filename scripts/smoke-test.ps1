@@ -258,6 +258,19 @@ Chequear ($idDeElla -is [string] -and $idDeElla.Length -eq 24) `
 EsperarCodigo { Invoke-RestMethod -Uri "$base/grupo" } 401 `
     "sin token, /grupo da 401"
 
+# Una ruta que no existe tiene que dar 404, no 401.
+#
+# Parece un detalle y no lo es: Boot reenvia el 404 a /error, ese reenvio vuelve
+# a pasar por la cadena de filtros, y FiltroJwt NO corre la segunda vez
+# (OncePerRequestFilter.shouldNotFilterErrorDispatch viene en true). Sin
+# permitAll sobre /error, el 404 sale como 401.
+#
+# El sintoma real que provoco: la app mobile llamo a un endpoint que el backend
+# deployado todavia no tenia, recibio "Falta el token, o no es valido", y cerro
+# la sesion sola aunque el token estuviera perfecto.
+EsperarCodigo { Invoke-RestMethod -Uri "$base/esta-ruta-no-existe" -Headers $franco } 404 `
+    "una ruta inexistente da 404 y no 401, aun con token valido"
+
 # ---------------------------------------------------------------------------
 Titulo "1. Ella carga un gasto PERSONAL marcado como hormiga"
 
@@ -301,6 +314,18 @@ Chequear (-not ($ids -contains $personalDeElla.id)) "Franco NO ve el personal de
 
 EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Method Delete -Headers $franco } `
     404 "pedirlo por id devuelve 404, no 403 (no confirma que existe)"
+
+# GET /gastos/{id}: lo usa la pantalla de edicion, que necesita el gasto y su
+# `version` al dia. Pasa por la misma regla de visibilidad que el listado, y eso
+# es justamente lo que hay que verificar: un endpoint nuevo es un lugar nuevo
+# donde alguien puede olvidarse el WHERE.
+$traido = Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Headers $franco
+Chequear ($traido.id -eq $compartido.id)        "traer un gasto por id devuelve ese gasto"
+Chequear ($null -ne $traido.version)            "y trae la version, que es para lo que sirve"
+Chequear ($null -eq $traido.pagadoPor.email)    "traer por id tampoco expone el email"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Headers $franco } `
+    404 "traer por id el personal de la otra persona da 404"
 
 # ---------------------------------------------------------------------------
 Titulo "4. Visibilidad: Ella ve los dos"

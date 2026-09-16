@@ -51,6 +51,30 @@ export function fijarToken(token: string | null): void {
   tokenActual = token;
 }
 
+/**
+ * Que hacer cuando el backend rechaza el token que estabamos usando.
+ *
+ * ESTO EXISTE POR UN BUG REAL. Un JWT de esta app dura 30 dias y se guarda en
+ * el Keychain, asi que al abrir la app hay token guardado mucho despues de que
+ * dejo de servir -- porque expiro, porque alguien uso /auth/cerrar-sesiones, o
+ * porque cambio el secreto del servidor.
+ *
+ * Antes, la app confiaba en que un token guardado era un token valido: te daba
+ * por logueado, entraba al resumen y cada pantalla se comia un 401 que se
+ * mostraba como "Falta el token, o no es valido". Sin nombre en el saludo, sin
+ * datos, y sin forma de salir. Un estado zombi del que no se sale.
+ *
+ * La alternativa era validar el token al arrancar con un `GET /auth/yo`, que no
+ * existe. Reaccionar al 401 no necesita endpoint nuevo y ademas cubre el caso
+ * de que el token se invalide con la app abierta, que un chequeo al arranque no
+ * cubriria.
+ */
+let alPerderLaSesion: (() => void) | null = null;
+
+export function cuandoSePierdaLaSesion(callback: (() => void) | null): void {
+  alPerderLaSesion = callback;
+}
+
 type Opciones = {
   metodo?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   cuerpo?: unknown;
@@ -100,6 +124,16 @@ export async function pedir<T>(ruta: string, opciones: Opciones = {}): Promise<T
   }
 
   if (!respuesta.ok) {
+    // Un 401 en una request CON token significa que el token dejo de servir, y
+    // la unica salida sana es volver al login.
+    //
+    // El `!sinToken` importa: el 401 del login es "esa contrasena esta mal", y
+    // ahi no hay ninguna sesion que cerrar. Sin esa condicion, escribir mal la
+    // contrasena dispararia un cierre de sesion que no existe.
+    if (respuesta.status === 401 && !sinToken) {
+      alPerderLaSesion?.();
+    }
+
     const error = datos as ErrorRespuesta | undefined;
     throw new ErrorDeApi(
       respuesta.status,

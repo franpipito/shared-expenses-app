@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorDeApi } from '../../../api/cliente';
-import { mesActual } from '../../../api/periodo';
 import type { SaldoRespuesta } from '../../../api/tipos';
+import { useMes } from '../../mes/mes';
 import { traerSaldo } from '../api';
 
 /**
@@ -17,6 +17,7 @@ import { traerSaldo } from '../api';
  * todavia no se probaron en un telefono. Primero que anden, despues se limpia.
  */
 export function useSaldo() {
+  const { mes } = useMes();
   const [saldo, setSaldo] = useState<SaldoRespuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,13 +25,13 @@ export function useSaldo() {
   const recargar = useCallback(async () => {
     setError(null);
     try {
-      setSaldo(await traerSaldo(mesActual()));
+      setSaldo(await traerSaldo(mes));
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo traer el saldo.');
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [mes]);
 
   useEffect(() => {
     void recargar();

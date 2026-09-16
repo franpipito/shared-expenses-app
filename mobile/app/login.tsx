@@ -3,10 +3,10 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorDeApi } from '../src/api/cliente';
 import { Boton } from '../src/componentes/Boton';
 import { Nutria } from '../src/componentes/Nutria';
+import { Campo } from '../src/features/auth/componentes/Campo';
 import { useSesion } from '../src/features/auth/sesion';
 import { colores } from '../src/tema/colores';
 import { fuentes } from '../src/tema/tipografia';
@@ -63,7 +64,7 @@ export default function Login() {
         <View style={estilos.encabezado}>
           <Nutria animo="TRANQUILA" tamano={150} />
           <Text style={estilos.marca}>MiNutria</Text>
-          <Text style={estilos.bajada}>Los gastos de Viole y Fran</Text>
+          <Text style={estilos.bajada}>Anota rapido. La nutria hace las cuentas.</Text>
         </View>
 
         <View style={estilos.campos}>
@@ -90,39 +91,22 @@ export default function Login() {
             cargando={enviando}
             deshabilitado={!email.trim() || !password}
           />
+
+          {/*
+            Sin esto, la segunda persona del grupo no tiene forma de entrar a la
+            app: el backend sabe registrar desde la sesion 4, pero el cliente
+            solo sabia loguear.
+          */}
+          <Pressable
+            onPress={() => router.push('/registro')}
+            hitSlop={12}
+            accessibilityRole="button"
+          >
+            <Text style={estilos.crearCuenta}>No tengo cuenta todavia</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
-  );
-}
-
-type CampoProps = {
-  etiqueta: string;
-  valor: string;
-  alCambiar: (v: string) => void;
-  secreto?: boolean;
-  teclado?: 'default' | 'email-address';
-  autoComplete?: 'email' | 'current-password';
-};
-
-function Campo({ etiqueta, valor, alCambiar, secreto, teclado = 'default', autoComplete }: CampoProps) {
-  return (
-    <View style={estilos.campo}>
-      <Text style={estilos.etiqueta}>{etiqueta}</Text>
-      <TextInput
-        value={valor}
-        onChangeText={alCambiar}
-        secureTextEntry={secreto}
-        keyboardType={teclado}
-        autoComplete={autoComplete}
-        // Sin esto iOS pone mayuscula al primer caracter del email y el login
-        // falla sin que se entienda por que.
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={estilos.input}
-        placeholderTextColor={colores.textoSuave}
-      />
-    </View>
   );
 }
 
@@ -145,30 +129,16 @@ const estilos = StyleSheet.create({
     marginTop: 4,
   },
   campos: { gap: 16 },
-  campo: { gap: 6 },
-  etiqueta: {
-    fontFamily: fuentes.cuerpoSemi,
-    fontSize: 12,
-    letterSpacing: 1.2,
-    // Versalitas arriba de cada campo: es lo que Viole eligio del mockup de
-    // Vercel.
-    textTransform: 'uppercase',
-    color: colores.textoSuave,
-  },
-  input: {
-    backgroundColor: colores.tarjeta,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    minHeight: 52,
-    fontFamily: fuentes.cuerpo,
-    fontSize: 17,
-    color: colores.texto,
-  },
   error: {
     fontFamily: fuentes.cuerpo,
     fontSize: 14,
     color: colores.terracotaProfunda,
+  },
+  crearCuenta: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 15,
+    color: colores.rioProfundo,
+    textAlign: 'center',
+    paddingVertical: 8,
   },
 });

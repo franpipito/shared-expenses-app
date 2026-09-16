@@ -63,6 +63,18 @@ public class GastoControlador {
     }
 
     /**
+     * GET /gastos/{id}
+     *
+     * Lo necesita la pantalla de edicion: para editar hace falta el gasto y su
+     * `version` al dia, y traerlos de la lista significaria editar contra una
+     * copia posiblemente vieja.
+     */
+    @GetMapping("/{id}")
+    public GastoRespuesta porId(@PathVariable String id) {
+        return servicio.porId(id);
+    }
+
+    /**
      * PUT /gastos/{id}
      *
      * @PathVariable toma el {id} de la ruta.
