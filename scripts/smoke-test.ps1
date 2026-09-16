@@ -553,6 +553,26 @@ Chequear ($pozo.restante -eq 800000.00) "sin gastos, el restante es todo lo apor
 $deElla = $pozo.porPersona | Where-Object { $_.usuarioId -eq $ELLA_ID }
 Chequear ($deElla.total -eq 400000.00) "cada aporte queda a nombre de quien lo hizo"
 
+# Un aporte equivocado se deshace compensandolo, no borrandolo: los aportes son
+# inmutables a proposito. Antes esto era imposible (el monto era @Positive y no
+# hay endpoint para borrar un aporte), asi que un 4.000.000 tipeado en vez de
+# 400.000 quedaba en el pozo para siempre.
+$conError = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = 90000.00 } | ConvertTo-Json)
+Chequear ($conError.aportado -eq 890000.00) "un aporte de mas entra"
+
+$corregido = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = -90000.00 } | ConvertTo-Json)
+Chequear ($corregido.aportado -eq 800000.00) "y se deshace con un aporte negativo"
+Chequear (($corregido.aportes | Measure-Object).Count -eq 4) `
+    "quedan los dos asientos, no se borra ninguno"
+
+EsperarValidacion { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    "monto" "un aporte de cero se rechaza: no es aporte ni correccion"
+
+$pozo = $corregido
+
 # --- el saldo y la nutria ANTES de tocar la vaquita -------------------------
 $saldoAntes   = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $franco
 $resumenAntes = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $franco
@@ -640,6 +660,16 @@ EsperarRegla { Crear $franco @{
 
 $sinPozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $ella
 Chequear ($null -eq $sinPozo) "despues de cerrarla, no hay vaquita activa"
+
+# GET /pozos es lo que hace alcanzable una vaquita cerrada. Sin el, sus gastos
+# quedaban sin ninguna pantalla desde la cual llegar: no salen en la lista del
+# mes y /pozos/activo deja de devolverla.
+$todos = Invoke-RestMethod -Uri "$base/pozos" -Headers $ella
+Chequear ((($todos | Where-Object { $_.id -eq $pozo.id }) | Measure-Object).Count -eq 1) `
+    "GET /pozos incluye las vaquitas cerradas"
+
+$delCerrado = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/gastos" -Headers $ella
+Chequear (($delCerrado | Measure-Object).Count -ge 1) "y se pueden listar sus gastos"
 
 # CERRAR CONGELA LA VAQUITA, NO LOS GASTOS QUE YA TENIA.
 #

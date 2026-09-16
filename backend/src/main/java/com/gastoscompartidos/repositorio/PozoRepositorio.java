@@ -4,6 +4,7 @@ import com.gastoscompartidos.modelo.EstadoPozo;
 import com.gastoscompartidos.modelo.Pozo;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -31,4 +32,15 @@ public interface PozoRepositorio extends MongoRepository<Pozo, String>, PozoCons
      * que el pozo existe.
      */
     Optional<Pozo> findByIdAndGrupoId(String id, String grupoId);
+
+    /**
+     * Todas las vaquitas del grupo, la mas nueva primero.
+     *
+     * Hace falta porque una vaquita cerrada quedaba INALCANZABLE: sus gastos no
+     * salen en la lista del mes (los filtra `sinPozo()`), `GET /pozos/activo`
+     * devuelve 204 apenas se cierra, y sin este listado no habia forma de
+     * recuperar su id. O sea que el permiso de corregir esos gastos -- que la
+     * sesion 6.9 agrego a proposito -- era inalcanzable en la practica.
+     */
+    List<Pozo> findByGrupoIdOrderByCreadoEnDesc(String grupoId);
 }

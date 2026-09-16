@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorDeApi } from '../../../api/cliente';
 import { sincronizar } from '../../gastos/sincronizador';
 import type { GastoRespuesta, PozoRespuesta } from '../../../api/tipos';
-import { traerGastosDelPozo, traerPozoActivoFresco } from '../api';
+import { traerGastosDelPozo, traerPozoActivoFresco, traerPozos } from '../api';
 
 /**
  * El "controlador" de la pantalla de la vaquita.
@@ -22,6 +22,11 @@ import { traerGastosDelPozo, traerPozoActivoFresco } from '../api';
 export function useVaquita() {
   const [pozo, setPozo] = useState<PozoRespuesta | null>(null);
   const [gastos, setGastos] = useState<GastoRespuesta[]>([]);
+  /**
+   * Los viajes ya cerrados. Sin esto sus gastos eran inalcanzables: no salen en
+   * la lista del mes y `/pozos/activo` deja de devolverlos apenas se cierran.
+   */
+  const [cerrados, setCerrados] = useState<PozoRespuesta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +54,7 @@ export function useVaquita() {
       // Sin pozo no hay gastos que pedir, y pedirlos igual seria una request de
       // mas en el caso mas comun (todavia no abrieron ninguna vaquita).
       setGastos(activo ? await traerGastosDelPozo(activo.id) : []);
+      setCerrados((await traerPozos()).filter((p) => p.estado === 'CERRADO'));
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo traer la vaquita.');
     } finally {
@@ -68,5 +74,5 @@ export function useVaquita() {
     setPozo(actualizado);
   }, []);
 
-  return { pozo, gastos, cargando, error, recargar, fijarPozo };
+  return { pozo, gastos, cerrados, cargando, error, recargar, fijarPozo };
 }

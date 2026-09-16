@@ -94,7 +94,7 @@ public class ResumenServicio {
                 grupoId, yo, anteriorP.desde(), anteriorP.hasta()) > 0;
 
         AnimoNutria animo = CalculadorDeAnimo.calcular(
-                totalHormiga, hormigaAnterior, hayDatosAnteriores);
+                totalHormiga, hormigaAnterior, hayDatosAnteriores, actualP.dias());
 
         return new ResumenRespuesta(
                 periodoPedido.toString(),

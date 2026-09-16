@@ -33,9 +33,30 @@ public final class CalculadorDeAnimo {
      * @param hormigaAnterior      gasto hormiga del mismo tramo del mes anterior
      * @param hayDatosAnteriores   si el mes anterior tiene algun gasto cargado
      */
+    /**
+     * Dias minimos de mes transcurrido antes de animarse a hablar de tendencia.
+     *
+     * LA BANDA DE +-10% NO ALCANZA CUANDO LA MUESTRA ES CHICA, y el 1 de cada
+     * mes la muestra es de UN dia contra UN dia. Ahi la banda no protege de
+     * nada: si el 1 del mes pasado no hubo ni un gasto evitable,
+     * `hormigaAnterior` es cero y un solo cafe del dia 1 deja a la nutria
+     * PREOCUPADA.
+     *
+     * Cinco dias es un numero elegido, no derivado: es el tramo mas corto en el
+     * que un fin de semana caro no domina la comparacion el solo. Si se quiere
+     * mover, se mueve aca y los tests de abajo dicen que se rompe.
+     *
+     * El costo, y hay que tenerlo presente: durante los primeros dias de cada
+     * mes la nutria no opina. Se paga con el copy -- "recien arranca el mes"
+     * informa sin juzgar, y la ilustracion sigue en pantalla, que es lo que
+     * sostiene el habito de abrir la app.
+     */
+    private static final int DIAS_MINIMOS_PARA_COMPARAR = 5;
+
     public static AnimoNutria calcular(BigDecimal hormigaActual,
                                        BigDecimal hormigaAnterior,
-                                       boolean hayDatosAnteriores) {
+                                       boolean hayDatosAnteriores,
+                                       long diasTranscurridos) {
 
         // Cero gasto evitable es el mejor resultado posible, sin importar el pasado.
         if (hormigaActual.signum() == 0) {
@@ -45,6 +66,14 @@ public final class CalculadorDeAnimo {
         // Sin base de comparacion no se puede hablar de tendencia. El primer mes
         // de uso la nutria no juzga.
         if (!hayDatosAnteriores) {
+            return AnimoNutria.TRANQUILA;
+        }
+
+        // Y con el mes recien arrancado tampoco: ver DIAS_MINIMOS_PARA_COMPARAR.
+        // Va DESPUES del chequeo de cero hormiga a proposito -- "no gastaste
+        // nada evitable" es verdad el dia 1 igual que el dia 20, no es una
+        // comparacion y no necesita muestra.
+        if (diasTranscurridos < DIAS_MINIMOS_PARA_COMPARAR) {
             return AnimoNutria.TRANQUILA;
         }
 

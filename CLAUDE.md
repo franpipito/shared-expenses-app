@@ -431,7 +431,11 @@ Compara el gasto hormiga del **tramo transcurrido** del mes contra el **mismo
 tramo** del mes anterior (6 dias contra 6 dias, no 6 contra 31). Baja de 10% o mas
 -> CONTENTA; sube 10% o mas -> PREOCUPADA; en el medio -> TRANQUILA. Cero hormiga
 -> CONTENTA. Sin datos del mes anterior -> TRANQUILA: la nutria no juzga el primer
-mes de uso.
+mes de uso. **Y con menos de 5 dias transcurridos tampoco**: el 1 de cada mes la
+comparacion es un dia contra un dia, donde la banda de +-10% no protege de nada
+-- si el 1 del mes pasado no hubo hormiga, un solo cafe dejaba a la nutria
+PREOCUPADA. El chequeo va despues del de cero hormiga, porque "no gastaste nada
+evitable" es verdad el dia 1 igual que el dia 20: no es una comparacion.
 
 Es una medida relativa porque los ingresos son irregulares, y es contra el pasado
 y no contra una meta porque el objetivo declarado de la usuaria es **bajar**, no
@@ -521,6 +525,21 @@ estaban ahi.
 Corolario que vale mas que el caso: **en React Native no se asume que el bundler
 descarta lo que no se usa.** Un `import { X } from 'libreria'` de una libreria
 grande merece que alguien mire cuanto pesa el bundle antes y despues.
+
+### Tres huecos que encontraron las auditorias de la sesion 6.10
+- **Una vaquita cerrada quedaba inalcanzable.** Sus gastos no salen en la lista
+  del mes (`sinPozo()`) y `/pozos/activo` deja de devolverla al cerrarse, asi que
+  el permiso de corregirlos -- agregado a proposito en la 6.9 -- no tenia ninguna
+  pantalla desde la cual ejercerse. Ahora hay `GET /pozos` y `app/viaje/[id].tsx`.
+- **Un aporte equivocado no se podia deshacer.** Los aportes son inmutables a
+  proposito y `docs/vaquita.md` decia "si estuvo mal, se compensa con otro", pero
+  la API no dejaba: el monto era `@Positive`. Ahora admite negativo, que es el
+  asiento en contrario. Cero se rechaza: no es aporte ni correccion.
+- **El default automatico a Vaquita se saco.** La pantalla que abre la vaquita no
+  pide fechas, asi que `vigenteEl()` daba true siempre y cada alta abria en
+  VAQUITA desde dos semanas antes del viaje -- y VAQUITA es COMPARTIDO, o sea
+  visible para los dos. Un regalo sorpresa cargado rapido se publicaba solo.
+  El default vuelve a PERSONAL: lo compartido se elige, nunca se asume.
 
 ### Pendiente de decidir
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el

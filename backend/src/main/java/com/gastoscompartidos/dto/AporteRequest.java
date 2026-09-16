@@ -19,8 +19,24 @@ import java.math.BigDecimal;
  */
 public record AporteRequest(
 
+        /*
+         * SE ADMITE NEGATIVO, y es la unica forma de deshacer un aporte.
+         *
+         * `docs/vaquita.md` dice que un aporte es un asiento contable y que "si
+         * estuvo mal, se compensa con otro" -- pero la API no dejaba: el monto
+         * era @Positive, no hay endpoint para borrar un aporte, y tampoco para
+         * reabrir un pozo. Si alguien tipeaba 4000000 en vez de 400000 parado en
+         * el aeropuerto, el pozo quedaba con esa plata para siempre y la unica
+         * salida era entrar a mano a la base.
+         *
+         * Para una feature cuyo numero protagonista es "queda $X", eso era un
+         * agujero grande.
+         *
+         * El aporte sigue siendo inmutable: no se edita ni se borra, se
+         * compensa. Queda el rastro de los dos asientos, que en contabilidad es
+         * lo correcto.
+         */
         @NotNull(message = "el monto es obligatorio")
-        @DecimalMin(value = "0.01", message = "el monto tiene que ser mayor a cero")
         @Digits(integer = 12, fraction = 2, message = "el monto es demasiado grande")
         BigDecimal monto
 ) {

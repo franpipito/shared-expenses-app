@@ -53,7 +53,7 @@ import { Cargando } from './_layout';
  * esta es la otra seccion de a dos.
  */
 export default function Vaquita() {
-  const { pozo, gastos, cargando, error, recargar, fijarPozo } = useVaquita();
+  const { pozo, gastos, cerrados, cargando, error, recargar, fijarPozo } = useVaquita();
   const { usuario } = useSesion();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -112,6 +112,28 @@ export default function Vaquita() {
         ) : error ? null : (
           <SinVaquita onCreada={fijarPozo} />
         )}
+
+        {/*
+          Los viajes terminados. Es la unica puerta a sus gastos: la lista del
+          mes los filtra y /pozos/activo deja de devolverlos al cerrarse. Sin
+          esto, un cero de mas visto al volver de Bariloche quedaba para siempre.
+        */}
+        {cerrados.length > 0 ? (
+          <View style={estilos.bloque}>
+            <Text style={estilos.rotuloSeccion}>Viajes anteriores</Text>
+            {cerrados.map((c) => (
+              <Pressable
+                key={c.id}
+                onPress={() => router.push(`/viaje/${c.id}`)}
+                accessibilityRole="button"
+                style={({ pressed }) => [estilos.fila, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={estilos.filaEtiqueta}>{c.nombre}</Text>
+                <Text style={estilos.flecha}>›</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -234,11 +256,11 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
   const montoValido = monto.trim() !== '' && Number.isFinite(montoNumero) && montoNumero > 0;
   const enRojo = pozo.restante < 0;
 
-  async function poner() {
+  async function poner(signo: 1 | -1) {
     setError(null);
     setEnviando(true);
     try {
-      onCambio(await aportar(pozo.id, { monto: montoNumero }));
+      onCambio(await aportar(pozo.id, { monto: signo * montoNumero }));
       setMonto('');
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo registrar el aporte.');
@@ -353,11 +375,30 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
         <View style={estilos.accion}>
           <Boton
             titulo="Ponerla"
-            onPress={poner}
+            onPress={() => void poner(1)}
             cargando={enviando}
             deshabilitado={!montoValido}
           />
         </View>
+        {/*
+          SACAR PLATA ES COMO SE DESHACE UN APORTE EQUIVOCADO. Si tipeaste
+          4.000.000 en vez de 400.000 parado en el aeropuerto, antes el pozo
+          quedaba asi para siempre: los aportes son inmutables a proposito, no
+          hay endpoint para borrarlos, y el monto no admitia negativos.
+          Compensar con un asiento en contrario es la forma contable correcta, y
+          deja el rastro de los dos movimientos.
+        */}
+        <Pressable
+          onPress={() => void poner(-1)}
+          disabled={!montoValido || enviando}
+          accessibilityRole="button"
+          accessibilityLabel="Sacar del pozo, para corregir un aporte equivocado"
+          hitSlop={8}
+        >
+          <Text style={[estilos.sacar, !montoValido && { opacity: 0.4 }]}>
+            Me equivoque: sacar esta plata del pozo
+          </Text>
+        </Pressable>
       </View>
 
       {error ? <Text style={estilos.error}>{error}</Text> : null}
@@ -519,6 +560,14 @@ const estilos = StyleSheet.create({
     ...numerosTabulares,
   },
 
+  sacar: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 14,
+    color: colores.terracotaProfunda,
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  flecha: { fontFamily: fuentes.cuerpoSemi, fontSize: 20, color: colores.rioProfundo },
   cerrar: {
     fontFamily: fuentes.cuerpoSemi,
     fontSize: 15,

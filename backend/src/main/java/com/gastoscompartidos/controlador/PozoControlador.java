@@ -34,6 +34,19 @@ public class PozoControlador {
     }
 
     /**
+     * GET /pozos — todas las vaquitas del grupo, incluidas las cerradas.
+     *
+     * Existe para que una vaquita cerrada no quede inalcanzable. Sus gastos no
+     * aparecen en la lista del mes, y `/pozos/activo` deja de devolverla apenas
+     * se cierra: sin este listado no habia forma de recuperar su id para llegar
+     * a `GET /pozos/{id}/gastos` y corregir un monto mal cargado.
+     */
+    @GetMapping
+    public List<PozoRespuesta> listar() {
+        return servicio.listar();
+    }
+
+    /**
      * GET /pozos/activo — la vaquita abierta con sus numeros.
      *
      * Devuelve **204 No Content** y no un 404 cuando no hay ninguna abierta: no

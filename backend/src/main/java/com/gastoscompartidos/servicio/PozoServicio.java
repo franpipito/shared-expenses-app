@@ -100,6 +100,25 @@ public class PozoServicio {
         }
     }
 
+    /**
+     * Todas las vaquitas del grupo, la mas nueva primero.
+     *
+     * Es lo que hace alcanzable una vaquita cerrada. Sin esto, volver de
+     * Bariloche, cerrarla y despues ver que una cena tenia un cero de mas
+     * significaba que ese error quedaba para siempre: no habia ninguna pantalla
+     * desde la cual llegar al gasto.
+     *
+     * Una consulta por pozo para el `$sum` de lo gastado. Son unos pocos viajes,
+     * asi que el N+1 es teorico; si algun dia son decenas, se resuelve con un
+     * solo `$group` por `pozo_id`.
+     */
+    public List<PozoRespuesta> listar() {
+        Usuario actual = usuarioActual.requerido();
+        return pozos.findByGrupoIdOrderByCreadoEnDesc(actual.getGrupoId()).stream()
+                .map(this::respuesta)
+                .toList();
+    }
+
     /** El pozo abierto del grupo, o vacio si no hay ninguno. */
     public Optional<PozoRespuesta> activo() {
         Usuario actual = usuarioActual.requerido();
@@ -113,9 +132,16 @@ public class PozoServicio {
         // otra persona. Un aporte es la afirmacion "puse esta plata": solo la
         // puede emitir quien la puso. Por eso AporteRequest ni siquiera tiene
         // un campo para el usuario.
+        // Cero no es un aporte ni una correccion: es ruido en el historial. El
+        // negativo si vale, y es como se deshace un aporte equivocado.
+        BigDecimal monto = normalizar(req.monto());
+        if (monto.signum() == 0) {
+            throw new ReglaDeNegocioException("El monto no puede ser cero");
+        }
+
         Aporte aporte = new Aporte(
                 actual.comoReferencia(),
-                normalizar(req.monto()),
+                monto,
                 LocalDate.now(reloj));
 
         // Una sola operacion atomica que ademas verifica grupo y estado. Si

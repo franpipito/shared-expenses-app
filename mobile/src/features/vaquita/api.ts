@@ -43,6 +43,19 @@ export async function traerPozoActivoFresco(): Promise<PozoRespuesta | null> {
   return (await pedir<PozoRespuesta | undefined>('/pozos/activo')) ?? null;
 }
 
+/**
+ * Todas las vaquitas del grupo, la mas nueva primero.
+ *
+ * Es lo que hace alcanzable una vaquita CERRADA. Sus gastos no salen en la
+ * lista del mes -- los filtra `sinPozo()` en el backend -- y `/pozos/activo`
+ * deja de devolverla apenas se cierra. Sin este listado, volver del viaje,
+ * cerrar la vaquita y despues ver que una cena tenia un cero de mas significaba
+ * que ese error quedaba para siempre.
+ */
+export function traerPozos(): Promise<PozoRespuesta[]> {
+  return pedir<PozoRespuesta[]>('/pozos');
+}
+
 export function crearPozo(pozo: CrearPozoRequest): Promise<PozoRespuesta> {
   return pedir<PozoRespuesta>('/pozos', { metodo: 'POST', cuerpo: pozo });
 }
