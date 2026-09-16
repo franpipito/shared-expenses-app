@@ -363,8 +363,25 @@ Dos conversiones declaradas a mano en `ConfiguracionMongo`, y las dos importan:
 - **Perfil `produccion`**: activa `application-produccion.properties` (apaga el
   log de SQL, sin stacktrace ni mensaje interno en los errores) y
   `ValidacionDeConfiguracion`, que **impide arrancar** con el secreto o el codigo
-  de invitacion de desarrollo. Verificado corriendo la imagen: sin `JWT_SECRETO`
-  el contenedor sale con codigo 1.
+  de invitacion de desarrollo.
+
+  **Y ahi hubo un bug que vale la pena tener presente.** Era un `@Component` con
+  `@Profile("produccion")` y los chequeos en el constructor, pero **nadie depende
+  de ese bean**: Spring lo creaba cuando le tocaba, y lo que le tocaba antes era
+  la cadena que termina en `mongoTemplate`. Con la URI apuntando a una base que
+  no existe -- justo el caso que el chequeo venia a cazar -- el driver de Mongo
+  tiraba primero y el guardian no hablaba nunca. O sea que solo funcionaba
+  cuando la URI ya era correcta, que es cuando menos falta hace.
+
+  Ahora lo invoca `ValidacionAlArrancar`, un
+  `ApplicationListener<ApplicationPreparedEvent>` registrado a mano en `main()`.
+  Ese evento se publica al final de `prepareContext()`: el `Environment` ya esta
+  completo y las definiciones de beans cargadas, pero `refresh()` todavia no
+  corrio, asi que **no se instancio ningun singleton**. Es el ultimo momento en
+  que se puede frenar el arranque sin que nada se haya conectado a ningun lado.
+  Verificado corriendo el jar: cada variable que falta da su propio mensaje, en
+  orden, y la URI de Atlas pegada tal cual (sin `/gastos`) se caza antes de
+  tocar la red.
 - **La base local escucha solo en 127.0.0.1**, no en todas las interfaces.
 
 ### Lo que NO aplica a esta arquitectura
@@ -444,7 +461,7 @@ y no contra una meta porque el objetivo declarado de la usuaria es **bajar**, no
 estar debajo de una linea. La banda de +-10% evita que cambie de humor por ruido.
 
 La logica vive en `CalculadorDeAnimo` y `Periodo`, dos clases puras sin Spring ni
-base, para que se puedan testear barato. Son el 100% de la cobertura de tests.
+base, para que se puedan testear barato.
 
 ### La cola offline, y por que obligo a una clave de idempotencia
 El alta de gasto **ya no espera a la red**: el gasto se escribe en un archivo del
@@ -588,22 +605,30 @@ borra cuando cambia la PERSONA, no cuando se muere el TOKEN.
   El default vuelve a PERSONAL: lo compartido se elige, nunca se asume.
 
 
-### El hueco de cobertura que queda: la capa de servicio
-Los 52 tests son todos de clases puras -- `Periodo`, `CalculadorDeAnimo`, `Pozo`,
-`PoliticaDeContrasenas`, `ValidacionDeConfiguracion`. **Los servicios no tienen
-un solo test unitario**, y ahi es donde viven las reglas que mas duelen si se
-rompen: la visibilidad de un PERSONAL, el centavo del reparto, que un gasto
-personal no pueda salir de la vaquita.
+### Los tests: dos capas, y que prueba cada una
+**82 tests**, y conviene saber por que estan partidos en dos clases de cosas.
 
-Hoy lo unico que las cubre es `scripts/smoke-test.ps1`, que necesita Mongo
-corriendo y la app levantada. Eso esta bien como prueba de integracion, pero es
-lenta, no corre en CI y no se puede pedir en una entrevista.
+**Clases puras** (`Periodo`, `CalculadorDeAnimo`, `Pozo`, `PoliticaDeContrasenas`,
+`ValidacionDeConfiguracion`): no tocan Spring ni la base, se construyen a mano y
+corren en milisegundos.
 
-Mockito 5.23 y AssertJ **ya estan en el classpath de test**, asi que un
-`GastoServicioTest` con los repositorios mockeados no necesita ninguna
-dependencia nueva. Es lo mas valioso que le queda por hacer al backend, y no se
-hizo todavia a proposito: es una tanda de trabajo que merece su propia sesion,
-no colarse en un merge.
+**Servicios con mocks** (`GastoServicioTest`, `PozoServicioTest`): los
+repositorios son objetos falsos de Mockito, programados con
+`when(...).thenReturn(...)`. Asi se ejercita la LOGICA sin que exista una base.
+Cubren lo que mas duele si se rompe: el centavo del reparto, que un PERSONAL
+ajeno de 404 y no 403, que editar sin `pagadoPorId` **conserve** el pagador en
+vez de apropiarselo, que un reintento con `clienteId` devuelva el mismo gasto, y
+que un PERSONAL no pueda salir de la vaquita.
+
+**Lo que un mock NO prueba**, y por eso el smoke test no sobra: que la consulta
+de Mongo este bien escrita, que el indice parcial unico exista de verdad, que
+`$push` sea atomico. Un mock programado para devolver `true` devuelve `true`
+aunque la query este al reves. Las dos capas se complementan: aca las reglas,
+alla que la base entienda lo que le pedimos.
+
+Un detalle que salio de escribirlos: los mocks de `save()` devuelven el
+documento **con id**, porque es lo que hace Mongo. Con id null, lo que se rompe
+tres lineas despues no tiene nada que ver con la regla que se estaba probando.
 
 ### Pendiente de decidir
 - **Cuando hacer obligatorio el `version` en el PUT.** Hoy es opcional: si el
@@ -866,6 +891,16 @@ con el lenguaje del producto.
       Lo que sigue sin probarse es **la app en un telefono**: la cola en modo
       avion, la direccion de la deuda en un compartido al 70/30, y la vaquita
       real con los dos aportes.
+
+      **Cerrando la sesion se hicieron las dos cosas que quedaban de codigo:**
+      - **`ValidacionDeConfiguracion` no corria nunca.** Ver la seccion de
+        endurecimiento: el guardian de produccion era un bean del que nadie
+        dependia, asi que Mongo explotaba primero. Encontrado arrancando el jar
+        con el perfil `produccion` y sin secretos, que es exactamente lo que va a
+        pasar la primera vez que Render levante el contenedor.
+      - **Los servicios tienen tests.** `GastoServicioTest` (21) y
+        `PozoServicioTest` (9) con los repositorios mockeados. **82 tests en
+        total**, contra 52. Ver "Los tests: dos capas" mas arriba.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a
