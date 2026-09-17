@@ -113,6 +113,11 @@ export default function Registro() {
             valor={codigo}
             alCambiar={setCodigo}
             autoComplete="off"
+            // Se compara letra por letra contra un valor fijo: si el teclado
+            // le pone mayuscula a la primera letra, deja de matchear y el
+            // registro rechaza un codigo que esta bien escrito. Ver el
+            // javadoc de `capitalizar` en Campo.tsx.
+            capitalizar={false}
             ayuda="Te lo pasa quien ya esta adentro."
           />
 

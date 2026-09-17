@@ -24,6 +24,19 @@ type Props = {
   autoComplete?: 'email' | 'current-password' | 'new-password' | 'name' | 'off';
   /** Texto chico debajo del campo: la regla ANTES de tipear, no despues de fallar. */
   ayuda?: string;
+  /**
+   * `false` para un campo que se compara tal cual, letra por letra, contra un
+   * valor fijo -- el codigo de invitacion es el caso real que lo justifico.
+   *
+   * BUG ENCONTRADO EN VIVO, mostrandole la app a Viole: con el default
+   * `sentences`, iOS le puso mayuscula a la primera letra del codigo
+   * (`nutriasYpollitos` -> `Nutrias...`) mientras lo tipeaba. El backend
+   * compara con `.equals()` exacto, asi que "El codigo de invitacion no es
+   * valido" salia con el codigo bien escrito. Nombre y contrasena no lo sufren
+   * porque ahi lo que se tipea Y lo que se compara son la misma cosa -- no hay
+   * un valor de referencia externo que el teclado pueda desalinear.
+   */
+  capitalizar?: boolean;
 };
 
 export function Campo({
@@ -34,6 +47,7 @@ export function Campo({
   teclado = 'default',
   autoComplete,
   ayuda,
+  capitalizar = true,
 }: Props) {
   return (
     <View style={estilos.campo}>
@@ -44,9 +58,10 @@ export function Campo({
         secureTextEntry={secreto}
         keyboardType={teclado}
         autoComplete={autoComplete}
-        // Sin esto iOS pone mayuscula al primer caracter del email y el login
-        // falla sin que se entienda por que.
-        autoCapitalize={teclado === 'email-address' ? 'none' : 'sentences'}
+        // Sin esto iOS pone mayuscula al primer caracter del email (o de
+        // cualquier campo con `capitalizar={false}`) y la comparacion contra
+        // el valor guardado falla sin que se entienda por que.
+        autoCapitalize={teclado === 'email-address' || !capitalizar ? 'none' : 'sentences'}
         autoCorrect={false}
         style={estilos.input}
         placeholderTextColor={colores.textoSuave}
