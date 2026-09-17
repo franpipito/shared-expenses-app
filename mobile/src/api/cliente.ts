@@ -12,7 +12,7 @@ import type { ErrorRespuesta } from './tipos';
  * corre en el telefono: `localhost` ahi es el telefono mismo, no la maquina de
  * desarrollo. Es el primer error clasico de una app con Expo.
  */
-export const URL_API = 'https://brave-wisdom-production-0be5.up.railway.app';
+export const URL_API = 'https://minutria-api.onrender.com';
 
 /**
  * Un error que vino de la API con un cuerpo que se pudo leer.
