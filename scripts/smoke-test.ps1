@@ -140,6 +140,40 @@ function RegistrarOEntrar($nombre, $email, $password) {
 }
 
 # ---------------------------------------------------------------------------
+# ANTES DE NADA: que el backend conteste.
+#
+# POR QUE EXISTE ESTE CHEQUEO. Sin el, un backend apagado se veia asi:
+#
+#   No se pudo registrar a Franco, y NO es porque ya exista. El backend dijo:
+#
+# ...y nada atras. El mensaje era tecnicamente correcto -- el backend no dijo
+# nada, porque no habia backend -- pero manda a buscar el problema al lugar
+# equivocado: uno se pone a mirar el registro, el codigo de invitacion o la
+# base, cuando lo unico que pasaba es que faltaba levantar la API.
+#
+# Un chequeo que falla tiene que decir QUE hay que hacer. Este corta en la
+# primera linea, con el comando adentro del mensaje.
+try {
+    $salud = Invoke-RestMethod -Uri "$base/actuator/health" -TimeoutSec 10
+    if ($salud.status -ne "UP") {
+        Write-Host "El backend contesta pero no esta sano: status = $($salud.status)" -ForegroundColor Red
+        exit 1
+    }
+} catch {
+    Write-Host ""
+    Write-Host "  No hay backend escuchando en $base" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Levantalo en otra terminal, en este orden:" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "      docker compose up -d                    # desde la RAIZ del repo"
+    Write-Host "      cd backend; .\mvnw.cmd spring-boot:run"
+    Write-Host ""
+    Write-Host "  El orden importa: sin Mongo, la API no arranca." -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
+
+# ---------------------------------------------------------------------------
 Titulo "0. Autenticacion"
 
 $sesionFranco = RegistrarOEntrar "Franco" "franco@local" $PASSWORD
