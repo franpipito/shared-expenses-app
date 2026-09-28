@@ -18,7 +18,23 @@ caracteres, no a ojo).
    dormido, espera 40-60 segundos y puede rechazarla por "no responde". Ver
    `docs/deploy.md`, paso 5.
 2. [ ] **Build en TestFlight** con todo lo de la v1.0 (registro abierto, borrado
-   de cuenta, ícono, splash, descripción opcional, sin iPad).
+   de cuenta, ícono, splash, descripción opcional, sin iPad). El build lo arma
+   EAS; subirlo a App Store Connect necesita el **Apple ID numérico de la app**
+   (`ascAppId`), que está en App Store Connect → la app → Información de la app
+   → "Apple ID". Dos formas:
+
+   ```
+   cd mobile; eas submit --platform ios --latest
+   ```
+
+   (interactivo: pregunta lo que falte), o dejarlo fijo en `mobile/eas.json`
+   para que `eas build --auto-submit` suba solo la próxima vez:
+
+   ```json
+   "submit": { "production": { "ios": { "ascAppId": "1234567890" } } }
+   ```
+
+   Después de subirlo, Apple lo procesa (10-30 minutos) y aparece en TestFlight.
 3. [ ] **Recorrido final en el teléfono** con ese build (sección 1).
 4. [ ] **Cuenta demo**: `.\scripts\crear-cuenta-demo.ps1`, **el mismo día que
    mandás a revisión** (los gastos se fechan relativos a hoy).
