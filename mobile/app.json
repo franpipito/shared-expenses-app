@@ -4,11 +4,14 @@
     "slug": "minutria",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icono.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.franpipito.minutria"
+      "bundleIdentifier": "com.franpipito.minutria",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +30,12 @@
       "expo-secure-store",
       "expo-font"
     ],
-    "scheme": "minutria"
+    "scheme": "minutria",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c427a513-22fb-47f7-b38a-3b7f09d0ed48"
+      }
+    }
   }
 }
