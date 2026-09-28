@@ -774,12 +774,16 @@ docker-compose.yml       MongoDB local
 render.yaml              el servicio de Render, versionado y no en un panel
 scripts/
   smoke-test.ps1         chequeos de la API contra el backend corriendo
+  crear-cuenta-demo.ps1  la cuenta del revisor de Apple, con gastos de ejemplo
+  capturas-app-store.ps1 capturas del telefono al tamano de App Store Connect
 docs/
   entrevista-usuaria.md  fuente de verdad de las decisiones de producto
   diseno.md              colores, tipografias, nutrias y estructura de carpetas
   deploy.md              runbook del deploy (Render + Atlas)
   vaquita.md             el pozo del viaje: modelo, invariante y lo descartado
   atajo-ios.md           atajo de Atajos que le pega a POST /gastos con Back Tap
+  app-store.md           todo lo de App Store Connect, y los pasos para mandar a review
+  soporte.md             la pagina de soporte publica (URL de soporte de la ficha)
   aprendizaje/           notas de Java y Spring para el autor
 
 ```
@@ -1021,6 +1025,48 @@ con el lenguaje del producto.
       - **Y ahora corren solos**, en cada push y cada PR
         (`.github/workflows/ci.yml`), con una Mongo de verdad para que
         `contextLoads` tambien entre. Ver "Los tests: dos capas" mas arriba.
+- [~] **6.11 — v1.0: lista para la App Store.** Sin producto nuevo: todo lo que
+      bloqueaba la revision de Apple, mas lo que encontro Viole usandola.
+
+      **Lo que exige Apple:**
+      - **Registro abierto**, con un grupo por cuenta. Arrastro la regla
+        `tienePareja`, el rate limit que cuenta exitos, y juntar a Franco y
+        Ella por `mongosh` en el smoke test. Ver "Registro abierto" arriba.
+      - **Borrar la cuenta desde la app** (guideline 5.1.1(v)), con lo que
+        promete la politica de privacidad. Ver "Borrar la cuenta" arriba.
+      - **Politica de privacidad** linkeada desde Ajustes, y **pagina de
+        soporte** en `docs/soporte.md`.
+      - **Sin iPad** (`supportsTablet: false`): ninguno de los dos lo usa, y con
+        iPad prendido habia que subir capturas de iPad y el revisor la probaba
+        en un layout que nadie miro nunca.
+
+      **Lo que la hace parecer una app y no un prototipo:** el icono de iOS
+      (procesado desde el original: recortado al cuadrado y con las esquinas
+      rellenadas, porque iOS pone su propia mascara), la splash con la nutria
+      contenta que se queda hasta que cargan las fuentes, y la ortografia de
+      toda la copy (51 textos de la app y 28 mensajes del backend).
+
+      **Lo que encontro Viole usandola:** la descripcion paso a ser opcional
+      -- ver su seccion -- y la app escribia "senial" en vez de "señal".
+
+      **Lo que quedo listo para mandar:** `docs/app-store.md` tiene todos los
+      textos de App Store Connect (verificados contra los limites de cada
+      campo), las respuestas de privacidad, las notas para el revisor y los
+      pasos en orden. `scripts/crear-cuenta-demo.ps1` arma la cuenta del
+      revisor con gastos creibles (la misma sirve para las capturas, asi no se
+      ven gastos reales), y es idempotente: cada gasto lleva un `clienteId`
+      fijo, la misma clave que protege la cola offline.
+
+      **Un bug propio que vale como leccion:** al agregar una seccion de este
+      archivo, el texto "El \`$\` posicional" paso por un `String.replace` de
+      JavaScript, donde `` $` `` significa "todo lo anterior al match", y se
+      inserto media copia del archivo en el medio. Llego a `main`. Cuando se
+      reemplaza texto que no controlas, va `split/join` o una funcion como
+      reemplazo, nunca un string.
+
+      Verificado: 121 tests, el smoke test (145 chequeos) contra Mongo local, y
+      el CI en verde en cada commit. Lo que falta es de un telefono y de App
+      Store Connect: ver los pasos de `docs/app-store.md`.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a

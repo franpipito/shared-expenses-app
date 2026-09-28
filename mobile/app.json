@@ -7,7 +7,7 @@
     "icon": "./assets/icono.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.franpipito.minutria",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
