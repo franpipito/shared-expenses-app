@@ -106,9 +106,19 @@ public class Gasto {
     private LocalDate fecha;
 
     /**
-     * Obligatoria por pedido de la usuaria: es "algo que me recuerde el momento".
-     * No es decorativa. Es lo que le permite distinguir despues un gasto evitable
-     * de uno que no lo era: "uber cumple guada" contra "uber a las 15hs".
+     * "Algo que me recuerde el momento": lo que permite distinguir despues un
+     * gasto evitable de uno que no lo era ("uber cumple guada" contra "uber a
+     * las 15hs").
+     *
+     * FUE OBLIGATORIA HASTA LA v1.0, y se hizo opcional despues de que Viole la
+     * usara de verdad: parada en el mostrador, tipear algo es el paso que mas
+     * frena, y muchas veces la categoria y el monto ya dicen todo ("cafe,
+     * $3.000"). Es el requisito duro del producto -- prefiere olvidarse un gasto
+     * antes que anotar lento -- ganandole a un campo que era util pero no
+     * imprescindible.
+     *
+     * Ausente es null, nunca "": una sola forma de decir "no tiene", en vez de
+     * dos que cada pantalla tendria que distinguir.
      */
     private String descripcion;
 

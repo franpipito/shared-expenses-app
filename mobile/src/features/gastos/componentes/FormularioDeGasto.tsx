@@ -311,7 +311,6 @@ export function FormularioDeGasto({
   const listo =
     montoValido &&
     categoriaId !== null &&
-    descripcion.trim() !== '' &&
     // Y nunca se guarda un compartido que pago el otro sin saber quien es el
     // otro. Es el cinturon ademas de los tirantes: si por algun camino que no
     // previmos `idDelOtro` sigue sin resolverse, preferimos un boton
@@ -328,7 +327,9 @@ export function FormularioDeGasto({
         // Editando se conserva la fecha original: corregir un monto no deberia
         // mover el gasto de dia, y menos de mes.
         fecha: inicial?.fecha ?? hoyLocal(),
-        descripcion: descripcion.trim(),
+        // Opcional. Vacia viaja ausente y el backend guarda null: editando, es
+        // tambien como se borra una descripcion que ya estaba.
+        descripcion: descripcion.trim() || undefined,
         // VAQUITA no es un tipo del backend: alla es un COMPARTIDO con pozoId.
         // El backend RECHAZA un PERSONAL con pozoId en vez de corregirlo, asi
         // que esta linea y la de pozoId tienen que moverse juntas.
@@ -448,11 +449,15 @@ export function FormularioDeGasto({
         </View>
 
         <View style={estilos.bloque}>
-          <Text style={estilos.etiqueta}>Descripcion</Text>
+          {/*
+            Opcional desde la v1.0, y la etiqueta lo dice: Viole la probo de
+            verdad y tipear era el paso que mas frenaba la carga en el mostrador.
+            Sin placeholder que invite a llenarla.
+          */}
+          <Text style={estilos.etiqueta}>Descripcion (opcional)</Text>
           <TextInput
             value={descripcion}
             onChangeText={setDescripcion}
-            placeholder="Algo que te recuerde el momento"
             placeholderTextColor={colores.textoSuave}
             maxLength={255}
             style={estilos.input}

@@ -58,7 +58,8 @@ export type GastoRespuesta = {
   deudaGenerada: number;
   /** yyyy-MM-dd */
   fecha: string;
-  descripcion: string;
+  /** Opcional desde la v1.0. Ausente es null, nunca "". */
+  descripcion: string | null;
   tipo: TipoGasto;
   esHormiga: boolean;
   categoria: CategoriaRespuesta;
@@ -83,7 +84,8 @@ export type GuardarGastoRequest = {
   categoriaId: string;
   /** yyyy-MM-dd. No puede ser futura. */
   fecha: string;
-  descripcion: string;
+  /** Opcional. Sin ella (o vacia) el backend guarda null. */
+  descripcion?: string;
   tipo: TipoGasto;
   /** Solo aplica a COMPARTIDO. Si falta, el backend asume 50. */
   porcentajePagador?: number;

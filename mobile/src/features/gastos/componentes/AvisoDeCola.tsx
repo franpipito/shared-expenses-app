@@ -61,7 +61,8 @@ export function AvisoDeCola() {
         <View key={p.clienteId} style={estilos.rechazado}>
           <Text style={estilos.tituloRechazado}>No se pudo guardar un gasto</Text>
           <Text style={estilos.bajada}>
-            {formatearMonto(p.gasto.monto)} · {p.gasto.descripcion}
+            {formatearMonto(p.gasto.monto)}
+            {p.gasto.descripcion ? ` · ${p.gasto.descripcion}` : ''}
           </Text>
           <Text style={estilos.motivo}>{p.error}</Text>
           {/*

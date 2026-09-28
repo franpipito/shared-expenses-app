@@ -56,9 +56,13 @@ export function FilaGasto({ gasto, idUsuarioActual, alTocar }: Props) {
   // El segundo renglon se arma con las partes que aportan algo y se une con un
   // separador. Encadenar los textos a mano deja "7 sept ·  · cafe" cuando alguna
   // parte falta, que es como se ven las listas mal hechas.
+  //
+  // Sin descripcion, la categoria sube a titulo y sale del segundo renglon: si
+  // no, "Cafe" apareceria dos veces en la misma fila.
+  const titulo = gasto.descripcion ?? gasto.categoria.nombre;
   const detalle = [
     formatearDia(gasto.fecha),
-    gasto.categoria.nombre,
+    gasto.descripcion ? gasto.categoria.nombre : null,
     compartido ? (loPagoElOtro ? `pago ${gasto.pagadoPor.nombre}` : 'compartido') : null,
   ]
     .filter(Boolean)
@@ -83,7 +87,7 @@ export function FilaGasto({ gasto, idUsuarioActual, alTocar }: Props) {
       accessibilityRole={alTocar ? 'button' : undefined}
       accessibilityHint={alTocar ? 'Abre el gasto para editarlo o borrarlo' : undefined}
       accessibilityLabel={
-        `${gasto.descripcion}, ${formatearMonto(gasto.monto)}, ${detalle}` +
+        `${titulo}, ${formatearMonto(gasto.monto)}, ${detalle}` +
         (gasto.esHormiga ? ', gasto evitable' : '') +
         (alTocar ? '. Tocar para editar.' : '')
       }
@@ -93,7 +97,7 @@ export function FilaGasto({ gasto, idUsuarioActual, alTocar }: Props) {
 
       <View style={estilos.texto}>
         <Text style={estilos.descripcion} numberOfLines={1}>
-          {gasto.descripcion}
+          {titulo}
         </Text>
         <Text style={estilos.detalle} numberOfLines={1}>
           {detalle}

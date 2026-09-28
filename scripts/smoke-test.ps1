@@ -488,9 +488,16 @@ EsperarValidacion { Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "
                                      descripcion = "invalido"; tipo = "PERSONAL" } } `
     "fecha" "fecha futura rechazada por @PastOrPresent"
 
-EsperarValidacion { Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"
-                                     descripcion = ""; tipo = "PERSONAL" } } `
-    "descripcion" "descripcion vacia rechazada por @NotBlank"
+# La descripcion es opcional desde la v1.0: sin ella el gasto entra, y vuelve
+# null (no ""). Se borra enseguida para no ensuciar los totales de abajo.
+$sinDescripcion = Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"
+                                   tipo = "PERSONAL" }
+Chequear ($null -eq $sinDescripcion.descripcion) "sin descripcion el gasto entra, y la descripcion vuelve null"
+$soloEspacios = Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"
+                                 descripcion = "   "; tipo = "PERSONAL" }
+Chequear ($null -eq $soloEspacios.descripcion) "solo espacios tambien se guarda como null"
+Invoke-RestMethod -Uri "$base/gastos/$($sinDescripcion.id)" -Method Delete -Headers $franco | Out-Null
+Invoke-RestMethod -Uri "$base/gastos/$($soloEspacios.id)" -Method Delete -Headers $franco | Out-Null
 
 EsperarValidacion { Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"
                                      descripcion = "x"; tipo = "COMPARTIDO"

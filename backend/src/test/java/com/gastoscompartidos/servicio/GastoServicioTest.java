@@ -261,6 +261,41 @@ class GastoServicioTest {
         }
     }
 
+    // ------------------------------------------------------------ descripcion
+
+    @Nested
+    @DisplayName("La descripcion es opcional")
+    class Descripcion {
+
+        @Test
+        @DisplayName("sin descripcion el gasto entra, y se guarda null")
+        void sinDescripcion() {
+            GastoRespuesta r = servicio.crear(conDescripcion(null));
+            assertThat(r.descripcion()).isNull();
+        }
+
+        @Test
+        @DisplayName("vacia o solo espacios tambien es null, no un texto vacio")
+        void soloEspacios() {
+            // Una sola forma de decir "no tiene": si "" y null convivieran, cada
+            // pantalla tendria que chequear las dos.
+            assertThat(servicio.crear(conDescripcion("")).descripcion()).isNull();
+            assertThat(servicio.crear(conDescripcion("   ")).descripcion()).isNull();
+        }
+
+        @Test
+        @DisplayName("con texto se guarda recortado")
+        void conTexto() {
+            assertThat(servicio.crear(conDescripcion("  uber a lo de mi vieja ")).descripcion())
+                    .isEqualTo("uber a lo de mi vieja");
+        }
+
+        private GuardarGastoRequest conDescripcion(String descripcion) {
+            return new GuardarGastoRequest(new BigDecimal("3000.00"), CAT, LocalDate.of(2026, 9, 6),
+                    descripcion, TipoGasto.PERSONAL, null, null, false, null, null, null);
+        }
+    }
+
     // ------------------------------------------------- quien borro su cuenta
 
     @Nested

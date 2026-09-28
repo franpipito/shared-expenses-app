@@ -96,7 +96,7 @@ public class GastoServicio {
                 montoPagadorDe(req, monto),
                 req.tipo(),
                 req.fecha(),
-                req.descripcion().trim(),
+                descripcionDe(req),
                 esHormiga(req),
                 pozoId,
                 req.clienteId());
@@ -170,7 +170,7 @@ public class GastoServicio {
         gasto.setMontoPagador(montoPagadorDe(req, monto));
         gasto.setTipo(req.tipo());
         gasto.setFecha(req.fecha());
-        gasto.setDescripcion(req.descripcion().trim());
+        gasto.setDescripcion(descripcionDe(req));
         gasto.setEsHormiga(esHormiga(req));
         // Se puede mover un gasto adentro o afuera de la vaquita editandolo.
         // Es la valvula de escape para el que se cargo al pozo sin querer, que
@@ -319,6 +319,15 @@ public class GastoServicio {
             throw new ReglaDeNegocioException("Ese usuario no es de tu grupo");
         }
         return otro.comoReferencia();
+    }
+
+    /**
+     * La descripcion es opcional: vacia o solo espacios se guarda como null, asi
+     * "no tiene descripcion" se dice de una sola forma. Ver Gasto.descripcion.
+     */
+    private static String descripcionDe(GuardarGastoRequest req) {
+        String d = req.descripcion();
+        return (d == null || d.isBlank()) ? null : d.trim();
     }
 
     /** Ausente o null significa "no es hormiga". */

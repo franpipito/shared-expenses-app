@@ -67,7 +67,8 @@ celular, y dijo explicitamente que prefiere olvidarse un gasto antes que anotar
 lento. Carga parada en el mostrador, esperando el pedido.
 
 **Tres campos y nada mas: categoria, monto, descripcion** (mas el toggle de
-hormiga). Cada campo extra que se le agregue al formulario se paga en abandono.
+hormiga), y desde la v1.0 la descripcion es opcional. Cada campo extra que se le
+agregue al formulario se paga en abandono.
 
 ### Las nutrias: el diferencial de producto
 
@@ -338,10 +339,27 @@ Decisiones que vale la pena poder explicar:
 - **Sin nutria en la pantalla de borrado.** Una nutria triste ahi seria usar al
   personaje para hacer sentir culpa a quien se quiere ir.
 
-### `descripcion` es obligatoria
+### `descripcion` es opcional (desde la v1.0)
 La usuaria la eligio como uno de sus tres campos: "algo que me recuerde el
 momento". Es lo que le permite distinguir despues el gasto evitable del que no lo
-era. No es decorativa.
+era.
+
+**Fue obligatoria hasta que Viole uso la app de verdad.** Parada en el mostrador,
+tipear era el paso que mas frenaba, y muchas veces categoria y monto ya dicen todo
+("cafe, $3.000"). Gano el requisito duro -- prefiere olvidarse un gasto antes que
+anotar lento -- sobre un campo util pero no imprescindible. Es la clase de
+decision que solo sale de probar con la persona, no de la entrevista.
+
+Como quedo:
+- **Ausente es `null`, nunca `""`.** `GastoServicio.descripcionDe` convierte vacia
+  o solo espacios en null: una sola forma de decir "no tiene".
+- **En la lista, sin descripcion la categoria sube a titulo** y sale del segundo
+  renglon, para no decir "Cafe" dos veces en la misma fila.
+- **La etiqueta del formulario dice "(opcional)" y no tiene placeholder**: el
+  "Algo que te recuerde el momento" invitaba a llenarla.
+- **Backend antes que app, otra vez**: la app nueva manda gastos sin descripcion,
+  y el backend viejo los rechazaba con `@NotBlank`. Con la cola offline eso seria
+  peor que un error: el gasto quedaria marcado como rechazado en el telefono.
 
 ### Concurrencia: bloqueo optimista con `@Version`
 `Gasto` tiene un campo `@Version`. Hibernate agrega `AND version = ?` a cada

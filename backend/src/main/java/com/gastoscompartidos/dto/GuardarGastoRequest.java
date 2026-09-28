@@ -61,7 +61,8 @@ public record GuardarGastoRequest(
         @PastOrPresent(message = "la fecha no puede ser futura")
         LocalDate fecha,
 
-        @NotBlank(message = "la descripcion es obligatoria")
+        // Opcional desde la v1.0: ver el javadoc de Gasto.descripcion. Vacia o
+        // solo espacios se guarda como null (GastoServicio.descripcionDe).
         @Size(max = 255, message = "la descripcion no puede pasar de 255 caracteres")
         String descripcion,
 

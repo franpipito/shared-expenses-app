@@ -83,7 +83,7 @@ export default function EditarGasto() {
   function confirmarBorrado() {
     Alert.alert(
       'Borrar este gasto',
-      `${gasto!.descripcion}. No se puede deshacer.`,
+      gasto!.descripcion ? `${gasto!.descripcion}. No se puede deshacer.` : 'No se puede deshacer.',
       [
         { text: 'No', style: 'cancel' },
         {
