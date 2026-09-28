@@ -28,9 +28,11 @@ import { fuentes } from '../src/tema/tipografia';
  * falta que alguien corriera un curl por ella. Una app de dos usuarios donde uno
  * de los dos no puede entrar no esta terminada.
  *
- * El codigo de invitacion se pide aca y no se esconde: el registro esta cerrado
- * a proposito porque el backend es publico, y quien llega a esta pantalla tiene
- * que saber que necesita ese dato. Ocultarlo hasta que falle seria peor.
+ * Hasta la v1.0 pedia un codigo de invitacion, porque habia un unico grupo y
+ * el codigo decidia quien entraba. Se saco para publicar en la App Store: cada
+ * cuenta nueva arranca con su propio grupo, de un integrante, y la app funciona
+ * como registro personal hasta que se pueda sumar a alguien (v1.1). Por eso la
+ * bienvenida habla en singular y muestra una sola nutria.
  *
  * El minimo de 12 caracteres se dice ANTES de tipear. Es la recomendacion de
  * NIST SP 800-63B que ya sigue el backend: la regla se muestra de entrada, en
@@ -44,7 +46,6 @@ export default function Registro() {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [codigo, setCodigo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -52,8 +53,7 @@ export default function Registro() {
   // el unico que puede garantizarla. Esto es solo para no habilitar el boton
   // cuando ya se sabe que va a fallar: ahorra un viaje de ida y vuelta, no
   // reemplaza nada.
-  const listo =
-    nombre.trim() !== '' && email.trim() !== '' && password.length >= 12 && codigo.trim() !== '';
+  const listo = nombre.trim() !== '' && email.trim() !== '' && password.length >= 12;
 
   async function alRegistrarse() {
     setError(null);
@@ -63,7 +63,6 @@ export default function Registro() {
         nombre: nombre.trim(),
         email: email.trim(),
         password,
-        codigoInvitacion: codigo.trim(),
       });
       router.replace('/resumen');
     } catch (e) {
@@ -86,9 +85,9 @@ export default function Registro() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={estilos.encabezado}>
-          <Nutria animo="NOSOTROS" tamano={120} />
+          <Nutria animo="CONTENTA" tamano={120} />
           <Text style={estilos.marca}>Sumate</Text>
-          <Text style={estilos.bajada}>La nutria los espera a los dos.</Text>
+          <Text style={estilos.bajada}>Anota lo que gastas. La nutria te acompaña.</Text>
         </View>
 
         <View style={estilos.campos}>
@@ -107,18 +106,6 @@ export default function Registro() {
             secreto
             autoComplete="new-password"
             ayuda="Minimo 12 caracteres. Una frase que te acuerdes sirve mejor que algo corto y raro."
-          />
-          <Campo
-            etiqueta="Codigo de invitacion"
-            valor={codigo}
-            alCambiar={setCodigo}
-            autoComplete="off"
-            // Se compara letra por letra contra un valor fijo: si el teclado
-            // le pone mayuscula a la primera letra, deja de matchear y el
-            // registro rechaza un codigo que esta bien escrito. Ver el
-            // javadoc de `capitalizar` en Campo.tsx.
-            capitalizar={false}
-            ayuda="Te lo pasa quien ya esta adentro."
           />
 
           {error ? <Text style={estilos.error}>{error}</Text> : null}

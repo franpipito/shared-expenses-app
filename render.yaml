@@ -37,7 +37,7 @@ services:
       - key: SPRING_PROFILES_ACTIVE
         value: produccion
 
-      # Los tres secretos. `sync: false` = "pedirlos en el panel, no guardarlos
+      # Los dos secretos. `sync: false` = "pedirlos en el panel, no guardarlos
       # aca". Render los marca como pendientes al crear el blueprint.
       #
       # MONGO_URI tiene que terminar con el nombre de la base (`/gastos`): la
@@ -46,8 +46,6 @@ services:
       - key: MONGO_URI
         sync: false
       - key: JWT_SECRETO
-        sync: false
-      - key: CODIGO_INVITACION
         sync: false
 
       # ZONA_HORARIA no se declara: el default de la app ya es

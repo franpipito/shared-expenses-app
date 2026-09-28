@@ -8,6 +8,7 @@ import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Aporte;
 import com.gastoscompartidos.modelo.EstadoPozo;
 import com.gastoscompartidos.modelo.Pozo;
+import com.gastoscompartidos.modelo.ReferenciaUsuario;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
 import com.gastoscompartidos.repositorio.PozoRepositorio;
@@ -26,6 +27,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -81,6 +83,9 @@ class PozoServicioTest {
 
         when(usuarioActual.requerido()).thenReturn(franco);
         when(usuarios.findByGrupoIdOrderByIdAsc(GRUPO)).thenReturn(List.of(franco, viole));
+        // Metodo default de la interfaz: el mock no corre su cuerpo. Ver la
+        // nota en GastoServicioTest.
+        when(usuarios.tienePareja(GRUPO)).thenReturn(true);
         // save() devuelve el documento CON id, que es lo que hace Mongo. Sin
         // eso el pozo recien creado sale con id null y lo que se rompe despues
         // no tiene nada que ver con el bug: la consulta de lo gastado recibe
@@ -149,6 +154,47 @@ class PozoServicioTest {
                     "Bariloche", null, LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 1))))
                     .isInstanceOf(ReglaDeNegocioException.class)
                     .hasMessageContaining("no puede ser anterior");
+        }
+
+        @Test
+        @DisplayName("con un solo integrante en el grupo no se puede abrir")
+        void sinPareja() {
+            when(usuarios.tienePareja(GRUPO)).thenReturn(false);
+
+            assertThatThrownBy(() -> servicio.crear(
+                    new CrearPozoRequest("Bariloche", null, null, null)))
+                    .isInstanceOf(ReglaDeNegocioException.class)
+                    .hasMessageContaining("la otra persona tiene que estar en tu grupo");
+
+            verify(pozos, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Quien borro su cuenta")
+    class ExIntegrante {
+
+        @Test
+        @DisplayName("sus aportes siguen en el desglose por persona, con el nombre anonimizado")
+        void aportesDeQuienSeFue() {
+            // Viole y Franco en el grupo; un tercer id que ya no es integrante
+            // (borro su cuenta) con un aporte que quedo en el pozo. Sin esto,
+            // su plata sumaba en "aportado" pero no aparecia en ninguna fila.
+            Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
+            var ex = new ReferenciaUsuario("u-ex", "Cuenta eliminada");
+            escribirCampo(p, "aportes", new ArrayList<>(List.of(
+                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte(ex, new BigDecimal("300000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte(ex, new BigDecimal("100000.00"), LocalDate.of(2026, 9, 2)))));
+            when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+
+            var porPersona = servicio.listar().get(0).porPersona();
+
+            assertThat(porPersona).extracting("nombre")
+                    .containsExactly("Franco", "Viole", "Cuenta eliminada");
+            // Una sola fila por persona aunque haya aportado dos veces.
+            assertThat(porPersona.get(2).total()).isEqualByComparingTo("400000.00");
         }
     }
 

@@ -5,10 +5,14 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * @param codigoInvitacion el backend va a estar publico en Railway. Sin este
- *                         codigo, cualquiera que encuentre la URL se crearia una
- *                         cuenta. Sale de una variable de entorno, asi que se
- *                         puede rotar sin tocar codigo.
+ * ACA HABIA UN `codigoInvitacion`, y se saco para la v1.0 de la App Store: una
+ * app publicada tiene que dejar registrarse a cualquiera que la baje. Lo que
+ * cuidaba el codigo -- que un desconocido no se cree una cuenta en el grupo de
+ * Viole y Franco -- ahora lo cuida otra cosa: cada registro crea su propio
+ * grupo (ver AutenticacionServicio).
+ *
+ * Un cliente viejo que todavia lo mande no rompe nada: Jackson ignora los
+ * campos que el record no declara.
  */
 public record RegistroRequest(
 
@@ -27,9 +31,6 @@ public record RegistroRequest(
         // equivalentes.
         @NotBlank(message = "la contrasena es obligatoria")
         @Size(min = 8, max = 72, message = "la contrasena tiene que tener entre 8 y 72 caracteres")
-        String password,
-
-        @NotBlank(message = "hace falta el codigo de invitacion")
-        String codigoInvitacion
+        String password
 ) {
 }

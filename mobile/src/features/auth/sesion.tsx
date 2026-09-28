@@ -36,22 +36,20 @@ type Sesion = {
   entrar: (email: string, password: string) => Promise<void>;
   registrarse: (datos: DatosDeRegistro) => Promise<void>;
   salir: (motivo?: MotivoDeSalida) => Promise<void>;
+  borrarCuenta: (password: string) => Promise<void>;
 };
 
 const ContextoDeSesion = createContext<Sesion | null>(null);
 
 /**
- * Lo que hace falta para crear una cuenta.
- *
- * El `codigoInvitacion` no es ceremonia: el backend va a estar publico, y sin el
- * cualquiera que encuentre la URL se crearia una cuenta. Franco se lo pasa a
- * Viole por fuera de la app.
+ * Lo que hace falta para crear una cuenta. Hasta la v1.0 llevaba tambien un
+ * codigo de invitacion; el registro ahora es abierto y cada cuenta nueva crea su
+ * propio grupo.
  */
 export type DatosDeRegistro = {
   nombre: string;
   email: string;
   password: string;
-  codigoInvitacion: string;
 };
 
 /**
@@ -67,8 +65,13 @@ export type DatosDeRegistro = {
  * cuando la app lleva rato sin abrirse -- que es cuando mas gastos sin mandar
  * puede haber. Sin esto, abrir la app en el hotel al volver del viaje tiraba los
  * gastos cargados sin senial, en silencio y antes de que nadie los viera.
+ *
+ * - `'cuenta-borrada'`: la persona borro su cuenta. Se limpia todo, igual que
+ *   en la manual: los gastos que quedaron en la cola eran de una cuenta que ya
+ *   no existe, y mandarlos con el token de quien entre despues los pondria a su
+ *   nombre.
  */
-export type MotivoDeSalida = 'manual' | 'token-vencido';
+export type MotivoDeSalida = 'manual' | 'token-vencido' | 'cuenta-borrada';
 
 export function SesionProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<UsuarioGuardado | null>(null);
@@ -115,14 +118,14 @@ export function SesionProvider({ children }: { children: ReactNode }) {
    * retipear la contrasena que acabas de elegir es friccion pura, justo en el
    * momento mas fragil -- el de alguien que todavia no vio nada de la app.
    *
-   * El primero que se registra crea el grupo; el segundo se suma; un tercero se
-   * rechaza, porque el modelo de reparto asume dos integrantes.
+   * Cada registro crea su propio grupo, de un solo integrante: sumarse al de
+   * otra persona llega en la v1.1, con un codigo por grupo.
    *
    * La duplicacion con `entrar` es de tres lineas y a proposito: son dos flujos
    * distintos que hoy comparten la forma de la respuesta. Extraerlas ataria el
    * registro al login por una casualidad.
    *
-   * Recibe un objeto y no cuatro parametros sueltos porque los cuatro son
+   * Recibe un objeto y no tres parametros sueltos porque los tres son
    * `string`: con posicionales, cambiar el email por la contrasena compila
    * igual y se descubre recien en runtime.
    */
@@ -148,7 +151,7 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     // El catalogo se limpia siempre: son las categorias del grupo de quien
     // estaba adentro, y volver a pedirlas no cuesta nada.
     //
-    // LA COLA NO, y solo se borra si la salida fue manual. La cola es del grupo
+    // LA COLA NO SIEMPRE: se conserva solo si el token vencio. La cola es del grupo
     // de quien estaba adentro: si quedan gastos pendientes y despues entra la
     // otra persona en el mismo telefono, el sincronizador los mandaria con SU
     // token y quedarian a su nombre. Pero un 401 NO es un cambio de persona --
@@ -159,7 +162,9 @@ export function SesionProvider({ children }: { children: ReactNode }) {
       borrarToken(),
       borrarUsuario(),
       borrarCatalogo(),
-      ...(motivo === 'manual' ? [borrarCola()] : []),
+      // La excepcion es el token vencido, no la regla: cualquier motivo nuevo
+      // que se agregue borra la cola salvo que alguien decida lo contrario.
+      ...(motivo === 'token-vencido' ? [] : [borrarCola()]),
     ]);
     fijarToken(null);
     setUsuario(null);
@@ -187,9 +192,28 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     return () => cuandoSePierdaLaSesion(null);
   }, [salir]);
 
+  /**
+   * Borrar la cuenta y salir.
+   *
+   * La contrasena la verifica el backend. Si esta mal devuelve 400, no 401, y
+   * es a proposito: un 401 con token hace que `cliente.ts` cierre la sesion
+   * sola (asi detecta un token vencido), y equivocarse al confirmar no puede
+   * sacarte de la app.
+   *
+   * Si el POST falla, la excepcion sube a la pantalla y no se sale: la cuenta
+   * sigue existiendo, y la persona tiene que ver por que no se borro.
+   */
+  const borrarCuenta = useCallback(
+    async (password: string) => {
+      await pedir<void>('/auth/borrar-cuenta', { metodo: 'POST', cuerpo: { password } });
+      await salir('cuenta-borrada');
+    },
+    [salir],
+  );
+
   const valor = useMemo<Sesion>(
-    () => ({ usuario, cargando, entrar, registrarse, salir }),
-    [usuario, cargando, entrar, registrarse, salir],
+    () => ({ usuario, cargando, entrar, registrarse, salir, borrarCuenta }),
+    [usuario, cargando, entrar, registrarse, salir, borrarCuenta],
   );
 
   return <ContextoDeSesion.Provider value={valor}>{children}</ContextoDeSesion.Provider>;

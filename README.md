@@ -40,12 +40,11 @@ las variables de entorno tienen prioridad. Variables relevantes:
 |----------------------|----------------------------------------------------|
 | `MONGO_URI`          | `mongodb://gastos:gastos_local@localhost:27017/...` |
 | `JWT_SECRETO`        | uno de desarrollo, publicado en el repo            |
-| `CODIGO_INVITACION`  | `nutrias`                                          |
 | `ZONA_HORARIA`       | `America/Argentina/Buenos_Aires`                   |
 | `JWT_DURACION_DIAS`  | `30`                                               |
 
 Con el perfil `produccion` activo, `ValidacionDeConfiguracion` **impide que la
-app arranque** si `JWT_SECRETO`, `CODIGO_INVITACION` o `MONGO_URI` quedaron en
+app arranque** si `JWT_SECRETO` o `MONGO_URI` quedaron en
 sus valores de desarrollo.
 
 ## Modelo de datos

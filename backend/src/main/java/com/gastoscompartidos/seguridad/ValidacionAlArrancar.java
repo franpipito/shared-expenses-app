@@ -59,12 +59,11 @@ public class ValidacionAlArrancar implements ApplicationListener<ApplicationPrep
         // el objeto no se guarda en ningun lado -- si no tira, la app arranca.
         new ValidacionDeConfiguracion(
                 requerida(entorno, "app.jwt.secreto"),
-                requerida(entorno, "app.registro.codigo-invitacion"),
                 requerida(entorno, "spring.mongodb.uri"));
     }
 
     /**
-     * Las tres tienen default en `application.properties`, asi que en la practica
+     * Las dos tienen default en `application.properties`, asi que en la practica
      * nunca faltan -- y si alguien los borrara, un null aca daria un
      * NullPointerException opaco en vez de decir que propiedad falta.
      */

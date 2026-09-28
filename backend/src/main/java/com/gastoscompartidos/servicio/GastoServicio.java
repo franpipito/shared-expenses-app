@@ -9,6 +9,7 @@ import com.gastoscompartidos.modelo.EstadoPozo;
 import com.gastoscompartidos.modelo.Gasto;
 import com.gastoscompartidos.modelo.Pozo;
 import com.gastoscompartidos.modelo.ReferenciaCategoria;
+import com.gastoscompartidos.modelo.ReferenciaUsuario;
 import com.gastoscompartidos.modelo.TipoGasto;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.CategoriaRepositorio;
@@ -77,6 +78,9 @@ public class GastoServicio {
 
     public GastoRespuesta crear(GuardarGastoRequest req) {
         Usuario actual = usuarioActual.requerido();
+        if (req.tipo() == TipoGasto.COMPARTIDO) {
+            exigirPareja(actual);
+        }
         Categoria categoria = buscarCategoria(req.categoriaId());
         Usuario pagador = resolverPagador(req, actual);
 
@@ -150,10 +154,18 @@ public class GastoServicio {
             throw new OptimisticLockingFailureException("version desactualizada");
         }
 
+        // Solo se exige pareja para VOLVER compartido un gasto personal. Un
+        // COMPARTIDO que ya existia se tiene que poder seguir corrigiendo aunque
+        // el grupo haya quedado de uno (la otra persona borro su cuenta): si no,
+        // un error de tipeo en el historial quedaria para siempre.
+        if (req.tipo() == TipoGasto.COMPARTIDO && gasto.getTipo() == TipoGasto.PERSONAL) {
+            exigirPareja(actual);
+        }
+
         BigDecimal monto = normalizar(req.monto());
 
         gasto.setCategoria(referencia(buscarCategoria(req.categoriaId())));
-        gasto.setPagadoPor(resolverPagadorAlEditar(req, actual, gasto).comoReferencia());
+        gasto.setPagadoPor(resolverPagadorAlEditar(req, actual, gasto));
         gasto.setMonto(monto);
         gasto.setMontoPagador(montoPagadorDe(req, monto));
         gasto.setTipo(req.tipo());
@@ -200,6 +212,18 @@ public class GastoServicio {
     private Gasto buscarVisible(String id, Usuario actual) {
         return gastos.buscarVisiblePorId(id, actual.getGrupoId(), actual.getId())
                 .orElseThrow(() -> new RecursoNoEncontradoException("No existe el gasto " + id));
+    }
+
+    /**
+     * Sin la otra persona en el grupo, un COMPARTIDO generaria una deuda con
+     * nadie. La app ni muestra la opcion, pero la regla vive aca: ocultar un
+     * chip no es una regla.
+     */
+    private void exigirPareja(Usuario actual) {
+        if (!usuarios.tienePareja(actual.getGrupoId())) {
+            throw new ReglaDeNegocioException(
+                    "Para cargar un gasto compartido, la otra persona tiene que estar en tu grupo");
+        }
     }
 
     private Categoria buscarCategoria(String id) {
@@ -267,7 +291,7 @@ public class GastoServicio {
      *  2. Un gasto solo puede volverse PERSONAL si ya era tuyo. Hacer privado
      *     algo ajeno es borrarselo a la otra persona sin avisarle.
      */
-    private Usuario resolverPagadorAlEditar(GuardarGastoRequest req, Usuario actual, Gasto gasto) {
+    private ReferenciaUsuario resolverPagadorAlEditar(GuardarGastoRequest req, Usuario actual, Gasto gasto) {
         String pagadorActual = gasto.getPagadoPor().usuarioId();
         String pedido = (req.pagadoPorId() != null) ? req.pagadoPorId() : pagadorActual;
 
@@ -277,7 +301,16 @@ public class GastoServicio {
         }
 
         if (pedido.equals(actual.getId())) {
-            return actual;
+            return actual.comoReferencia();
+        }
+
+        // Si el pagador no cambia, se conserva el SNAPSHOT que ya tenia, sin ir
+        // a buscar al usuario. No es una optimizacion: si esa persona borro su
+        // cuenta, ya no existe, y buscarla tiraba "No existe el usuario" -- o
+        // sea que quien quedo no podia corregir ni un tipeo de su historial.
+        // Conservar el snapshot mantiene tambien el "Cuenta eliminada".
+        if (pedido.equals(pagadorActual)) {
+            return gasto.getPagadoPor();
         }
 
         Usuario otro = usuarios.findById(pedido)
@@ -285,7 +318,7 @@ public class GastoServicio {
         if (!otro.getGrupoId().equals(actual.getGrupoId())) {
             throw new ReglaDeNegocioException("Ese usuario no es de tu grupo");
         }
-        return otro;
+        return otro.comoReferencia();
     }
 
     /** Ausente o null significa "no es hormiga". */

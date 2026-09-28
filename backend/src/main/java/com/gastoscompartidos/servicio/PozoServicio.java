@@ -11,6 +11,7 @@ import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Aporte;
 import com.gastoscompartidos.modelo.EstadoPozo;
 import com.gastoscompartidos.modelo.Pozo;
+import com.gastoscompartidos.modelo.ReferenciaUsuario;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
 import com.gastoscompartidos.repositorio.PozoRepositorio;
@@ -23,8 +24,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * La vaquita: abrir un pozo, aportarle plata, cerrarlo y leer sus numeros.
@@ -67,6 +73,15 @@ public class PozoServicio {
 
     public PozoRespuesta crear(CrearPozoRequest req) {
         Usuario actual = usuarioActual.requerido();
+
+        // Una vaquita es plata de los dos. Con un solo integrante no hay a quien
+        // aportarle ni con quien repartir. Se chequea al ABRIR y no al aportar:
+        // si la otra persona borra su cuenta con una vaquita abierta, la que
+        // queda tiene que poder seguir usandola y cerrarla.
+        if (!usuarios.tienePareja(actual.getGrupoId())) {
+            throw new ReglaDeNegocioException(
+                    "Para abrir una vaquita, la otra persona tiene que estar en tu grupo");
+        }
 
         if (req.desde() != null && req.hasta() != null && req.hasta().isBefore(req.desde())) {
             throw new ReglaDeNegocioException("La fecha de fin no puede ser anterior a la de inicio");
@@ -232,12 +247,34 @@ public class PozoServicio {
      *
      * Se listan los dos y no solo los que aportaron: "Viole $0" es informacion
      * util -- es justamente lo que hay que mirar antes de salir de viaje.
+     *
+     * Y despues de los integrantes, quien aporto y YA NO ESTA en el grupo:
+     * alguien que borro su cuenta. Sin esto su aporte seguiria sumando en el
+     * total pero desapareceria del desglose, y "aportado" no cerraria contra la
+     * suma de las personas. Sale con el nombre del snapshot del aporte, que el
+     * borrado deja en "Cuenta eliminada".
      */
     private List<TotalPorPersona> totalesPorPersona(Pozo pozo) {
-        return usuarios.findByGrupoIdOrderByIdAsc(pozo.getGrupoId()).stream()
+        List<Usuario> integrantes = usuarios.findByGrupoIdOrderByIdAsc(pozo.getGrupoId());
+        Set<String> ids = integrantes.stream().map(Usuario::getId).collect(Collectors.toSet());
+
+        Stream<TotalPorPersona> actuales = integrantes.stream()
                 .map(u -> new TotalPorPersona(
-                        u.getId(), u.getNombre(), pozo.aportadoPor(u.getId())))
-                .toList();
+                        u.getId(), u.getNombre(), pozo.aportadoPor(u.getId())));
+
+        // LinkedHashMap para quedarse con UNA entrada por persona, en el orden
+        // de su primer aporte.
+        Map<String, ReferenciaUsuario> exIntegrantes = new LinkedHashMap<>();
+        pozo.getAportes().stream()
+                .map(Aporte::usuario)
+                .filter(u -> !ids.contains(u.usuarioId()))
+                .forEach(u -> exIntegrantes.putIfAbsent(u.usuarioId(), u));
+
+        Stream<TotalPorPersona> quienesSeFueron = exIntegrantes.values().stream()
+                .map(u -> new TotalPorPersona(
+                        u.usuarioId(), u.nombre(), pozo.aportadoPor(u.usuarioId())));
+
+        return Stream.concat(actuales, quienesSeFueron).toList();
     }
 
     /** El cliente podria mandar 3 decimales. Los llevamos a 2 en el borde. */

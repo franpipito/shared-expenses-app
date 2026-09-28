@@ -1,9 +1,11 @@
 package com.gastoscompartidos.controlador;
 
+import com.gastoscompartidos.dto.BorrarCuentaRequest;
 import com.gastoscompartidos.dto.LoginRequest;
 import com.gastoscompartidos.dto.RegistroRequest;
 import com.gastoscompartidos.dto.TokenRespuesta;
 import com.gastoscompartidos.servicio.AutenticacionServicio;
+import com.gastoscompartidos.servicio.CuentaServicio;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -22,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AutenticacionControlador {
 
     private final AutenticacionServicio servicio;
+    private final CuentaServicio cuentas;
 
-    public AutenticacionControlador(AutenticacionServicio servicio) {
+    public AutenticacionControlador(AutenticacionServicio servicio, CuentaServicio cuentas) {
         this.servicio = servicio;
+        this.cuentas = cuentas;
     }
 
     /**
@@ -57,6 +61,22 @@ public class AutenticacionControlador {
     @PostMapping("/cerrar-sesiones")
     public TokenRespuesta cerrarSesiones() {
         return servicio.cerrarOtrasSesiones();
+    }
+
+    /**
+     * POST /auth/borrar-cuenta
+     *
+     * POST y no DELETE, y es una decision: hace falta mandar la contrasena en el
+     * cuerpo, y un cuerpo en un DELETE no tiene semantica definida en HTTP --
+     * hay proxies y clientes que lo descartan. Ademas queda al lado de
+     * `cerrar-sesiones`, que es la otra accion sobre la propia cuenta.
+     *
+     * 204: no hay nada que devolver, la cuenta ya no existe.
+     */
+    @PostMapping("/borrar-cuenta")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void borrarCuenta(@Valid @RequestBody BorrarCuentaRequest req) {
+        cuentas.borrar(req);
     }
 
     private String ipDe(HttpServletRequest http) {

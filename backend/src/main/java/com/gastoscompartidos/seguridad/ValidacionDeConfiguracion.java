@@ -6,7 +6,10 @@ package com.gastoscompartidos.seguridad;
  * El escenario que evita es concreto: `application.properties` trae defaults
  * comodos para trabajar en local, y estan **a la vista en un repo publico**.
  * Quien lea el secreto del JWT puede firmar tokens validos para cualquier
- * usuario; quien lea el codigo de invitacion puede registrarse.
+ * usuario.
+ *
+ * (Hasta la v1.0 tambien chequeaba que CODIGO_INVITACION no fuera el de
+ * desarrollo. El registro ahora es abierto, asi que no hay codigo que cuidar.)
  *
  * Si esos defaults llegaran a produccion, la app funcionaria perfecto y estaria
  * completamente abierta, sin ninguna senial de que algo anda mal. Fallar al
@@ -22,13 +25,13 @@ package com.gastoscompartidos.seguridad;
  * Ahora la invoca `ValidacionAlArrancar`, un listener que corre antes de que
  * exista un solo bean. Ahi esta contada la historia entera.
  *
- * Queda como una clase pura, sin Spring: recibe tres strings y tira o no tira.
+ * Queda como una clase pura, sin Spring: recibe dos strings y tira o no tira.
  * Por eso `ValidacionDeConfiguracionTest` la puede ejercitar en milisegundos,
  * igual que `CalculadorDeAnimoTest` y `PeriodoTest`.
  */
 public class ValidacionDeConfiguracion {
 
-    public ValidacionDeConfiguracion(String secretoJwt, String codigoInvitacion, String mongoUri) {
+    public ValidacionDeConfiguracion(String secretoJwt, String mongoUri) {
 
         if (secretoJwt.contains("NO-USAR-EN-PRODUCCION")) {
             throw new IllegalStateException("""
@@ -36,12 +39,6 @@ public class ValidacionDeConfiguracion {
                     La app esta usando el secreto de desarrollo, que esta publicado en el repo:
                     cualquiera podria firmar tokens validos para cualquier usuario.
                     Genera uno con: openssl rand -base64 48""");
-        }
-
-        if ("nutrias".equals(codigoInvitacion)) {
-            throw new IllegalStateException("""
-                    Falta la variable de entorno CODIGO_INVITACION.
-                    El codigo de desarrollo esta en el repo, asi que cualquiera podria registrarse.""");
         }
 
         // ACA HABIA UN CHEQUEO DE ddl-auto, que con Postgres impedia que

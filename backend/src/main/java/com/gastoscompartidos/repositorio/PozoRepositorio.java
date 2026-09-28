@@ -43,4 +43,7 @@ public interface PozoRepositorio extends MongoRepository<Pozo, String>, PozoCons
      * sesion 6.9 agrego a proposito -- era inalcanzable en la practica.
      */
     List<Pozo> findByGrupoIdOrderByCreadoEnDesc(String grupoId);
+
+    /** Borrado de cuenta del ultimo integrante: se va el grupo entero. */
+    long deleteByGrupoId(String grupoId);
 }

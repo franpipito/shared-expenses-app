@@ -81,4 +81,14 @@ public interface GastoConsultas {
 
     /** Cuanto se gasto del pozo. Es el lado de los debitos del invariante. */
     BigDecimal sumarDelPozo(String pozoId);
+
+    /** Borrado de cuenta: los PERSONAL de esa persona. Devuelve cuantos borro. */
+    long borrarPersonalesDe(String grupoId, String usuarioId);
+
+    /**
+     * Borrado de cuenta: reemplaza el nombre del pagador en los gastos que pago
+     * esa persona. Los gastos quedan -- son el historial de la otra -- pero sin
+     * su nombre. Devuelve cuantos toco.
+     */
+    long anonimizarPagador(String grupoId, String usuarioId, String nombre);
 }

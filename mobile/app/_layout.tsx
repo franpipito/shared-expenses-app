@@ -65,6 +65,8 @@ export default function LayoutRaiz() {
           <Stack.Screen name="gastos" />
           <Stack.Screen name="saldo" />
           <Stack.Screen name="vaquita" />
+          <Stack.Screen name="ajustes" />
+          <Stack.Screen name="borrar-cuenta" />
           <Stack.Screen name="viaje/[id]" />
           <Stack.Screen
             name="gasto/nuevo"

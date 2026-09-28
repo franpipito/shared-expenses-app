@@ -21,10 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ValidacionDeConfiguracionTest {
 
     private static final String SECRETO_OK = "un-secreto-largo-y-generado-al-azar";
-    private static final String CODIGO_OK = "no-es-nutrias";
 
     private static void validar(String mongoUri) {
-        new ValidacionDeConfiguracion(SECRETO_OK, CODIGO_OK, mongoUri);
+        new ValidacionDeConfiguracion(SECRETO_OK, mongoUri);
     }
 
     @Nested
@@ -91,14 +90,7 @@ class ValidacionDeConfiguracionTest {
         @DisplayName("el secreto del repo no arranca")
         void secretoDeDesarrollo() {
             assertThrows(IllegalStateException.class, () -> new ValidacionDeConfiguracion(
-                    "secreto-de-desarrollo-NO-USAR-EN-PRODUCCION-esta-en-el-repo", CODIGO_OK, URI_OK));
-        }
-
-        @Test
-        @DisplayName("el codigo de invitacion del repo no arranca")
-        void codigoDeDesarrollo() {
-            assertThrows(IllegalStateException.class, () ->
-                    new ValidacionDeConfiguracion(SECRETO_OK, "nutrias", URI_OK));
+                    "secreto-de-desarrollo-NO-USAR-EN-PRODUCCION-esta-en-el-repo", URI_OK));
         }
 
         @Test

@@ -104,7 +104,8 @@ public class ResumenServicio {
                 totalHormiga,
                 hormigaAnterior,
                 porCategoria,
-                animo);
+                animo,
+                usuarios.tienePareja(grupoId));
     }
 
     public SaldoRespuesta saldo(YearMonth mes) {

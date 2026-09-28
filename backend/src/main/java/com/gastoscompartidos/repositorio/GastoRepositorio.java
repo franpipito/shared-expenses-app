@@ -29,4 +29,7 @@ public interface GastoRepositorio extends MongoRepository<Gasto, String>, GastoC
      * generar la misma clave, y el indice es unico POR grupo.
      */
     Optional<Gasto> findByGrupoIdAndClienteId(String grupoId, String clienteId);
+
+    /** Borrado de cuenta del ultimo integrante: se va el grupo entero. */
+    long deleteByGrupoId(String grupoId);
 }

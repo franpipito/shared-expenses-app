@@ -7,6 +7,7 @@ import com.gastoscompartidos.modelo.Grupo;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.GrupoRepositorio;
 import com.gastoscompartidos.repositorio.UsuarioRepositorio;
+import com.gastoscompartidos.seguridad.DemasiadosIntentosException;
 import com.gastoscompartidos.seguridad.LimitadorDeIntentos;
 import com.gastoscompartidos.seguridad.NoAutenticadoException;
 import com.gastoscompartidos.seguridad.ServicioDeTokens;
@@ -25,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +36,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,10 +56,10 @@ import static org.mockito.Mockito.when;
  */
 class AutenticacionServicioTest {
 
-    private static final String CODIGO = "codigo-de-prueba";
     private static final String GRUPO = "grupo-1";
     private static final String PASSWORD = "una-frase-larga-que-me-acuerdo";
     private static final String IP = "127.0.0.1";
+    private static final int MAX_REGISTROS = 5;
 
     /**
      * El hash de PASSWORD, calculado UNA vez y con un encoder propio.
@@ -107,14 +110,18 @@ class AutenticacionServicioTest {
             if (u.getId() == null) escribirCampo(u, "id", "u-nuevo");
             return u;
         });
+        // Cada grupo guardado recibe un id distinto, como en Mongo. Con uno fijo,
+        // el test de "cada registro crea SU grupo" pasaria aunque dos personas
+        // terminaran en el mismo.
+        AtomicInteger siguienteGrupo = new AtomicInteger(1);
         when(grupos.save(any(Grupo.class))).thenAnswer(inv -> {
             Grupo g = inv.getArgument(0);
-            escribirCampo(g, "id", GRUPO);
+            escribirCampo(g, "id", "grupo-" + siguienteGrupo.getAndIncrement());
             return g;
         });
 
         servicio = new AutenticacionServicio(usuarios, grupos, codificador, tokens,
-                limitador, usuarioActual, reloj, CODIGO, "Casa");
+                limitador, usuarioActual, reloj, "Casa", MAX_REGISTROS);
     }
 
     @Nested
@@ -122,63 +129,52 @@ class AutenticacionServicioTest {
     class Registro {
 
         @Test
-        @DisplayName("el primero que se registra CREA el grupo")
-        void elPrimeroCreaElGrupo() {
-            when(grupos.findFirstByOrderByIdAsc()).thenReturn(Optional.empty());
+        @DisplayName("cada registro crea SU grupo: un desconocido nunca cae en el de otra pareja")
+        void cadaUnoSuGrupo() {
             when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
 
             servicio.registrar(registro("Franco", "franco@local"), IP);
+            servicio.registrar(registro("Desconocido", "otro@local"), IP);
 
-            verify(grupos).save(any(Grupo.class));
+            ArgumentCaptor<Usuario> guardados = ArgumentCaptor.forClass(Usuario.class);
+            verify(usuarios, times(2)).save(guardados.capture());
+            assertThat(guardados.getAllValues())
+                    .extracting(Usuario::getGrupoId)
+                    .doesNotHaveDuplicates()
+                    .doesNotContainNull();
         }
 
         @Test
-        @DisplayName("el segundo se suma al que ya existe, no crea otro")
-        void elSegundoSeSuma() {
-            when(grupos.findFirstByOrderByIdAsc()).thenReturn(Optional.of(grupo()));
-            when(usuarios.countByGrupoId(GRUPO)).thenReturn(1L);
-            when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
-
-            servicio.registrar(registro("Viole", "viole@local"), IP);
-
-            verify(grupos, never()).save(any(Grupo.class));
-            ArgumentCaptor<Usuario> guardado = ArgumentCaptor.forClass(Usuario.class);
-            verify(usuarios).save(guardado.capture());
-            assertThat(guardado.getValue().getGrupoId()).isEqualTo(GRUPO);
-        }
-
-        @Test
-        @DisplayName("un tercero se rechaza: el modelo de reparto asume dos")
-        void unTerceroSeRechaza() {
-            when(grupos.findFirstByOrderByIdAsc()).thenReturn(Optional.of(grupo()));
-            when(usuarios.countByGrupoId(GRUPO)).thenReturn(2L);
-            when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> servicio.registrar(registro("Tercero", "tercero@local"), IP))
-                    .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("grupo ya esta completo");
-
-            verify(usuarios, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("sin el codigo de invitacion no se puede registrar")
+        @DisplayName("se registra sin ningun codigo: la app publicada es para cualquiera")
         void sinCodigo() {
-            assertThatThrownBy(() -> servicio.registrar(
-                    new RegistroRequest("Intruso", "intruso@local", PASSWORD, "otro-codigo"), IP))
-                    .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("codigo de invitacion");
+            when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
 
-            // Y ni siquiera mira si el email existe: el codigo se chequea
-            // primero, asi que el registro no puede usarse para averiguar que
-            // cuentas hay.
-            verify(usuarios, never()).findByEmail(anyString());
+            var r = servicio.registrar(registro("Viole", "viole@local"), IP);
+
+            assertThat(r.token()).isEqualTo("un.token.firmado");
+        }
+
+        @Test
+        @DisplayName("el sexto registro desde la misma IP se corta, aunque los anteriores salieran bien")
+        void rateLimitCuentaLosExitos() {
+            // En el login el exito limpia el contador. Aca NO: con el registro
+            // abierto, el abuso es justamente tener exito muchas veces.
+            when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
+
+            for (int i = 0; i < MAX_REGISTROS; i++) {
+                servicio.registrar(registro("Persona", "persona" + i + "@local"), IP);
+            }
+
+            assertThatThrownBy(() -> servicio.registrar(registro("Una mas", "otra@local"), IP))
+                    .isInstanceOf(DemasiadosIntentosException.class);
+            // Y corta ANTES de mirar la base, que es lo que impide usar el
+            // registro para averiguar que emails tienen cuenta.
+            verify(usuarios, never()).findByEmail("otra@local");
         }
 
         @Test
         @DisplayName("la contrasena se guarda hasheada, nunca en texto plano")
         void passwordHasheada() {
-            when(grupos.findFirstByOrderByIdAsc()).thenReturn(Optional.empty());
             when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
 
             servicio.registrar(registro("Franco", "franco@local"), IP);
@@ -195,7 +191,6 @@ class AutenticacionServicioTest {
         @Test
         @DisplayName("el email se normaliza: mayusculas y espacios no crean cuentas distintas")
         void emailNormalizado() {
-            when(grupos.findFirstByOrderByIdAsc()).thenReturn(Optional.empty());
             when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
 
             servicio.registrar(registro("Franco", "  FRANCO@Local  "), IP);
@@ -209,7 +204,7 @@ class AutenticacionServicioTest {
         @DisplayName("una contrasena corta se rechaza antes de tocar la base")
         void contrasenaCorta() {
             assertThatThrownBy(() -> servicio.registrar(
-                    new RegistroRequest("Franco", "franco@local", "corta", CODIGO), IP))
+                    new RegistroRequest("Franco", "franco@local", "corta"), IP))
                     .isInstanceOf(ReglaDeNegocioException.class);
 
             verify(usuarios, never()).save(any());
@@ -353,13 +348,7 @@ class AutenticacionServicioTest {
     }
 
     private RegistroRequest registro(String nombre, String email) {
-        return new RegistroRequest(nombre, email, PASSWORD, CODIGO);
-    }
-
-    private Grupo grupo() {
-        Grupo g = new Grupo("Casa");
-        escribirCampo(g, "id", GRUPO);
-        return g;
+        return new RegistroRequest(nombre, email, PASSWORD);
     }
 
     private Usuario usuarioGuardado(String email) {

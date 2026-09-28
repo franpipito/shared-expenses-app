@@ -11,6 +11,7 @@ import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -289,4 +290,32 @@ public class GastoConsultasImpl implements GastoConsultas {
         if (total instanceof Number numero) return new BigDecimal(numero.toString());
         throw new IllegalStateException("El total no es un numero: " + total.getClass());
     }
+
+    // ------------------------------------------------------ borrado de cuenta
+
+    @Override
+    public long borrarPersonalesDe(String grupoId, String usuarioId) {
+        Query query = Query.query(Criteria.where("grupo_id").is(grupoId)
+                .and("tipo").is(TipoGasto.PERSONAL)
+                .and("pagadoPor.usuarioId").is(usuarioId));
+        return mongoTemplate.remove(query, Gasto.class).getDeletedCount();
+    }
+
+    @Override
+    public long anonimizarPagador(String grupoId, String usuarioId, String nombre) {
+        Query query = Query.query(Criteria.where("grupo_id").is(grupoId)
+                .and("pagadoPor.usuarioId").is(usuarioId));
+        // Se reemplaza SOLO el nombre, no el usuarioId. El id ya no apunta a
+        // nadie, pero el saldo y la edicion comparan por id: sin el, un gasto
+        // que pago esta persona se leeria como pagado por nadie.
+        //
+        // Y la version se incrementa, igual que en cualquier escritura a mano:
+        // si la otra persona tenia el gasto abierto en la pantalla de edicion,
+        // su PUT tiene que dar 409 y no pisar el anonimizado con el nombre viejo.
+        Update update = new Update()
+                .set("pagadoPor.nombre", nombre)
+                .inc("version", 1);
+        return mongoTemplate.updateMulti(query, update, Gasto.class).getModifiedCount();
+    }
+
 }

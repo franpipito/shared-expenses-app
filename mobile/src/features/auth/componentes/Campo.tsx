@@ -35,6 +35,10 @@ type Props = {
    * valido" salia con el codigo bien escrito. Nombre y contrasena no lo sufren
    * porque ahi lo que se tipea Y lo que se compara son la misma cosa -- no hay
    * un valor de referencia externo que el teclado pueda desalinear.
+   *
+   * En la v1.0 el codigo de invitacion se saco y hoy nadie pasa `false`. Se
+   * queda porque la v1.1 trae codigos por grupo, que van a tener el mismo
+   * problema.
    */
   capitalizar?: boolean;
 };

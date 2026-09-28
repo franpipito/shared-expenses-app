@@ -170,6 +170,15 @@ export function FormularioDeGasto({
   const eligioAMano = useRef(inicial !== undefined);
   const [porcentaje, setPorcentaje] = useState(parteMia(inicial, usuario?.id));
   const [otro, setOtro] = useState<UsuarioRespuesta | null>(null);
+  /**
+   * El grupo tiene un solo integrante: toda cuenta nueva desde el registro
+   * abierto, hasta que se pueda sumar a alguien (v1.1). Arranca en false a
+   * proposito: si /grupo no contesta y no hay nada en cache, no sabemos, y en la
+   * duda se muestra el formulario de siempre. El backend rechaza el compartido
+   * igual; lo que se evita aca es ofrecerle a alguien una opcion que no puede
+   * usar.
+   */
+  const [sinPareja, setSinPareja] = useState(false);
   const [pagueYo, setPagueYo] = useState(
     inicial ? inicial.pagadoPor.id === usuario?.id : true,
   );
@@ -196,6 +205,7 @@ export function FormularioDeGasto({
       try {
         const { dato: grupo } = await traerGrupo();
         setOtro(grupo?.integrantes.find((u) => u.id !== usuario?.id) ?? null);
+        setSinPareja(grupo != null && grupo.integrantes.length < 2);
       } catch {
         setOtro(null);
       }
@@ -269,6 +279,10 @@ export function FormularioDeGasto({
    */
   // Hay vaquita en juego si hay una abierta, o si este gasto ya salio de una.
   const hayVaquita = pozo !== null || inicial?.pozoId != null;
+  // Se decide por como VENIA el gasto y no por el destino actual: si quien
+  // quedo sola edita un compartido viejo y toca Personal, la seccion no tiene
+  // que desaparecerle en la cara y dejarla sin poder volver atras.
+  const ocultarCompartido = sinPareja && destinoDe(inicial) === 'PERSONAL';
   const nombreDeLaVaquita = pozo?.nombre ?? 'la vaquita';
 
   const montoNumero = Number(monto.replace(',', '.'));
@@ -478,148 +492,154 @@ export function FormularioDeGasto({
           Teal y no ambar: el ambar es del gasto hormiga y de nada mas. Aca el
           teal significa lo que significa en toda la app, que es "lo compartido".
         */}
-        <View style={[estilos.compartido, destino !== 'PERSONAL' && estilos.compartidoActivo]}>
-          {/*
-            DOS FORMAS DISTINTAS PARA EL MISMO CAMPO, y es deliberado.
+        {/*
+          Sin pareja en el grupo, la seccion entera no esta: no hay con quien
+          compartir, y un switch que siempre da error es peor que no tenerlo.
+        */}
+        {ocultarCompartido ? null : (
+          <View style={[estilos.compartido, destino !== 'PERSONAL' && estilos.compartidoActivo]}>
+            {/*
+              DOS FORMAS DISTINTAS PARA EL MISMO CAMPO, y es deliberado.
 
-            Sin vaquita abierta -- o sea casi todo el anio -- el control es el
-            switch de siempre y esta pantalla no cambio en nada. Con una vaquita
-            abierta pasan a ser tres chips, porque un switch no tiene tres
-            estados y meter un segundo switch traeria combinaciones imposibles.
+              Sin vaquita abierta -- o sea casi todo el anio -- el control es el
+              switch de siempre y esta pantalla no cambio en nada. Con una vaquita
+              abierta pasan a ser tres chips, porque un switch no tiene tres
+              estados y meter un segundo switch traeria combinaciones imposibles.
 
-            Lo importante es que el tercer chip **no agrega un campo, reemplaza
-            uno**: elegir Vaquita es mas rapido que elegir Compartido, porque no
-            hay que decidir reparto ni quien pago. Un tap en vez de tres.
-          */}
-          {/*
-            Los tres chips aparecen si hay una vaquita abierta O si el gasto que
-            se esta editando ya pertenece a una. Sin la segunda condicion, editar
-            un gasto de un viaje cerrado mostraria el switch de compartido, que
-            no tiene un estado para "vaquita": se veria como personal y guardar
-            lo sacaria del pozo.
-          */}
-          {hayVaquita ? (
-            <>
-              <Text style={estilos.repartoEtiqueta}>De donde sale</Text>
-              <View style={estilos.chips}>
-                {(['PERSONAL', 'COMPARTIDO', 'VAQUITA'] as const).map((d) => {
-                  const elegido = d === destino;
-                  return (
-                    <Pressable
-                      key={d}
-                      onPress={() => elegirDestino(d)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: elegido }}
-                      style={[estilos.chip, elegido && estilos.chipElegido]}
-                    >
-                      <Text style={[estilos.chipTexto, elegido && estilos.chipTextoElegido]}>
-                        {d === 'PERSONAL' ? 'Personal' : d === 'COMPARTIDO' ? 'Compartido' : 'Vaquita'}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Text style={estilos.compartidoBajada}>
-                {destino === 'PERSONAL'
-                  ? 'Un gasto personal lo ves solo vos'
-                  : destino === 'COMPARTIDO'
-                    ? 'Lo van a ver los dos y entra en el saldo'
-                    : `Sale de ${nombreDeLaVaquita}. No genera deuda entre ustedes.`}
-              </Text>
-            </>
-          ) : (
-            <View style={estilos.filaSwitch}>
-              <View style={estilos.compartidoTexto}>
-                <Text style={estilos.compartidoTitulo}>Es un gasto compartido</Text>
-                <Text style={estilos.compartidoBajada}>
-                  {destino === 'COMPARTIDO'
-                    ? 'Lo van a ver los dos y entra en el saldo'
-                    : 'Un gasto personal lo ves solo vos'}
-                </Text>
-              </View>
-              <Switch
-                value={destino === 'COMPARTIDO'}
-                onValueChange={(v) => elegirDestino(v ? 'COMPARTIDO' : 'PERSONAL')}
-                trackColor={{ false: colores.borde, true: colores.rio }}
-                thumbColor={colores.tarjeta}
-                ios_backgroundColor={colores.borde}
-              />
-            </View>
-          )}
-
-          {/*
-            El reparto aparece recien al prender el switch. Es "revelacion
-            progresiva": el 90% de las veces el formulario no lo muestra, y quien
-            lo necesita lo tiene a un tap. Mostrarlo siempre seria un campo mas
-            en la pantalla que tiene que ser la mas rapida de la app.
-          */}
-          {destino === 'COMPARTIDO' ? (
-            <View style={estilos.reparto}>
-              {/*
-                Quien pago aparece SOLO si el grupo ya tiene a la otra persona.
-                Mientras Viole no se haya registrado, un selector con una sola
-                opcion no es una eleccion: es un control que ocupa lugar y no
-                hace nada.
-              */}
-              {otro ? (
-                <>
-                  <Text style={estilos.repartoEtiqueta}>Quien pago</Text>
-                  <View style={estilos.chips}>
-                    {[true, false].map((yo) => (
+              Lo importante es que el tercer chip **no agrega un campo, reemplaza
+              uno**: elegir Vaquita es mas rapido que elegir Compartido, porque no
+              hay que decidir reparto ni quien pago. Un tap en vez de tres.
+            */}
+            {/*
+              Los tres chips aparecen si hay una vaquita abierta O si el gasto que
+              se esta editando ya pertenece a una. Sin la segunda condicion, editar
+              un gasto de un viaje cerrado mostraria el switch de compartido, que
+              no tiene un estado para "vaquita": se veria como personal y guardar
+              lo sacaria del pozo.
+            */}
+            {hayVaquita ? (
+              <>
+                <Text style={estilos.repartoEtiqueta}>De donde sale</Text>
+                <View style={estilos.chips}>
+                  {(['PERSONAL', 'COMPARTIDO', 'VAQUITA'] as const).map((d) => {
+                    const elegido = d === destino;
+                    return (
                       <Pressable
-                        key={String(yo)}
-                        onPress={() => setPagueYo(yo)}
+                        key={d}
+                        onPress={() => elegirDestino(d)}
                         accessibilityRole="button"
-                        accessibilityState={{ selected: pagueYo === yo }}
-                        style={[estilos.chip, pagueYo === yo && estilos.chipElegido]}
+                        accessibilityState={{ selected: elegido }}
+                        style={[estilos.chip, elegido && estilos.chipElegido]}
                       >
-                        <Text
-                          style={[
-                            estilos.chipTexto,
-                            pagueYo === yo && estilos.chipTextoElegido,
-                          ]}
-                        >
-                          {yo ? 'Pague yo' : `Pago ${otro.nombre}`}
+                        <Text style={[estilos.chipTexto, elegido && estilos.chipTextoElegido]}>
+                          {d === 'PERSONAL' ? 'Personal' : d === 'COMPARTIDO' ? 'Compartido' : 'Vaquita'}
                         </Text>
                       </Pressable>
-                    ))}
-                  </View>
-                </>
-              ) : null}
-
-              <Text style={estilos.repartoEtiqueta}>Tu parte</Text>
-              <View style={estilos.chips}>
-                {REPARTOS.map((p) => {
-                  const elegido = p === porcentaje;
-                  return (
-                    <Pressable
-                      key={p}
-                      onPress={() => setPorcentaje(p)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: elegido }}
-                      // El porcentaje solo no dice nada leido en voz alta.
-                      accessibilityLabel={
-                        p === 100 ? 'Pagas vos el total' : `Vos ${p} por ciento, la otra persona ${100 - p}`
-                      }
-                      style={[estilos.chip, elegido && estilos.chipElegido]}
-                    >
-                      <Text style={[estilos.chipTexto, elegido && estilos.chipTextoElegido]}>
-                        {p === 100 ? 'Todo yo' : `${p} / ${100 - p}`}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                    );
+                  })}
+                </View>
+                <Text style={estilos.compartidoBajada}>
+                  {destino === 'PERSONAL'
+                    ? 'Un gasto personal lo ves solo vos'
+                    : destino === 'COMPARTIDO'
+                      ? 'Lo van a ver los dos y entra en el saldo'
+                      : `Sale de ${nombreDeLaVaquita}. No genera deuda entre ustedes.`}
+                </Text>
+              </>
+            ) : (
+              <View style={estilos.filaSwitch}>
+                <View style={estilos.compartidoTexto}>
+                  <Text style={estilos.compartidoTitulo}>Es un gasto compartido</Text>
+                  <Text style={estilos.compartidoBajada}>
+                    {destino === 'COMPARTIDO'
+                      ? 'Lo van a ver los dos y entra en el saldo'
+                      : 'Un gasto personal lo ves solo vos'}
+                  </Text>
+                </View>
+                <Switch
+                  value={destino === 'COMPARTIDO'}
+                  onValueChange={(v) => elegirDestino(v ? 'COMPARTIDO' : 'PERSONAL')}
+                  trackColor={{ false: colores.borde, true: colores.rio }}
+                  thumbColor={colores.tarjeta}
+                  ios_backgroundColor={colores.borde}
+                />
               </View>
-              {/*
-                No se muestra cuanto le toca a cada uno en pesos. La app NO hace
-                aritmetica con plata: monto x porcentaje lo calcula el backend,
-                que es el unico que sabe donde cae el centavo cuando la division
-                no es exacta ($10,01 al 50/50). Un preview calculado aca podria
-                no coincidir con lo que despues queda guardado.
-              */}
-            </View>
-          ) : null}
-        </View>
+            )}
+
+            {/*
+              El reparto aparece recien al prender el switch. Es "revelacion
+              progresiva": el 90% de las veces el formulario no lo muestra, y quien
+              lo necesita lo tiene a un tap. Mostrarlo siempre seria un campo mas
+              en la pantalla que tiene que ser la mas rapida de la app.
+            */}
+            {destino === 'COMPARTIDO' ? (
+              <View style={estilos.reparto}>
+                {/*
+                  Quien pago aparece SOLO si el grupo ya tiene a la otra persona.
+                  Mientras Viole no se haya registrado, un selector con una sola
+                  opcion no es una eleccion: es un control que ocupa lugar y no
+                  hace nada.
+                */}
+                {otro ? (
+                  <>
+                    <Text style={estilos.repartoEtiqueta}>Quien pago</Text>
+                    <View style={estilos.chips}>
+                      {[true, false].map((yo) => (
+                        <Pressable
+                          key={String(yo)}
+                          onPress={() => setPagueYo(yo)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: pagueYo === yo }}
+                          style={[estilos.chip, pagueYo === yo && estilos.chipElegido]}
+                        >
+                          <Text
+                            style={[
+                              estilos.chipTexto,
+                              pagueYo === yo && estilos.chipTextoElegido,
+                            ]}
+                          >
+                            {yo ? 'Pague yo' : `Pago ${otro.nombre}`}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+
+                <Text style={estilos.repartoEtiqueta}>Tu parte</Text>
+                <View style={estilos.chips}>
+                  {REPARTOS.map((p) => {
+                    const elegido = p === porcentaje;
+                    return (
+                      <Pressable
+                        key={p}
+                        onPress={() => setPorcentaje(p)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: elegido }}
+                        // El porcentaje solo no dice nada leido en voz alta.
+                        accessibilityLabel={
+                          p === 100 ? 'Pagas vos el total' : `Vos ${p} por ciento, la otra persona ${100 - p}`
+                        }
+                        style={[estilos.chip, elegido && estilos.chipElegido]}
+                      >
+                        <Text style={[estilos.chipTexto, elegido && estilos.chipTextoElegido]}>
+                          {p === 100 ? 'Todo yo' : `${p} / ${100 - p}`}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {/*
+                  No se muestra cuanto le toca a cada uno en pesos. La app NO hace
+                  aritmetica con plata: monto x porcentaje lo calcula el backend,
+                  que es el unico que sabe donde cae el centavo cuando la division
+                  no es exacta ($10,01 al 50/50). Un preview calculado aca podria
+                  no coincidir con lo que despues queda guardado.
+                */}
+              </View>
+            ) : null}
+          </View>
+        )}
 
         {error ? <Text style={estilos.error}>{error}</Text> : null}
       </ScrollView>

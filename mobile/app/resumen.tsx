@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import LogOut from 'lucide-react-native/icons/log-out';
+import Settings from 'lucide-react-native/icons/settings';
 import { useCallback } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -70,7 +70,7 @@ function fraseDelAnimo(
 }
 
 export default function Resumen() {
-  const { usuario, salir } = useSesion();
+  const { usuario } = useSesion();
   const { resumen, cargando, error, recargar } = useResumen();
   const { esElMesActual } = useMes();
   const router = useRouter();
@@ -108,20 +108,21 @@ export default function Resumen() {
             <Text style={estilos.saludo}>{usuario?.nombre ? `Hola, ${usuario.nombre}` : 'Hola'}</Text>
             <Text style={estilos.seccion}>Tus gastos del mes</Text>
           </View>
+          {/*
+            Aca estaba "Cerrar sesion". Se mudo a Ajustes cuando llego el
+            borrado de cuenta: dos acciones sobre la cuenta no entran en el
+            encabezado de la pantalla de los gastos. La pastilla queda, con el
+            mismo formato, y ahora abre Ajustes.
+          */}
           <Pressable
-            // `() => salir()` y no `salir` a secas: onPress le pasa el evento
-            // del toque al handler, y `salir` recibe el MOTIVO de la salida.
-            // Pasado directo, el motivo seria un GestureResponderEvent, la
-            // comparacion con 'manual' daria false, y la cola no se limpiaria
-            // al cerrar sesion a mano -- que es justo cuando hay que limpiarla.
-            onPress={() => void salir('manual')}
+            onPress={() => router.push('/ajustes')}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Cerrar sesion"
-            style={({ pressed }) => [estilos.cerrarSesion, pressed && estilos.cerrarSesionPresionado]}
+            accessibilityLabel="Ajustes"
+            style={({ pressed }) => [estilos.pastilla, pressed && estilos.pastillaPresionada]}
           >
-            <LogOut size={16} color={colores.rioProfundo} strokeWidth={1.75} />
-            <Text style={estilos.cerrarSesionTexto}>Cerrar sesion</Text>
+            <Settings size={16} color={colores.rioProfundo} strokeWidth={1.75} />
+            <Text style={estilos.pastillaTexto}>Ajustes</Text>
           </Pressable>
         </View>
 
@@ -191,31 +192,46 @@ export default function Resumen() {
               economia compartida: tienen ingresos separados, y ese encuadre es
               del producto, no del copy.
             */}
-            <Pressable
-              onPress={() => router.push('/saldo')}
-              accessibilityRole="button"
-              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-            >
-              <Text style={estilos.verGastos}>Gastos compartidos</Text>
-              <Text style={estilos.flecha}>›</Text>
-            </Pressable>
-
             {/*
-              La fila esta siempre, aunque no haya ninguna vaquita abierta, y no
-              condicionada a que exista una. Preguntar por el pozo activo aca
-              costaria una request mas en la pantalla que se abre primero y mas
-              seguido de toda la app, y para decidir si mostrar UNA fila. La
-              pantalla de la vaquita sabe dibujar su estado vacio, y ese estado
-              vacio ES el formulario para abrirla.
+              Las dos filas de pareja (compartidos y vaquita) desaparecen si el
+              grupo tiene un solo integrante: no hay saldo con nadie ni pozo que
+              armar, y el backend rechazaria las dos cosas. Mostrarlas con un
+              "proximamente" es justo lo que App Review rechaza por incompleto.
+
+              `!== false` y NO `=== true`, a proposito: el backend que no
+              conoce el campo no lo manda, y `undefined` tiene que leerse como
+              "como siempre". Si no, la app nueva contra el backend viejo les
+              esconderia la seccion de pareja a Viole y Franco.
             */}
-            <Pressable
-              onPress={() => router.push('/vaquita')}
-              accessibilityRole="button"
-              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-            >
-              <Text style={estilos.verGastos}>La vaquita del viaje</Text>
-              <Text style={estilos.flecha}>›</Text>
-            </Pressable>
+            {resumen.tienePareja !== false ? (
+              <>
+                <Pressable
+                  onPress={() => router.push('/saldo')}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+                >
+                  <Text style={estilos.verGastos}>Gastos compartidos</Text>
+                  <Text style={estilos.flecha}>›</Text>
+                </Pressable>
+
+                {/*
+                  La fila esta siempre, aunque no haya ninguna vaquita abierta, y no
+                  condicionada a que exista una. Preguntar por el pozo activo aca
+                  costaria una request mas en la pantalla que se abre primero y mas
+                  seguido de toda la app, y para decidir si mostrar UNA fila. La
+                  pantalla de la vaquita sabe dibujar su estado vacio, y ese estado
+                  vacio ES el formulario para abrirla.
+                */}
+                <Pressable
+                  onPress={() => router.push('/vaquita')}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+                >
+                  <Text style={estilos.verGastos}>La vaquita del viaje</Text>
+                  <Text style={estilos.flecha}>›</Text>
+                </Pressable>
+              </>
+            ) : null}
 
             {resumen.porCategoria.length > 0 ? (
               <View style={estilos.categorias}>
@@ -264,10 +280,11 @@ const estilos = StyleSheet.create({
     marginTop: 4,
   },
   encabezadoTexto: { flex: 1 },
-  // Pastilla con borde en vez de un texto suelto: Salir a secas se leia como
-  // un link mas de la pantalla, al lado de los otros dos que si navegan. Un
-  // boton que cierra la sesion tiene que verse como un boton y decir que hace.
-  cerrarSesion: {
+  // Pastilla con borde en vez de un texto suelto. Nacio para "Cerrar sesion",
+  // que como texto a secas se leia como un link mas de la pantalla; hoy abre
+  // Ajustes y conserva la forma, que la separa de las filas que navegan a los
+  // gastos.
+  pastilla: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -280,8 +297,8 @@ const estilos = StyleSheet.create({
     // saludo. El hitSlop le suma el area tactil que le falta.
     minHeight: 36,
   },
-  cerrarSesionPresionado: { backgroundColor: colores.arena },
-  cerrarSesionTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 13, color: colores.rioProfundo },
+  pastillaPresionada: { backgroundColor: colores.arena },
+  pastillaTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 13, color: colores.rioProfundo },
 
   tarjetaHormiga: {
     backgroundColor: colores.tarjeta,

@@ -98,6 +98,11 @@ class GastoServicioTest {
         // save() devuelve lo que le pasaron, que es lo que hace Mongo salvo por
         // el id. Asi el test puede mirar el gasto que el servicio construyo.
         when(gastos.save(any(Gasto.class))).thenAnswer(inv -> inv.getArgument(0));
+        // `tienePareja` es un metodo default de la interfaz, y un mock NO corre
+        // su cuerpo: devuelve false como cualquier otro boolean sin programar.
+        // Por defecto el grupo es Franco + Viole; los tests del grupo de uno lo
+        // pisan.
+        when(usuarios.tienePareja(GRUPO)).thenReturn(true);
     }
 
     // ------------------------------------------------------------- el centavo
@@ -216,9 +221,6 @@ class GastoServicioTest {
             when(usuarioActual.requerido()).thenReturn(viole);
             when(gastos.buscarVisiblePorId(anyString(), anyString(), anyString()))
                     .thenReturn(Optional.of(deFranco));
-            // El servicio busca al pagador conservado para devolver el Usuario
-            // entero. Que haga falta stubbearlo ya dice que NO se lo apropio.
-            when(usuarios.findById(franco.getId())).thenReturn(Optional.of(franco));
 
             GastoRespuesta r = servicio.actualizar("g-1",
                     pedido("20000.00", TipoGasto.COMPARTIDO, 50, null, null));
@@ -256,6 +258,86 @@ class GastoServicioTest {
 
             assertThat(r.tipo()).isEqualTo(TipoGasto.PERSONAL);
             assertThat(r.deudaGenerada()).isEqualByComparingTo("0.00");
+        }
+    }
+
+    // ------------------------------------------------- quien borro su cuenta
+
+    @Nested
+    @DisplayName("Un gasto que pago alguien que borro su cuenta")
+    class PagadorBorrado {
+
+        @Test
+        @DisplayName("se puede corregir, y conserva el snapshot anonimizado")
+        void seCorrigeSinBuscarAlPagador() {
+            // El pagador ya no existe en la base. Antes, editar buscaba al
+            // pagador conservado con findById y tiraba "No existe el usuario":
+            // quien quedaba no podia corregir ni un tipeo de su historial.
+            Usuario borrado = usuario("u-borrado", "Cuenta eliminada", GRUPO);
+            Gasto viejo = gastoExistente(borrado, TipoGasto.COMPARTIDO, "1000.00", null);
+            when(gastos.buscarVisiblePorId(anyString(), anyString(), anyString()))
+                    .thenReturn(Optional.of(viejo));
+            when(usuarios.findById("u-borrado")).thenReturn(Optional.empty());
+
+            GastoRespuesta r = servicio.actualizar("g-1", compartido("100.00", 50));
+
+            assertThat(r.monto()).isEqualByComparingTo("100.00");
+            assertThat(r.pagadoPor().id()).isEqualTo("u-borrado");
+            assertThat(r.pagadoPor().nombre()).isEqualTo("Cuenta eliminada");
+        }
+    }
+
+    // ---------------------------------------------------------- grupo de uno
+
+    @Nested
+    @DisplayName("Grupo de un solo integrante")
+    class SinPareja {
+
+        @BeforeEach
+        void soloFranco() {
+            when(usuarios.tienePareja(GRUPO)).thenReturn(false);
+        }
+
+        @Test
+        @DisplayName("un COMPARTIDO se rechaza: seria una deuda con nadie")
+        void compartidoSeRechaza() {
+            assertThatThrownBy(() -> servicio.crear(compartido("1000.00", 50)))
+                    .isInstanceOf(ReglaDeNegocioException.class)
+                    .hasMessageContaining("la otra persona tiene que estar en tu grupo");
+
+            verify(gastos, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("un PERSONAL entra igual: la app sola es un registro personal")
+        void personalEntra() {
+            GastoRespuesta r = servicio.crear(personal("1000.00"));
+            assertThat(r.tipo()).isEqualTo(TipoGasto.PERSONAL);
+        }
+
+        @Test
+        @DisplayName("no se puede volver COMPARTIDO un PERSONAL editandolo")
+        void noSePuedeVolverCompartido() {
+            Gasto propio = gastoExistente(franco, TipoGasto.PERSONAL, "1000.00", null);
+            when(gastos.buscarVisiblePorId(anyString(), anyString(), anyString()))
+                    .thenReturn(Optional.of(propio));
+
+            assertThatThrownBy(() -> servicio.actualizar("g-1", compartido("1000.00", 50)))
+                    .isInstanceOf(ReglaDeNegocioException.class);
+        }
+
+        @Test
+        @DisplayName("un COMPARTIDO que ya existia se puede seguir corrigiendo")
+        void compartidoViejoSeCorrige() {
+            // El caso: la otra persona borro su cuenta y quedo el historial. Un
+            // monto mal cargado ahi tiene que poder arreglarse igual.
+            Gasto viejo = gastoExistente(franco, TipoGasto.COMPARTIDO, "1000.00", null);
+            when(gastos.buscarVisiblePorId(anyString(), anyString(), anyString()))
+                    .thenReturn(Optional.of(viejo));
+
+            GastoRespuesta r = servicio.actualizar("g-1", compartido("100.00", 50));
+
+            assertThat(r.monto()).isEqualByComparingTo("100.00");
         }
     }
 

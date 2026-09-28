@@ -82,6 +82,15 @@ public class LimitadorDeIntentos {
 
     /** Se llama cuando las credenciales resultaron incorrectas. */
     public void registrarFallo(String clave) {
+        registrarIntento(clave);
+    }
+
+    /**
+     * Cuenta un intento sin importar como salio. Es lo mismo que un fallo por
+     * dentro; existe con otro nombre para que quien lea `registrar()` no crea
+     * que un registro exitoso es un "fallo".
+     */
+    public void registrarIntento(String clave) {
         Instant ahora = Instant.now(reloj);
         if (intentos.size() > MAX_CLAVES) {
             intentos.entrySet().removeIf(e -> e.getValue().expiro(ahora));

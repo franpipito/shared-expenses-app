@@ -27,8 +27,6 @@ import java.util.UUID;
 @Service
 public class AutenticacionServicio {
 
-    private static final int MAXIMO_INTEGRANTES = 2;
-
     private final UsuarioRepositorio usuarios;
     private final GrupoRepositorio grupos;
     private final PasswordEncoder codificador;
@@ -36,8 +34,21 @@ public class AutenticacionServicio {
     private final LimitadorDeIntentos limitador;
     private final UsuarioActual usuarioActual;
     private final Clock reloj;
-    private final String codigoInvitacion;
     private final String nombreGrupoPorDefecto;
+
+    /**
+     * Registros por IP cada 15 minutos, CONTANDO LOS QUE SALEN BIEN. Es el unico
+     * limite de la app que cuenta exitos, porque con el registro abierto el
+     * exito es justamente el abuso: crear cuentas en serie. Y como el registro
+     * contesta "ese email ya esta registrado", cada intento sirve para averiguar
+     * si una cuenta existe; este tope es lo que impide barrer una lista.
+     *
+     * Cinco no molesta a nadie de verdad: una persona se registra una vez en la
+     * vida. Es configurable solo para el smoke test, que registra varios
+     * usuarios seguidos desde 127.0.0.1 -- el default es el valor seguro, y es el
+     * que corre en Render.
+     */
+    private final int maxRegistrosPorIp;
 
     /**
      * Un hash valido de una contrasena aleatoria que nadie conoce. Se usa para
@@ -52,8 +63,8 @@ public class AutenticacionServicio {
                                  LimitadorDeIntentos limitador,
                                  UsuarioActual usuarioActual,
                                  Clock reloj,
-                                 @Value("${app.registro.codigo-invitacion}") String codigoInvitacion,
-                                 @Value("${app.grupo-por-defecto:Casa}") String nombreGrupoPorDefecto) {
+                                 @Value("${app.grupo-por-defecto:Casa}") String nombreGrupoPorDefecto,
+                                 @Value("${app.registro.max-por-ip:5}") int maxRegistrosPorIp) {
         this.usuarios = usuarios;
         this.grupos = grupos;
         this.codificador = codificador;
@@ -61,8 +72,8 @@ public class AutenticacionServicio {
         this.limitador = limitador;
         this.usuarioActual = usuarioActual;
         this.reloj = reloj;
-        this.codigoInvitacion = codigoInvitacion;
         this.nombreGrupoPorDefecto = nombreGrupoPorDefecto;
+        this.maxRegistrosPorIp = maxRegistrosPorIp;
         this.hashSenuelo = codificador.encode(UUID.randomUUID().toString());
     }
 
@@ -71,15 +82,14 @@ public class AutenticacionServicio {
      *           servicio no tenga que saber que existe HTTP.
      */
     public TokenRespuesta registrar(RegistroRequest req, String ip) {
-        // El codigo de invitacion tambien es adivinable a fuerza bruta, y aca
-        // no hay email contra el cual limitar: la clave es la IP.
+        // Se cuenta CADA intento, salga bien o mal, y antes de mirar nada. Con el
+        // registro abierto el abuso no es fallar: es tener exito muchas veces
+        // (cuentas en serie), o preguntar por muchos emails para ver cuales
+        // contestan "ya esta registrado". Por eso aca no hay un limpiar()
+        // despues del exito, como si lo hay en el login.
         String clave = "registro:" + ip;
-        limitador.verificar(clave, LimitadorDeIntentos.MAX_POR_IP);
-
-        if (!codigoInvitacion.equals(req.codigoInvitacion())) {
-            limitador.registrarFallo(clave);
-            throw new ReglaDeNegocioException("El codigo de invitacion no es valido");
-        }
+        limitador.verificar(clave, maxRegistrosPorIp);
+        limitador.registrarIntento(clave);
 
         String email = normalizar(req.email());
 
@@ -98,9 +108,8 @@ public class AutenticacionServicio {
                 // La contrasena en texto plano no se guarda, ni se loguea, ni
                 // sale de este metodo. Lo unico que persiste es el hash.
                 codificador.encode(req.password()),
-                grupoParaNuevoIntegrante().getId());
+                grupoPropio().getId());
 
-        limitador.limpiar(clave);
         return tokenPara(usuarios.save(usuario));
     }
 
@@ -164,29 +173,28 @@ public class AutenticacionServicio {
     // ---------------------------------------------------------------- helpers
 
     /**
-     * El primero que se registra crea el grupo; el segundo se suma al mismo. Un
-     * tercero se rechaza, porque el reparto del modelo asume dos integrantes.
+     * Cada persona que se registra arranca con un grupo propio, de un solo
+     * integrante.
      *
-     * ESTE ES EL UNICO LUGAR DE LA APP QUE ESCRIBE DOS DOCUMENTOS, y por lo
-     * tanto el unico donde la falta de transaccion se nota. Si se crea el grupo
-     * y despues falla el alta del usuario, queda un grupo huerfano.
+     * Hasta la v1.0 era distinto: el primero creaba EL grupo y el segundo se
+     * sumaba, porque habia un unico grupo en toda la base y el codigo de
+     * invitacion decidia quien entraba. Con el registro abierto eso significaria
+     * que un desconocido que baja la app cae en el grupo de otra pareja. Sumarse
+     * al grupo de alguien va a necesitar un codigo POR GRUPO (v1.1), y ahi
+     * vuelve el tope de dos integrantes.
      *
-     * Se acepta a conciencia, por dos motivos: el reintento se cura solo (el
-     * segundo intento encuentra el grupo existente y se suma), y una
-     * transaccion de Mongo exigiria correr un replica set tambien en local,
-     * que es bastante costo para un camino que se ejecuta exactamente dos veces
-     * en la vida de esta app.
+     * Con un solo integrante la app es un registro personal: lo compartido y la
+     * vaquita se rechazan (ver UsuarioRepositorio.tienePareja).
+     *
+     * ES EL UNICO LUGAR DE LA APP QUE ESCRIBE DOS DOCUMENTOS sin transaccion. Si
+     * se crea el grupo y despues falla el alta del usuario, queda un grupo
+     * vacio. Antes el reintento lo reusaba; ahora crea otro, asi que el huerfano
+     * queda. Se acepta: es un documento de dos campos que nadie ve. Invertir el
+     * orden seria peor, porque dejaria un usuario apuntando a un grupo que no
+     * existe, y eso si se nota (`GET /grupo` daria 404).
      */
-    private Grupo grupoParaNuevoIntegrante() {
-        Optional<Grupo> existente = grupos.findFirstByOrderByIdAsc();
-        if (existente.isEmpty()) {
-            return grupos.save(new Grupo(nombreGrupoPorDefecto));
-        }
-        Grupo grupo = existente.get();
-        if (usuarios.countByGrupoId(grupo.getId()) >= MAXIMO_INTEGRANTES) {
-            throw new ReglaDeNegocioException("El grupo ya esta completo");
-        }
-        return grupo;
+    private Grupo grupoPropio() {
+        return grupos.save(new Grupo(nombreGrupoPorDefecto));
     }
 
     private TokenRespuesta tokenPara(Usuario usuario) {

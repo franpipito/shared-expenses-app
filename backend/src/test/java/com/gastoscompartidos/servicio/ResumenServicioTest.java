@@ -90,6 +90,16 @@ class ResumenServicioTest {
     class Resumen {
 
         @Test
+        @DisplayName("dice si el grupo tiene pareja: la app esconde lo compartido cuando no")
+        void informaSiHayPareja() {
+            when(usuarios.tienePareja(GRUPO)).thenReturn(false);
+            assertThat(servicio.resumen(YearMonth.of(2026, 9)).tienePareja()).isFalse();
+
+            when(usuarios.tienePareja(GRUPO)).thenReturn(true);
+            assertThat(servicio.resumen(YearMonth.of(2026, 9)).tienePareja()).isTrue();
+        }
+
+        @Test
         @DisplayName("el total es MI parte, no el total del grupo")
         void miParteYNoElTotal() {
             // Es la diferencia que define la pantalla: un compartido de $1.000
@@ -229,7 +239,8 @@ class ResumenServicioTest {
         @Test
         @DisplayName("solo en el grupo: sin la otra persona, el saldo es cero")
         void sinLaOtraPersona() {
-            // Pasa entre que el primero se registra y el segundo entra. Sin
+            // Desde el registro abierto es el estado de toda cuenta nueva, y
+            // tambien el de quien queda cuando la otra persona borra la suya. Sin
             // esto, buscar al otro integrante devolveria null y la respuesta se
             // armaria con un nombre en null.
             when(usuarios.findByGrupoIdOrderByIdAsc(GRUPO)).thenReturn(List.of(franco));

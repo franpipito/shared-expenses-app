@@ -67,4 +67,27 @@ public class PozoConsultasImpl implements PozoConsultas {
 
         return resultado.getMatchedCount() > 0;
     }
+
+    /**
+     * Cambia el nombre en los aportes de una persona, adentro del array.
+     *
+     * Es la primera vez que la app edita elementos de un array en el lugar, y
+     * la herramienta es `arrayFilters`: `aportes.$[a]` significa "cada
+     * elemento del array que cumpla el filtro llamado a", y el filtro se
+     * declara aparte con `filterArray`. El `$` a secas solo tocaria el PRIMER
+     * aporte que matchea, y una persona suele aportar mas de una vez.
+     *
+     * Todo en una sola escritura por pozo, atomica como el `$push` del aporte.
+     */
+    @Override
+    public long anonimizarAportante(String grupoId, String usuarioId, String nombre) {
+        Query query = Query.query(Criteria.where("grupo_id").is(grupoId)
+                .and("aportes.usuario.usuarioId").is(usuarioId));
+        Update update = new Update()
+                .set("aportes.$[a].usuario.nombre", nombre)
+                .filterArray(Criteria.where("a.usuario.usuarioId").is(usuarioId))
+                .inc("version", 1);
+        return mongoTemplate.updateMulti(query, update, Pozo.class).getModifiedCount();
+    }
+
 }

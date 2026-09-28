@@ -131,6 +131,14 @@ export type ResumenRespuesta = {
   totalHormigaMesAnterior: number;
   porCategoria: TotalPorCategoria[];
   animo: AnimoNutria;
+  /**
+   * Si el grupo tiene a las dos personas. Sin pareja, la app esconde lo
+   * compartido y la vaquita: el backend los rechazaria igual.
+   *
+   * Opcional porque un backend anterior a la v1.0 no lo manda. Ausente se lee
+   * como "si": ver el comentario en resumen.tsx.
+   */
+  tienePareja?: boolean;
 };
 
 export type SaldoRespuesta = {

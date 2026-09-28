@@ -58,8 +58,11 @@ $bytes = New-Object byte[] 48
 seguro.
 
 Ese valor va **solo** en las variables de Render. Nunca en el repo, nunca en un
-mensaje, nunca en una captura. Elegí también un código de invitación nuevo,
-distinto de `nutrias`.
+mensaje, nunca en una captura.
+
+> Hasta la v1.0 había también un `CODIGO_INVITACION`. El registro ahora es
+> abierto (cada cuenta nueva crea su propio grupo), así que esa variable ya no
+> existe. Si quedó cargada en Render, se puede borrar: nadie la lee.
 
 > **Orden importante:** rotá el secreto **antes** de armar el atajo de iOS
 > (`docs/atajo-ios.md`). Si lo armás antes, el token que pegues en Atajos nace
@@ -107,8 +110,8 @@ justifique pagar, ese es el primer upgrade a hacer.
 2. Render lee el archivo y propone el servicio `minutria-api` ya configurado:
    Docker, el contexto en `backend/`, el health check en `/actuator/health`, la
    región y el plan free.
-3. Te pide a mano los tres valores marcados `sync: false`, que son los del paso
-   4: `MONGO_URI`, `JWT_SECRETO` y `CODIGO_INVITACION`.
+3. Te pide a mano los dos valores marcados `sync: false`, que son los del paso
+   4: `MONGO_URI` y `JWT_SECRETO`.
 
 Tener la configuración en un archivo versionado y no en un panel es la única
 forma de que dentro de seis meses se pueda leer por qué está como está —- y de
@@ -139,7 +142,6 @@ raíz. Es el mismo tropiezo que en Railway.
 | `SPRING_PROFILES_ACTIVE` | `produccion` |
 | `MONGO_URI` | la cadena de Atlas, ver abajo |
 | `JWT_SECRETO` | el del paso 1 |
-| `CODIGO_INVITACION` | el nuevo, distinto de `nutrias` |
 
 `ZONA_HORARIA` y `JWT_DURACION_DIAS` tienen defaults correctos y no hace falta
 setearlas.
@@ -175,7 +177,7 @@ Activa dos cosas:
   `findByEmail` te deja el email en el log) y garantiza que ningún error
   devuelva stacktrace.
 - **`ValidacionDeConfiguracion`**, que **impide que la app arranque** con el
-  secreto, el código de invitación o la URI de desarrollo. Sin el perfil, esa
+  secreto o la URI de desarrollo. Sin el perfil, esa
   clase ni se instancia, y la app arrancaría feliz, completamente abierta y
   contra una base vacía.
 
@@ -224,8 +226,7 @@ Después, registrate:
 
 ```powershell
 $body = @{ nombre = "Franco"; email = "franco@minutria.app"
-           password = "TU-CONTRASENA-DE-AL-MENOS-12"
-           codigoInvitacion = "TU-CODIGO" } | ConvertTo-Json
+           password = "TU-CONTRASENA-DE-AL-MENOS-12" } | ConvertTo-Json
 Invoke-RestMethod -Uri "https://TU-DOMINIO.onrender.com/auth/registro" `
     -Method Post -ContentType "application/json" -Body $body
 ```
@@ -273,7 +274,6 @@ variable que falta.
 |---|---|
 | El build no encuentra el Dockerfile | Falta **Root Directory = `backend`** (o el `dockerContext` del blueprint) |
 | `Falta la variable de entorno JWT_SECRETO` | Funcionó el guardián: cargar la variable |
-| `Falta la variable de entorno CODIGO_INVITACION` | Idem. Ojo que el de desarrollo (`nutrias`) también se rechaza |
 | `Falta la variable de entorno MONGO_URI` | Idem, o la URI quedó apuntando a localhost |
 | `MONGO_URI no dice contra qué base conectarse` | Es **la trampa de Atlas**: la cadena que te da para copiar no trae el nombre de la base. Agregá `/gastos` entre el host y el `?` |
 | `MONGO_URI trae la contraseña de desarrollo` | Se pegó la URI local en vez de la de Atlas |
@@ -291,9 +291,16 @@ variable que falta.
 ## Cosas que se aprendieron deployando
 
 - **`smoke-test.ps1` NO se corre contra producción.** Está clavado a
-  `localhost:8080`, usa el código de invitación y la contraseña de desarrollo, y
-  arranca registrando usuarios: contra la base real fallaría en la primera línea
-  porque el grupo ya está completo. Es un script de la máquina de desarrollo.
+  `localhost:8080`, usa la contraseña de desarrollo y arranca registrando
+  usuarios de prueba: contra la base real los dejaría creados ahí. Es un script
+  de la máquina de desarrollo.
+- **Con un cambio de contrato, el backend se deploya ANTES que la app.** La v1.0
+  sacó el código de invitación: la app nueva ya no lo manda, y el backend viejo
+  lo exigía con `@NotBlank`. App nueva contra backend viejo = nadie se puede
+  registrar. Al revés no pasa nada, porque el backend ignora los campos que no
+  conoce. La regla general: el servidor tiene que aceptar las dos versiones del
+  cliente mientras convivan, y el cliente que está en los teléfonos no se
+  actualiza cuando uno quiere.
 - **No hay endpoint para cambiar el email ni la contraseña.** Está fuera del MVP
   a propósito: son dos personas que se registran una vez. Si hay que corregir un
   email, es un `updateOne` desde la consola de Atlas, **en minúsculas y sin

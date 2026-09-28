@@ -47,4 +47,10 @@ public interface PozoConsultas {
      *         cerrado. Cerrar dos veces no es un error silencioso.
      */
     boolean cerrar(String pozoId, String grupoId);
+
+    /**
+     * Borrado de cuenta: reemplaza el nombre de esa persona en los aportes que
+     * hizo, en todos los pozos del grupo. Devuelve cuantos pozos toco.
+     */
+    long anonimizarAportante(String grupoId, String usuarioId, String nombre);
 }

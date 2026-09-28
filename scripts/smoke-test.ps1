@@ -1,7 +1,12 @@
 ﻿# Smoke test de la API de gastos.
 #
 # Requiere:
-#   - la app corriendo en localhost:8080
+#   - Mongo local en Docker (docker compose up -d): el script lo usa directo para
+#     juntar a Franco y Ella en un grupo, ver "0. Autenticacion"
+#   - la app corriendo en localhost:8080 CON EL TOPE DE REGISTROS SUBIDO:
+#       $env:REGISTRO_MAX_POR_IP = "100"; .\mvnw.cmd spring-boot:run
+#     El default es 5 registros por IP cada 15 minutos (el valor de produccion),
+#     y este script registra varios usuarios seguidos desde 127.0.0.1.
 #   - las categorias sembradas (las siembra la app sola al arrancar)
 #
 # Correr desde la raiz del repo:
@@ -14,7 +19,6 @@
 $ErrorActionPreference = "Stop"
 
 $base     = "http://localhost:8080"
-$CODIGO   = "nutrias"          # app.registro.codigo-invitacion
 $PASSWORD = "gastos-dev-2026"
 
 # Los ids de categoria se resuelven POR NOMBRE, mas abajo, una vez que hay token.
@@ -108,9 +112,8 @@ function EsperarRegla($bloque, $textoEsperado, $texto) {
     }
 }
 
-function Registrar($nombre, $email, $password, $codigo) {
-    $body = @{ nombre = $nombre; email = $email; password = $password
-               codigoInvitacion = $codigo } | ConvertTo-Json
+function Registrar($nombre, $email, $password) {
+    $body = @{ nombre = $nombre; email = $email; password = $password } | ConvertTo-Json
     return Invoke-RestMethod -Uri "$base/auth/registro" -Method Post `
         -ContentType "application/json" -Body $body
 }
@@ -121,6 +124,32 @@ function Entrar($email, $password) {
         -ContentType "application/json" -Body $body
 }
 
+# Corre JS contra la Mongo local y devuelve lo que imprime. Solo para lo que la
+# API no sabe hacer (juntar dos cuentas en un grupo) o no deja ver (lo que queda
+# en la base despues de un borrado).
+#
+# Comillas simples adentro del JS, a proposito: PowerShell 5.1 le pasa mal las
+# comillas dobles a un ejecutable nativo.
+function Mongo($js) {
+    $salida = docker exec gastos-mongo mongosh -u gastos -p gastos_local --authenticationDatabase admin gastos --quiet --eval $js
+    return "$salida".Trim()
+}
+
+# Mueve la cuenta de $emailQueSeSuma al grupo de $emailDelGrupo. Ver "0.
+# Autenticacion" para el por que.
+function JuntarEnGrupo($emailQueSeSuma, $emailDelGrupo) {
+    $unidos = Mongo ("const f = db.usuario.findOne({ email: '$emailDelGrupo' });" +
+        "const r = db.usuario.updateOne({ email: '$emailQueSeSuma' }, { `$set: { grupo_id: f.grupo_id } });" +
+        "print(r.matchedCount);")
+    if ($unidos -ne "1") {
+        Write-Host ""
+        Write-Host "  No se pudo juntar $emailQueSeSuma con $emailDelGrupo via mongosh (dijo: $unidos)." -ForegroundColor Red
+        Write-Host "  Este script necesita el contenedor gastos-mongo corriendo: docker compose up -d" -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+}
+
 # Registra si no existe, y si ya existe entra. Asi el script se puede correr
 # muchas veces seguidas sin tener que limpiar usuarios entre corridas.
 #
@@ -129,11 +158,20 @@ function Entrar($email, $password) {
 # un "email o contrasena incorrectos" que no tiene nada que ver con la causa.
 function RegistrarOEntrar($nombre, $email, $password) {
     try {
-        return Registrar $nombre $email $password $CODIGO
+        return Registrar $nombre $email $password
     } catch {
         $cuerpo = CuerpoDelError $_
         if ($cuerpo -match "ya esta registrado") {
             return Entrar $email $password
+        }
+        if ($_.Exception.Response.StatusCode.value__ -eq 429) {
+            Write-Host ""
+            Write-Host "  El backend corto los registros por IP (429)." -ForegroundColor Red
+            Write-Host "  El tope default es 5 cada 15 minutos. Reinicia la API con:" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host '      $env:REGISTRO_MAX_POR_IP = "100"; .\mvnw.cmd spring-boot:run'
+            Write-Host ""
+            exit 1
         }
         throw "No se pudo registrar a $nombre, y NO es porque ya exista. El backend dijo: $cuerpo"
     }
@@ -166,7 +204,7 @@ try {
     Write-Host "  Levantalo en otra terminal, en este orden:" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "      docker compose up -d                    # desde la RAIZ del repo"
-    Write-Host "      cd backend; .\mvnw.cmd spring-boot:run"
+    Write-Host '      cd backend; $env:REGISTRO_MAX_POR_IP = "100"; .\mvnw.cmd spring-boot:run'
     Write-Host ""
     Write-Host "  El orden importa: sin Mongo, la API no arranca." -ForegroundColor Yellow
     Write-Host ""
@@ -191,6 +229,17 @@ Chequear ($null -eq $sesionFranco.usuario.email)  "el usuario de la respuesta no
 Chequear ($sesionFranco.token.Split('.').Count -eq 3) "el token tiene las tres partes de un JWT"
 Chequear ($FRANCO_ID -ne $ELLA_ID)                "son dos usuarios distintos"
 
+# --- juntarlos en un grupo, por la base ---
+# Desde la v1.0 el registro es abierto y CADA cuenta nueva crea su propio grupo,
+# asi que Ella acaba de caer en uno distinto al de Franco. La API todavia no
+# sabe sumar a alguien a un grupo ajeno (eso es la v1.1, con codigos por grupo).
+#
+# Este updateOne deja a los dos en el mismo grupo, que es exactamente el estado
+# de Viole y Franco en produccion: se registraron antes de la v1.0, cuando el
+# segundo se sumaba solo. Es idempotente: en las corridas siguientes ya estan
+# juntos y no cambia nada. El grupo que Ella tenia queda vacio; nadie lo ve.
+JuntarEnGrupo "ella@local" "franco@local"
+
 EsperarCodigo { Entrar "franco@local" "contrasena-incorrecta" } `
     401 "contrasena incorrecta da 401"
 
@@ -203,14 +252,8 @@ try { Entrar "franco@local" "otra-cosa" } catch { $errorPasswordMala = CuerpoDel
 Chequear ($errorEmailInexistente -eq $errorPasswordMala) `
     "email inexistente y contrasena mala dan el mismo error, sin filtrar cuales existen"
 
-EsperarRegla { Registrar "Intruso" "intruso@local" $PASSWORD "codigo-equivocado" } `
-    "codigo de invitacion" "sin el codigo de invitacion no se puede registrar"
-
-EsperarRegla { Registrar "Franco" "franco@local" $PASSWORD $CODIGO } `
+EsperarRegla { Registrar "Franco" "franco@local" $PASSWORD } `
     "ya esta registrado" "no se puede registrar dos veces el mismo email"
-
-EsperarRegla { Registrar "Tercero" "tercero@local" $PASSWORD $CODIGO } `
-    "grupo ya esta completo" "un tercer integrante se rechaza"
 
 EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
     -Headers @{ Authorization = "Bearer esto.no.es-un-token" } } `
@@ -222,13 +265,13 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
     401 "el header X-Usuario-Id ya no sirve"
 
 # --- politica de contrasenas ---
-EsperarRegla { Registrar "Corta" "corta@local" "Abc123!x" $CODIGO } `
+EsperarRegla { Registrar "Corta" "corta@local" "Abc123!x" } `
     "al menos 12" "una contrasena de menos de 12 caracteres se rechaza"
 
-EsperarRegla { Registrar "Comun" "comun@local" "123456789012" $CODIGO } `
+EsperarRegla { Registrar "Comun" "comun@local" "123456789012" } `
     "demasiado comun" "una contrasena comun se rechaza aunque sea larga"
 
-EsperarRegla { Registrar "Homonimo" "homonimo@local" "homonimo-del-sur" $CODIGO } `
+EsperarRegla { Registrar "Homonimo" "homonimo@local" "homonimo-del-sur" } `
     "no puede contener tu email" "no se puede usar el propio email como contrasena"
 
 # --- limite de intentos ---
@@ -320,6 +363,43 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/grupo" } 401 `
 # la sesion sola aunque el token estuviera perfecto.
 EsperarCodigo { Invoke-RestMethod -Uri "$base/esta-ruta-no-existe" -Headers $franco } 404 `
     "una ruta inexistente da 404 y no 401, aun con token valido"
+
+# ---------------------------------------------------------------------------
+Titulo "0.2 Una cuenta nueva, sola en su grupo"
+
+# El estado de cualquiera que baje la app desde la App Store: se registra sin
+# codigo, cae en un grupo propio, y la app funciona como registro personal.
+# Queda creada entre corridas, igual que Franco y Ella.
+$sesionSola = RegistrarOEntrar "Sola" "sola@local" $PASSWORD
+$sola = @{ Authorization = "Bearer $($sesionSola.token)" }
+
+$grupoSola = Invoke-RestMethod -Uri "$base/grupo" -Headers $sola
+Chequear (($grupoSola.integrantes | Measure-Object).Count -eq 1) `
+    "quien se registra sin codigo queda sola en su grupo"
+Chequear ($grupoSola.id -ne $grupoFranco.id) `
+    "y NO cae en el grupo de otra pareja"
+
+$resumenSola = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $sola
+Chequear ($resumenSola.tienePareja -eq $false) "su resumen dice tienePareja = false"
+$resumenConPareja = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $franco
+Chequear ($resumenConPareja.tienePareja -eq $true) "el de Franco dice tienePareja = true"
+
+EsperarRegla { Crear $sola @{
+    monto = 1000; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "cafe"; tipo = "COMPARTIDO" } } `
+    "la otra persona tiene que estar en tu grupo" "sin pareja, un COMPARTIDO se rechaza"
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $sola `
+    -ContentType "application/json" -Body (@{ nombre = "Viaje sola" } | ConvertTo-Json) } `
+    "la otra persona tiene que estar en tu grupo" "sin pareja, no se puede abrir una vaquita"
+
+# Un PERSONAL entra igual: sola, la app es un registro personal completo.
+$personalDeSola = Crear $sola @{
+    monto = 1000; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "cafe de la esquina"; tipo = "PERSONAL"; esHormiga = $true
+}
+Chequear ($personalDeSola.tipo -eq "PERSONAL") "sin pareja, un PERSONAL entra normal"
+Invoke-RestMethod -Uri "$base/gastos/$($personalDeSola.id)" -Method Delete -Headers $sola | Out-Null
 
 # ---------------------------------------------------------------------------
 Titulo "1. Ella carga un gasto PERSONAL marcado como hormiga"
@@ -776,6 +856,80 @@ Invoke-RestMethod -Uri "$base/gastos/$($personalDeElla.id)" -Method Delete -Head
 
 $quedan = Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" -Headers $ella
 Chequear (($quedan | Measure-Object).Count -eq 0) "quedo todo limpio"
+
+# ---------------------------------------------------------------------------
+Titulo "12. Borrar la cuenta"
+
+# Con una pareja descartable y no con Franco y Ella: al final del bloque las dos
+# cuentas estan borradas, asi que cada corrida arranca de cero y el script se
+# limpia solo. De paso prueba los DOS caminos: la primera en irse deja a alguien
+# (se anonimiza), la segunda es la ultima del grupo (se va todo).
+$sesionBorra = RegistrarOEntrar "Borra" "borra@local" $PASSWORD
+$sesionQueda = RegistrarOEntrar "Queda" "queda@local" $PASSWORD
+JuntarEnGrupo "queda@local" "borra@local"
+$borra = @{ Authorization = "Bearer $($sesionBorra.token)" }
+$queda = @{ Authorization = "Bearer $($sesionQueda.token)" }
+$BORRA_ID = $sesionBorra.usuario.id
+$GRUPO_BQ = (Invoke-RestMethod -Uri "$base/grupo" -Headers $borra).id
+
+$personalDeBorra = Crear $borra @{ monto = 5000; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "regalo sorpresa"; tipo = "PERSONAL" }
+$compartidoDeBorra = Crear $borra @{ monto = 8000; categoriaId = $COMIDA; fecha = "2026-09-06"
+    descripcion = "cena del sabado"; tipo = "COMPARTIDO"; porcentajePagador = 50 }
+$pozoBQ = Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $queda `
+    -ContentType "application/json" -Body (@{ nombre = "Escapada" } | ConvertTo-Json)
+# Dos aportes de Borra: el anonimizado tiene que tocar TODOS, no solo el primero.
+# Es justo lo que distingue $[a] con arrayFilters de un $ a secas.
+1..2 | ForEach-Object {
+    Invoke-RestMethod -Uri "$base/pozos/$($pozoBQ.id)/aportes" -Method Post -Headers $borra `
+        -ContentType "application/json" -Body (@{ monto = 1000 } | ConvertTo-Json) | Out-Null
+}
+
+$cuerpoMal = @{ password = "no-es-mi-contrasena" } | ConvertTo-Json
+EsperarRegla { Invoke-RestMethod -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $borra `
+    -ContentType "application/json" -Body $cuerpoMal } `
+    "contrasena no es correcta" "con la contrasena equivocada no borra, y da 400 y no 401"
+
+$r = Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $borra -UseBasicParsing `
+    -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json)
+Chequear ($r.StatusCode -eq 204) "con la contrasena correcta borra la cuenta (204)"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" -Headers $borra } `
+    401 "el token de la cuenta borrada deja de servir"
+EsperarCodigo { Entrar "borra@local" $PASSWORD } 401 "y ya no se puede entrar"
+
+Chequear ((Mongo "print(db.gasto.countDocuments({ 'pagadoPor.usuarioId': '$BORRA_ID', tipo: 'PERSONAL' }))") -eq "0") `
+    "sus gastos personales se borraron de la base"
+
+$compartidoVisto = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeBorra.id)" -Headers $queda
+Chequear ($compartidoVisto.pagadoPor.nombre -eq "Cuenta eliminada") `
+    "el compartido queda en el historial de Queda, con el nombre anonimizado"
+Chequear ($compartidoVisto.descripcion -eq "cena del sabado") "y con su descripcion"
+
+$pozoVisto = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $queda
+Chequear ($pozoVisto.aportado -eq 2000) "sus aportes siguen sumando en la vaquita"
+$filaAnonima = $pozoVisto.porPersona | Where-Object { $_.nombre -eq "Cuenta eliminada" }
+Chequear ($filaAnonima.total -eq 2000) "y aparecen en el desglose como Cuenta eliminada"
+Chequear ((Mongo "print(db.pozo.countDocuments({ 'aportes.usuario.nombre': 'Borra' }))") -eq "0") `
+    "no quedo ningun aporte con su nombre (arrayFilters toco todos)"
+
+$corregido = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeBorra.id)" -Method Put -Headers $queda `
+    -ContentType "application/json" -Body (@{ monto = 7000; categoriaId = $COMIDA; fecha = "2026-09-06"
+        descripcion = "cena del sabado"; tipo = "COMPARTIDO"; porcentajePagador = 50
+        version = $compartidoVisto.version } | ConvertTo-Json)
+Chequear ($corregido.monto -eq 7000) "Queda puede corregir un compartido que pago la cuenta borrada"
+
+Chequear ((Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -Headers $queda).tienePareja -eq $false) `
+    "Queda quedo sola: su resumen dice tienePareja = false"
+
+# La ultima del grupo: se va todo.
+$r = Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $queda -UseBasicParsing `
+    -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json)
+Chequear ($r.StatusCode -eq 204) "la ultima integrante borra su cuenta"
+Chequear ((Mongo "print(db.gasto.countDocuments({ grupo_id: '$GRUPO_BQ' }) + db.pozo.countDocuments({ grupo_id: '$GRUPO_BQ' }))") -eq "0") `
+    "sin nadie en el grupo, no quedan ni gastos ni vaquitas"
+Chequear ((Mongo "print(db.grupo.countDocuments({ _id: ObjectId('$GRUPO_BQ') }))") -eq "0") `
+    "y el grupo tambien se borro"
 
 # ---------------------------------------------------------------------------
 Write-Host ""
