@@ -32,7 +32,7 @@ import { Cargando } from './_layout';
 const FRASES = {
   CONTENTA: 'Vas mejor que el mes pasado a esta altura.',
   TRANQUILA: 'Vas parecido al mes pasado a esta altura.',
-  PREOCUPADA: 'Vas gastando un poco mas que el mes pasado.',
+  PREOCUPADA: 'Vas gastando un poco más que el mes pasado.',
 } as const;
 
 /**
@@ -63,8 +63,8 @@ function fraseDelAnimo(
   // Es el precio de que ahora se pueda navegar a meses anteriores.
   if (totalHormiga === 0) {
     return esElMesActual
-      ? 'Todavia no anotaste ningun gasto evitable este mes.'
-      : 'No anotaste ningun gasto evitable ese mes.';
+      ? 'Todavía no anotaste ningún gasto evitable este mes.'
+      : 'No anotaste ningún gasto evitable ese mes.';
   }
   return FRASES[animo];
 }
@@ -235,7 +235,7 @@ export default function Resumen() {
 
             {resumen.porCategoria.length > 0 ? (
               <View style={estilos.categorias}>
-                <Text style={estilos.rotuloSeccion}>Por categoria</Text>
+                <Text style={estilos.rotuloSeccion}>Por categoría</Text>
                 {resumen.porCategoria.map((c) => (
                   <View key={c.categoriaId} style={estilos.categoria}>
                     <IconoCategoria nombre={c.icono} />
@@ -253,7 +253,7 @@ export default function Resumen() {
                 ))}
               </View>
             ) : (
-              <Text style={estilos.vacio}>{esElMesActual ? 'Todavia no cargaste nada este mes.' : 'No cargaste nada ese mes.'}</Text>
+              <Text style={estilos.vacio}>{esElMesActual ? 'Todavía no cargaste nada este mes.' : 'No cargaste nada ese mes.'}</Text>
             )}
           </>
         ) : null}

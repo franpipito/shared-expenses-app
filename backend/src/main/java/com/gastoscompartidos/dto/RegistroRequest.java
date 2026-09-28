@@ -21,7 +21,7 @@ public record RegistroRequest(
         String nombre,
 
         @NotBlank(message = "el email es obligatorio")
-        @Email(message = "el email no tiene un formato valido")
+        @Email(message = "el email no tiene un formato válido")
         @Size(max = 255)
         String email,
 
@@ -29,8 +29,8 @@ public record RegistroRequest(
         // trunca silenciosamente despues de 72 bytes, asi que sin tope dos
         // contrasenas larguisimas que compartan los primeros 72 bytes serian
         // equivalentes.
-        @NotBlank(message = "la contrasena es obligatoria")
-        @Size(min = 8, max = 72, message = "la contrasena tiene que tener entre 8 y 72 caracteres")
+        @NotBlank(message = "la contraseña es obligatoria")
+        @Size(min = 8, max = 72, message = "la contraseña tiene que tener entre 8 y 72 caracteres")
         String password
 ) {
 }

@@ -58,7 +58,7 @@ export default function Ajustes() {
             accessibilityRole="button"
             style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
           >
-            <Text style={estilos.filaTexto}>Cerrar sesion</Text>
+            <Text style={estilos.filaTexto}>Cerrar sesión</Text>
           </Pressable>
 
           <Pressable
@@ -66,7 +66,7 @@ export default function Ajustes() {
             accessibilityRole="link"
             style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
           >
-            <Text style={estilos.filaTexto}>Politica de privacidad</Text>
+            <Text style={estilos.filaTexto}>Política de privacidad</Text>
             <Text style={estilos.flecha}>›</Text>
           </Pressable>
         </View>

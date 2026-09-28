@@ -96,7 +96,7 @@ export default function Viaje() {
       </View>
 
       <View style={estilos.bloque}>
-        <Text style={estilos.rotuloSeccion}>Quien puso que</Text>
+        <Text style={estilos.rotuloSeccion}>Quién puso qué</Text>
         {pozo.porPersona.map((p) => (
           <View key={p.usuarioId} style={estilos.fila}>
             <Text style={estilos.filaEtiqueta}>{p.nombre}</Text>

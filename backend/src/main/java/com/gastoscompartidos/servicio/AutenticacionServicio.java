@@ -99,7 +99,7 @@ public class AutenticacionServicio {
         }
 
         if (usuarios.findByEmail(email).isPresent()) {
-            throw new ReglaDeNegocioException("Ese email ya esta registrado");
+            throw new ReglaDeNegocioException("Ese email ya está registrado");
         }
 
         Usuario usuario = new Usuario(
@@ -142,7 +142,7 @@ public class AutenticacionServicio {
             limitador.registrarFallo(clavePorIp);
             // El MISMO mensaje para los dos casos. Decir "ese email no existe"
             // convertiria el login en un verificador de emails registrados.
-            throw new NoAutenticadoException("Email o contrasena incorrectos");
+            throw new NoAutenticadoException("Email o contraseña incorrectos");
         }
 
         limitador.limpiar(clavePorEmail);

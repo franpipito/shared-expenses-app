@@ -188,7 +188,7 @@ class GastoServicioTest {
             assertThatThrownBy(() -> servicio.crear(
                     pedido("100.00", TipoGasto.PERSONAL, null, viole.getId(), null)))
                     .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("solo lo puede cargar quien lo pago");
+                    .hasMessageContaining("solo lo puede cargar quien lo pagó");
         }
 
         @Test
@@ -243,7 +243,7 @@ class GastoServicioTest {
             assertThatThrownBy(() -> servicio.actualizar("g-1",
                     pedido("50000.00", TipoGasto.PERSONAL, null, null, null)))
                     .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("solo lo puede tener quien lo pago");
+                    .hasMessageContaining("solo lo puede tener quien lo pagó");
         }
 
         @Test
@@ -487,7 +487,7 @@ class GastoServicioTest {
 
             assertThatThrownBy(() -> servicio.crear(conPozo("100.00", 50, "pozo-1")))
                     .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("ya esta cerrada");
+                    .hasMessageContaining("ya está cerrada");
         }
 
         @Test

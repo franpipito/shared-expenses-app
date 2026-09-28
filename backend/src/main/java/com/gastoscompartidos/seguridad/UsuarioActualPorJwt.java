@@ -46,7 +46,7 @@ public class UsuarioActualPorJwt implements UsuarioActual {
         // igual se rechaza si su generacion quedo vieja, que es lo que pasa
         // despues de POST /auth/cerrar-sesiones.
         if (identidad.tokenVersion() != usuario.getTokenVersion()) {
-            throw new NoAutenticadoException("La sesion fue cerrada. Volve a entrar.");
+            throw new NoAutenticadoException("La sesión fue cerrada. Volvé a entrar.");
         }
 
         return usuario;

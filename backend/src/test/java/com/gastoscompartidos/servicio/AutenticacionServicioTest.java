@@ -218,7 +218,7 @@ class AutenticacionServicioTest {
 
             assertThatThrownBy(() -> servicio.registrar(registro("Franco", "franco@local"), IP))
                     .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("ya esta registrado");
+                    .hasMessageContaining("ya está registrado");
         }
     }
 
@@ -312,7 +312,7 @@ class AutenticacionServicioTest {
             // cuatro fallos siguen sin bloquear.
             for (int i = 0; i < LimitadorDeIntentos.MAX_POR_CUENTA - 1; i++) {
                 assertThat(mensajeDeFallo("franco@local", "contrasena-equivocada-larga"))
-                        .isEqualTo("Email o contrasena incorrectos");
+                        .isEqualTo("Email o contraseña incorrectos");
             }
         }
     }

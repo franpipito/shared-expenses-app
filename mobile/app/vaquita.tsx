@@ -187,12 +187,12 @@ function SinVaquita({ onCreada }: PropsSinVaquita) {
       <Nutria animo="NOSOTROS" tamano={140} />
       <Text style={estilos.vacioTitulo}>Junten plata para un viaje</Text>
       <Text style={estilos.vacioBajada}>
-        Los dos ponen, y los gastos del viaje salen de ahi. Lo que sacan de la
-        vaquita no genera deuda entre ustedes: la plata ya se repartio al ponerla.
+        Los dos ponen, y los gastos del viaje salen de ahí. Lo que sacan de la
+        vaquita no genera deuda entre ustedes: la plata ya se repartió al ponerla.
       </Text>
 
       <View style={estilos.formulario}>
-        <Text style={estilos.etiqueta}>Como se llama</Text>
+        <Text style={estilos.etiqueta}>Cómo se llama</Text>
         <TextInput
           value={nombre}
           onChangeText={setNombre}
@@ -202,7 +202,7 @@ function SinVaquita({ onCreada }: PropsSinVaquita) {
           style={estilos.input}
         />
 
-        <Text style={estilos.etiqueta}>Cuanto quieren juntar (opcional)</Text>
+        <Text style={estilos.etiqueta}>Cuánto quieren juntar (opcional)</Text>
         <TextInput
           value={objetivo}
           onChangeText={setObjetivo}
@@ -218,7 +218,7 @@ function SinVaquita({ onCreada }: PropsSinVaquita) {
           presupuesto. Esto es plata que ya existe, no una meta que te juzga.
         */}
         <Text style={estilos.ayuda}>
-          No es un tope: nada se rechaza por pasarlo. Sirve para ver cuanto falta.
+          No es un tope: nada se rechaza por pasarlo. Sirve para ver cuánto falta.
         </Text>
       </View>
 
@@ -277,8 +277,8 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
     Alert.alert(
       `Cerrar ${pozo.nombre}`,
       enRojo
-        ? 'Se pasaron de lo que pusieron. Al cerrarla no se va a poder aportar ni cargar mas gastos, y no se puede reabrir.'
-        : `Quedan ${formatearMonto(pozo.restante)} sin usar. Al cerrarla no se va a poder aportar ni cargar mas gastos, y no se puede reabrir.`,
+        ? 'Se pasaron de lo que pusieron. Al cerrarla no se va a poder aportar ni cargar más gastos, y no se puede reabrir.'
+        : `Quedan ${formatearMonto(pozo.restante)} sin usar. Al cerrarla no se va a poder aportar ni cargar más gastos, y no se puede reabrir.`,
       [
         { text: 'Dejarla abierta', style: 'cancel' },
         {
@@ -345,7 +345,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
         estos dos numeros, la cuenta la hacen ellos.
       */}
       <View style={estilos.bloque}>
-        <Text style={estilos.rotuloSeccion}>Quien puso que</Text>
+        <Text style={estilos.rotuloSeccion}>Quién puso qué</Text>
         {pozo.porPersona.map((p) => (
           <View key={p.usuarioId} style={estilos.fila}>
             <Text style={estilos.filaEtiqueta}>{p.nombre}</Text>
@@ -396,7 +396,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
           hitSlop={8}
         >
           <Text style={[estilos.sacar, !montoValido && { opacity: 0.4 }]}>
-            Me equivoque: sacar esta plata del pozo
+            Me equivoqué: sacar esta plata del pozo
           </Text>
         </Pressable>
       </View>
@@ -405,7 +405,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
 
       <View style={estilos.bloque}>
         <Text style={estilos.rotuloSeccion}>
-          {gastos.length === 0 ? 'Todavia no gastaron nada' : 'Los gastos del viaje'}
+          {gastos.length === 0 ? 'Todavía no gastaron nada' : 'Los gastos del viaje'}
         </Text>
         {/*
           Esta lista NO se corta por mes, a diferencia de todo el resto de la

@@ -66,7 +66,7 @@ export default function Registro() {
       });
       router.replace('/resumen');
     } catch (e) {
-      setError(e instanceof ErrorDeApi ? e.message : 'Algo salio mal. Proba de nuevo.');
+      setError(e instanceof ErrorDeApi ? e.message : 'Algo salió mal. Probá de nuevo.');
     } finally {
       setEnviando(false);
     }
@@ -87,7 +87,7 @@ export default function Registro() {
         <View style={estilos.encabezado}>
           <Nutria animo="CONTENTA" tamano={120} />
           <Text style={estilos.marca}>Sumate</Text>
-          <Text style={estilos.bajada}>Anota lo que gastas. La nutria te acompaña.</Text>
+          <Text style={estilos.bajada}>Anotá lo que gastás. La nutria te acompaña.</Text>
         </View>
 
         <View style={estilos.campos}>
@@ -105,7 +105,7 @@ export default function Registro() {
             alCambiar={setPassword}
             secreto
             autoComplete="new-password"
-            ayuda="Minimo 12 caracteres. Una frase que te acuerdes sirve mejor que algo corto y raro."
+            ayuda="Mínimo 12 caracteres. Una frase que te acuerdes sirve mejor que algo corto y raro."
           />
 
           {error ? <Text style={estilos.error}>{error}</Text> : null}

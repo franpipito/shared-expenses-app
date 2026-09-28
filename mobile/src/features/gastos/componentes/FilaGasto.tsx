@@ -63,7 +63,7 @@ export function FilaGasto({ gasto, idUsuarioActual, alTocar }: Props) {
   const detalle = [
     formatearDia(gasto.fecha),
     gasto.descripcion ? gasto.categoria.nombre : null,
-    compartido ? (loPagoElOtro ? `pago ${gasto.pagadoPor.nombre}` : 'compartido') : null,
+    compartido ? (loPagoElOtro ? `pagó ${gasto.pagadoPor.nombre}` : 'compartido') : null,
   ]
     .filter(Boolean)
     .join(' · ');

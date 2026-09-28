@@ -124,7 +124,7 @@ class PozoServicioTest {
             assertThatThrownBy(() -> servicio.crear(
                     new CrearPozoRequest("Otra", null, null, null)))
                     .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("Cerra la anterior");
+                    .hasMessageContaining("Cerrá la anterior");
 
             // Ni siquiera intenta escribir: el chequeo previo esta para dar un
             // mensaje util, no para ahorrarse el indice.
@@ -144,7 +144,7 @@ class PozoServicioTest {
             assertThatThrownBy(() -> servicio.crear(
                     new CrearPozoRequest("Bariloche", null, null, null)))
                     .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("Cerra la anterior");
+                    .hasMessageContaining("Cerrá la anterior");
         }
 
         @Test

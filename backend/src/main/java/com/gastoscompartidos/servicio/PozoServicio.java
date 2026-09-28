@@ -95,7 +95,7 @@ public class PozoServicio {
         // correctitud.
         if (buscarAbierto(actual.getGrupoId()).isPresent()) {
             throw new ReglaDeNegocioException(
-                    "Ya hay una vaquita abierta. Cerra la anterior antes de abrir otra.");
+                    "Ya hay una vaquita abierta. Cerrá la anterior antes de abrir otra.");
         }
 
         Pozo pozo = new Pozo(
@@ -111,7 +111,7 @@ public class PozoServicio {
             // El indice parcial unico hizo su trabajo: alguien creo un pozo
             // abierto entre nuestro chequeo y nuestra escritura.
             throw new ReglaDeNegocioException(
-                    "Ya hay una vaquita abierta. Cerra la anterior antes de abrir otra.");
+                    "Ya hay una vaquita abierta. Cerrá la anterior antes de abrir otra.");
         }
     }
 

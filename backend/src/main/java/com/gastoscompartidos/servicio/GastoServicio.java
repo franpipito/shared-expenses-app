@@ -228,7 +228,7 @@ public class GastoServicio {
 
     private Categoria buscarCategoria(String id) {
         return categorias.findById(id)
-                .orElseThrow(() -> new ReglaDeNegocioException("No existe la categoria " + id));
+                .orElseThrow(() -> new ReglaDeNegocioException("No existe la categoría " + id));
     }
 
     private static ReferenciaCategoria referencia(Categoria categoria) {
@@ -246,7 +246,7 @@ public class GastoServicio {
             return actual;
         }
         if (req.tipo() == TipoGasto.PERSONAL) {
-            throw new ReglaDeNegocioException("Un gasto personal solo lo puede cargar quien lo pago");
+            throw new ReglaDeNegocioException("Un gasto personal solo lo puede cargar quien lo pagó");
         }
         Usuario otro = usuarios.findById(req.pagadoPorId())
                 .orElseThrow(() -> new ReglaDeNegocioException("No existe el usuario " + req.pagadoPorId()));
@@ -297,7 +297,7 @@ public class GastoServicio {
 
         if (req.tipo() == TipoGasto.PERSONAL && !pedido.equals(actual.getId())) {
             throw new ReglaDeNegocioException(
-                    "Un gasto personal solo lo puede tener quien lo pago");
+                    "Un gasto personal solo lo puede tener quien lo pagó");
         }
 
         if (pedido.equals(actual.getId())) {
@@ -426,7 +426,7 @@ public class GastoServicio {
         // es lo que cambiaria sus numeros despues de darlos por cerrados.
         boolean loEstaMoviendo = !pozo.getId().equals(pozoActual);
         if (pozo.getEstado() != EstadoPozo.ABIERTO && loEstaMoviendo) {
-            throw new ReglaDeNegocioException("Esa vaquita ya esta cerrada");
+            throw new ReglaDeNegocioException("Esa vaquita ya está cerrada");
         }
 
         return pozo.getId();

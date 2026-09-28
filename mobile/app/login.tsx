@@ -41,7 +41,7 @@ export default function Login() {
       // El backend devuelve el MISMO mensaje para email inexistente y para
       // contrasena incorrecta, a proposito, para no delatar que cuentas existen.
       // La app no tiene que arruinar eso agregando detalle de su cosecha.
-      setError(e instanceof ErrorDeApi ? e.message : 'Algo salio mal. Proba de nuevo.');
+      setError(e instanceof ErrorDeApi ? e.message : 'Algo salió mal. Probá de nuevo.');
     } finally {
       setEnviando(false);
     }
@@ -64,7 +64,7 @@ export default function Login() {
         <View style={estilos.encabezado}>
           <Nutria animo="TRANQUILA" tamano={150} />
           <Text style={estilos.marca}>MiNutria</Text>
-          <Text style={estilos.bajada}>Anota rapido. La nutria hace las cuentas.</Text>
+          <Text style={estilos.bajada}>Anotá rápido. La nutria hace las cuentas.</Text>
         </View>
 
         <View style={estilos.campos}>
@@ -103,7 +103,7 @@ export default function Login() {
             hitSlop={12}
             accessibilityRole="button"
           >
-            <Text style={estilos.crearCuenta}>No tengo cuenta todavia</Text>
+            <Text style={estilos.crearCuenta}>No tengo cuenta todavía</Text>
           </Pressable>
         </View>
       </ScrollView>

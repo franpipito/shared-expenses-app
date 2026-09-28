@@ -76,7 +76,7 @@ public class LimitadorDeIntentos {
         }
         if (ventana.fallos.get() >= maxIntentos) {
             throw new DemasiadosIntentosException(
-                    "Demasiados intentos. Espera unos minutos y volve a probar.");
+                    "Demasiados intentos. Esperá unos minutos y volvé a probar.");
         }
     }
 

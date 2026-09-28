@@ -122,10 +122,10 @@ export default function Gastos() {
             <View style={estilos.vacio}>
               <Nutria animo="TRANQUILA" tamano={120} />
               <Text style={estilos.vacioTitulo}>
-                {esElMesActual ? 'Todavia no cargaste nada este mes' : 'No cargaste nada ese mes'}
+                {esElMesActual ? 'Todavía no cargaste nada este mes' : 'No cargaste nada ese mes'}
               </Text>
               <Text style={estilos.vacioBajada}>
-                Los gastos que cargues van a aparecer aca, con los evitables marcados.
+                Los gastos que cargues van a aparecer acá, con los evitables marcados.
               </Text>
             </View>
           )

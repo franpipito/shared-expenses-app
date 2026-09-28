@@ -95,7 +95,7 @@ public class ConfiguracionSeguridad {
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         (req, res, ex) -> manejadorDeExcepciones.resolveException(
                                 req, res, null,
-                                new NoAutenticadoException("Falta el token, o no es valido"))))
+                                new NoAutenticadoException("Falta el token, o no es válido"))))
 
                 .addFilterBefore(new FiltroJwt(tokens), UsernamePasswordAuthenticationFilter.class);
 

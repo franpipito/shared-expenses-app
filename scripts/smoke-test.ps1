@@ -161,7 +161,7 @@ function RegistrarOEntrar($nombre, $email, $password) {
         return Registrar $nombre $email $password
     } catch {
         $cuerpo = CuerpoDelError $_
-        if ($cuerpo -match "ya esta registrado") {
+        if ($cuerpo -match "registrado") {
             return Entrar $email $password
         }
         if ($_.Exception.Response.StatusCode.value__ -eq 429) {
@@ -253,7 +253,7 @@ Chequear ($errorEmailInexistente -eq $errorPasswordMala) `
     "email inexistente y contrasena mala dan el mismo error, sin filtrar cuales existen"
 
 EsperarRegla { Registrar "Franco" "franco@local" $PASSWORD } `
-    "ya esta registrado" "no se puede registrar dos veces el mismo email"
+    "registrado" "no se puede registrar dos veces el mismo email"
 
 EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
     -Headers @{ Authorization = "Bearer esto.no.es-un-token" } } `
@@ -269,7 +269,7 @@ EsperarRegla { Registrar "Corta" "corta@local" "Abc123!x" } `
     "al menos 12" "una contrasena de menos de 12 caracteres se rechaza"
 
 EsperarRegla { Registrar "Comun" "comun@local" "123456789012" } `
-    "demasiado comun" "una contrasena comun se rechaza aunque sea larga"
+    "demasiado com" "una contrasena comun se rechaza aunque sea larga"
 
 EsperarRegla { Registrar "Homonimo" "homonimo@local" "homonimo-del-sur" } `
     "no puede contener tu email" "no se puede usar el propio email como contrasena"
@@ -510,11 +510,11 @@ EsperarValidacion { Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "
 # queremos probar.
 EsperarRegla { Crear $franco @{ monto = 100; categoriaId = "000000000000000000000000"; fecha = "2026-09-06"
                                 descripcion = "x"; tipo = "PERSONAL" } } `
-    "No existe la categoria" "categoria inexistente rechazada por el servicio"
+    "No existe la categor" "categoria inexistente rechazada por el servicio"
 
 EsperarRegla { Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"
                                 descripcion = "x"; tipo = "PERSONAL"; pagadoPorId = $ELLA_ID } } `
-    "solo lo puede cargar quien lo pago" "no se puede cargar un personal a nombre de otro"
+    "solo lo puede cargar quien lo pag" "no se puede cargar un personal a nombre de otro"
 
 EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" } `
     401 "una request sin token da 401"
@@ -820,7 +820,7 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method
 EsperarRegla { Crear $franco @{
         monto = 5000.00; categoriaId = $CAFE; fecha = "2026-09-06"
         descripcion = "tarde"; tipo = "COMPARTIDO"; pozoId = $pozo.id
-    } } "ya esta cerrada" "no se puede cargar un gasto a una vaquita cerrada"
+    } } "cerrada" "no se puede cargar un gasto a una vaquita cerrada"
 
 EsperarSinContenido "$base/pozos/activo" $ella "despues de cerrarla, no hay vaquita activa"
 
@@ -895,7 +895,7 @@ $pozoBQ = Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $queda `
 $cuerpoMal = @{ password = "no-es-mi-contrasena" } | ConvertTo-Json
 EsperarRegla { Invoke-RestMethod -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $borra `
     -ContentType "application/json" -Body $cuerpoMal } `
-    "contrasena no es correcta" "con la contrasena equivocada no borra, y da 400 y no 401"
+    "no es correcta" "con la contrasena equivocada no borra, y da 400 y no 401"
 
 $r = Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $borra -UseBasicParsing `
     -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json)

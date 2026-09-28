@@ -62,7 +62,7 @@ export default function Saldo() {
         <View style={estilos.encabezado}>
           <View style={estilos.encabezadoTexto}>
             <Text style={estilos.seccion}>La cuenta del mes</Text>
-            <Text style={estilos.titulo}>Quien le debe a quien</Text>
+            <Text style={estilos.titulo}>Quién le debe a quién</Text>
           </View>
           <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
             <Text style={estilos.volver}>Resumen</Text>
@@ -79,17 +79,17 @@ export default function Saldo() {
 
             {aMano ? (
               <>
-                <Text style={estilos.aMano}>Estan a mano</Text>
+                <Text style={estilos.aMano}>Están a mano</Text>
                 <Text style={estilos.bajada}>
                   {esElMesActual
-                    ? 'Ningun gasto compartido quedo sin equilibrar este mes.'
-                    : 'Ningun gasto compartido quedo sin equilibrar ese mes.'}
+                    ? 'Ningún gasto compartido quedó sin equilibrar este mes.'
+                    : 'Ningún gasto compartido quedó sin equilibrar ese mes.'}
                 </Text>
               </>
             ) : (
               <>
                 <Text style={estilos.rotulo}>
-                  {aFavor > 0 ? `${saldo.deudorNombre} te debe` : `Le debes a ${saldo.acreedorNombre}`}
+                  {aFavor > 0 ? `${saldo.deudorNombre} te debe` : `Le debés a ${saldo.acreedorNombre}`}
                 </Text>
                 {/*
                   El numero grande. Se usa `monto`, que el backend garantiza
@@ -120,7 +120,7 @@ export default function Saldo() {
           -- un "ya te pague" -- solo crece y deja de significar algo.
         */}
         <Text style={estilos.nota}>
-          Es la cuenta del mes, no el historico. Arranca de cero cada mes, asi que
+          Es la cuenta del mes, no el histórico. Arranca de cero cada mes, así que
           conviene arreglarla antes de que termine.
         </Text>
 

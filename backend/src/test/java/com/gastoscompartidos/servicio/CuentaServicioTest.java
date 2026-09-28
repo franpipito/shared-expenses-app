@@ -127,7 +127,7 @@ class CuentaServicioTest {
         // sesion sola, que es como reacciona a un token vencido.
         assertThatThrownBy(() -> servicio.borrar(new BorrarCuentaRequest("otra-cosa-larga-igual")))
                 .isInstanceOf(ReglaDeNegocioException.class)
-                .hasMessageContaining("contrasena no es correcta");
+                .hasMessageContaining("contraseña no es correcta");
 
         verify(usuarios, never()).delete(any());
         verify(gastos, never()).borrarPersonalesDe(anyString(), anyString());

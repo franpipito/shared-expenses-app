@@ -191,7 +191,7 @@ export function FormularioDeGasto({
         const { dato } = await traerCategorias();
         setCategorias(dato ?? []);
       } catch (e) {
-        setError(e instanceof ErrorDeApi ? e.message : 'No se pudieron traer las categorias.');
+        setError(e instanceof ErrorDeApi ? e.message : 'No se pudieron traer las categorías.');
       }
     })();
   }, []);
@@ -420,7 +420,7 @@ export function FormularioDeGasto({
         </View>
 
         <View style={estilos.bloque}>
-          <Text style={estilos.etiqueta}>Categoria</Text>
+          <Text style={estilos.etiqueta}>Categoría</Text>
           <View style={estilos.chips}>
             {categorias.map((c) => {
               const elegida = c.id === categoriaId;
@@ -454,7 +454,7 @@ export function FormularioDeGasto({
             verdad y tipear era el paso que mas frenaba la carga en el mostrador.
             Sin placeholder que invite a llenarla.
           */}
-          <Text style={estilos.etiqueta}>Descripcion (opcional)</Text>
+          <Text style={estilos.etiqueta}>Descripción (opcional)</Text>
           <TextInput
             value={descripcion}
             onChangeText={setDescripcion}
@@ -476,7 +476,7 @@ export function FormularioDeGasto({
           <View style={estilos.hormigaTexto}>
             <Text style={estilos.hormigaTitulo}>Fue un gasto evitable</Text>
             <Text style={estilos.hormigaBajada}>
-              Mirandolo en frio, podria no haberlo hecho
+              Mirándolo en frío, podría no haberlo hecho
             </Text>
           </View>
           <Switch
@@ -524,7 +524,7 @@ export function FormularioDeGasto({
             */}
             {hayVaquita ? (
               <>
-                <Text style={estilos.repartoEtiqueta}>De donde sale</Text>
+                <Text style={estilos.repartoEtiqueta}>De dónde sale</Text>
                 <View style={estilos.chips}>
                   {(['PERSONAL', 'COMPARTIDO', 'VAQUITA'] as const).map((d) => {
                     const elegido = d === destino;
@@ -587,7 +587,7 @@ export function FormularioDeGasto({
                 */}
                 {otro ? (
                   <>
-                    <Text style={estilos.repartoEtiqueta}>Quien pago</Text>
+                    <Text style={estilos.repartoEtiqueta}>Quién pagó</Text>
                     <View style={estilos.chips}>
                       {[true, false].map((yo) => (
                         <Pressable
@@ -603,7 +603,7 @@ export function FormularioDeGasto({
                               pagueYo === yo && estilos.chipTextoElegido,
                             ]}
                           >
-                            {yo ? 'Pague yo' : `Pago ${otro.nombre}`}
+                            {yo ? 'Pagué yo' : `Pagó ${otro.nombre}`}
                           </Text>
                         </Pressable>
                       ))}
@@ -623,7 +623,7 @@ export function FormularioDeGasto({
                         accessibilityState={{ selected: elegido }}
                         // El porcentaje solo no dice nada leido en voz alta.
                         accessibilityLabel={
-                          p === 100 ? 'Pagas vos el total' : `Vos ${p} por ciento, la otra persona ${100 - p}`
+                          p === 100 ? 'Pagás vos el total' : `Vos ${p} por ciento, la otra persona ${100 - p}`
                         }
                         style={[estilos.chip, elegido && estilos.chipElegido]}
                       >

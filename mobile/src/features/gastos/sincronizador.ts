@@ -103,7 +103,7 @@ async function enviarTodo(): Promise<ResultadoDeEnvio> {
       // 4xx: el servidor lo rechazo y lo va a rechazar siempre.
       await marcarRechazado(
         pendiente.clienteId,
-        e instanceof ErrorDeApi ? e.message : 'El servidor lo rechazo.',
+        e instanceof ErrorDeApi ? e.message : 'El servidor lo rechazó.',
       );
     }
   }

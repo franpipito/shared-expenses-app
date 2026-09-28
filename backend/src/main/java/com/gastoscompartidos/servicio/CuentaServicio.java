@@ -81,7 +81,7 @@ public class CuentaServicio {
             // 400 y NO 401, a proposito: la app cierra la sesion sola ante un
             // 401 con token (es como detecta un token vencido). Equivocarse la
             // contrasena al confirmar no puede sacarte de la app.
-            throw new ReglaDeNegocioException("La contrasena no es correcta");
+            throw new ReglaDeNegocioException("La contraseña no es correcta");
         }
 
         String grupoId = actual.getGrupoId();

@@ -43,23 +43,23 @@ public final class PoliticaDeContrasenas {
      */
     public static String motivoDeRechazo(String password, String email, String nombre) {
         if (password == null || password.length() < LARGO_MINIMO) {
-            return "la contrasena tiene que tener al menos " + LARGO_MINIMO + " caracteres";
+            return "la contraseña tiene que tener al menos " + LARGO_MINIMO + " caracteres";
         }
         // BCrypt trunca en silencio despues de 72 bytes: dos contrasenas que
         // compartan los primeros 72 serian equivalentes sin que nadie lo note.
         if (password.length() > 72) {
-            return "la contrasena no puede pasar de 72 caracteres";
+            return "la contraseña no puede pasar de 72 caracteres";
         }
 
         String normalizada = password.toLowerCase(Locale.ROOT);
 
         if (PROHIBIDAS.contains(normalizada)) {
-            return "esa contrasena es demasiado comun, eligi otra";
+            return "esa contraseña es demasiado común, elegí otra";
         }
 
         // Un solo caracter repetido, por largo que sea, no aporta nada.
         if (normalizada.chars().distinct().count() < 5) {
-            return "la contrasena tiene muy pocos caracteres distintos";
+            return "la contraseña tiene muy pocos caracteres distintos";
         }
 
         // Contener el propio email o nombre la vuelve adivinable para quien
@@ -67,11 +67,11 @@ public final class PoliticaDeContrasenas {
         // de finanzas de pareja.
         String usuarioDelEmail = (email == null) ? "" : email.split("@")[0].toLowerCase(Locale.ROOT);
         if (usuarioDelEmail.length() >= 4 && normalizada.contains(usuarioDelEmail)) {
-            return "la contrasena no puede contener tu email";
+            return "la contraseña no puede contener tu email";
         }
         if (nombre != null && nombre.length() >= 4
                 && normalizada.contains(nombre.toLowerCase(Locale.ROOT))) {
-            return "la contrasena no puede contener tu nombre";
+            return "la contraseña no puede contener tu nombre";
         }
 
         return null;

@@ -65,7 +65,7 @@ public class ManejadorDeErrores {
         Map<String, String> errores = new LinkedHashMap<>();
         e.getBindingResult().getFieldErrors()
                 .forEach(fe -> errores.putIfAbsent(fe.getField(), fe.getDefaultMessage()));
-        return new ErrorRespuesta("Hay campos invalidos", errores);
+        return new ErrorRespuesta("Hay campos inválidos", errores);
     }
 
     /**
@@ -76,6 +76,6 @@ public class ManejadorDeErrores {
     @ExceptionHandler(OptimisticLockingFailureException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorRespuesta conflicto(OptimisticLockingFailureException e) {
-        return ErrorRespuesta.de("El gasto fue modificado por otra persona. Recarga y volve a intentar.");
+        return ErrorRespuesta.de("El gasto fue modificado por otra persona. Recargá y volvé a intentar.");
     }
 }

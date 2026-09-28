@@ -139,7 +139,7 @@ export async function pedir<T>(ruta: string, opciones: Opciones = {}): Promise<T
     // El estado 0 es la senial que usa el sincronizador para distinguir "no
     // llegue" de "el servidor me dijo que no": lo primero se reintenta, lo
     // segundo no.
-    throw new ErrorDeApi(0, 'No se pudo conectar. Fijate si tenes internet.');
+    throw new ErrorDeApi(0, 'No se pudo conectar. Fijate si tenés internet.');
   } finally {
     clearTimeout(reloj);
   }
@@ -172,7 +172,7 @@ export async function pedir<T>(ruta: string, opciones: Opciones = {}): Promise<T
     const error = datos as ErrorRespuesta | undefined;
     throw new ErrorDeApi(
       respuesta.status,
-      error?.mensaje ?? `El servidor respondio ${respuesta.status}.`,
+      error?.mensaje ?? `El servidor respondió ${respuesta.status}.`,
       error?.errores,
     );
   }

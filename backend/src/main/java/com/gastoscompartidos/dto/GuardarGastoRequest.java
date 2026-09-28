@@ -54,7 +54,7 @@ public record GuardarGastoRequest(
         @Digits(integer = 12, fraction = 2, message = "el monto es demasiado grande")
         BigDecimal monto,
 
-        @NotNull(message = "la categoria es obligatoria")
+        @NotNull(message = "la categoría es obligatoria")
         String categoriaId,
 
         @NotNull(message = "la fecha es obligatoria")
@@ -63,7 +63,7 @@ public record GuardarGastoRequest(
 
         // Opcional desde la v1.0: ver el javadoc de Gasto.descripcion. Vacia o
         // solo espacios se guarda como null (GastoServicio.descripcionDe).
-        @Size(max = 255, message = "la descripcion no puede pasar de 255 caracteres")
+        @Size(max = 255, message = "la descripción no puede pasar de 255 caracteres")
         String descripcion,
 
         @NotNull(message = "el tipo es obligatorio (PERSONAL o COMPARTIDO)")
@@ -114,7 +114,7 @@ public record GuardarGastoRequest(
          * un `?? ''` mal puesto en el cliente.
          */
         @Size(max = 64, message = "el id de cliente no puede pasar de 64 caracteres")
-        @Pattern(regexp = "[A-Za-z0-9_.:-]+", message = "el id de cliente tiene caracteres invalidos")
+        @Pattern(regexp = "[A-Za-z0-9_.:-]+", message = "el id de cliente tiene caracteres inválidos")
         String clienteId
 ) {
 }

@@ -64,7 +64,7 @@ export default function BorrarCuenta() {
               // Si sale bien, borrarCuenta ya navega al login.
               await borrarCuenta(password);
             } catch (e) {
-              setError(e instanceof ErrorDeApi ? e.message : 'No se pudo borrar la cuenta. Proba de nuevo.');
+              setError(e instanceof ErrorDeApi ? e.message : 'No se pudo borrar la cuenta. Probá de nuevo.');
               setEnviando(false);
             }
           })();
@@ -96,20 +96,20 @@ export default function BorrarCuenta() {
         </View>
 
         <View style={estilos.tarjeta}>
-          <Text style={estilos.rotulo}>Que pasa si la borras</Text>
+          <Text style={estilos.rotulo}>Qué pasa si la borrás</Text>
           <Text style={estilos.punto}>Tus gastos personales se borran para siempre.</Text>
           <Text style={estilos.punto}>
             Los gastos compartidos y tus aportes a la vaquita quedan en el historial de la otra
             persona, para que sus cuentas sigan cerrando. Tu nombre pasa a decir "Cuenta eliminada".
           </Text>
           <Text style={estilos.punto}>
-            Si no compartis la app con nadie, se borra todo.
+            Si no compartís la app con nadie, se borra todo.
           </Text>
           {sinMandar > 0 ? (
             <Text style={[estilos.punto, estilos.aviso]}>
               {sinMandar === 1
-                ? 'Tenes 1 gasto que todavia no se mando. Se va a perder.'
-                : `Tenes ${sinMandar} gastos que todavia no se mandaron. Se van a perder.`}
+                ? 'Tenés 1 gasto que todavía no se mandó. Se va a perder.'
+                : `Tenés ${sinMandar} gastos que todavía no se mandaron. Se van a perder.`}
             </Text>
           ) : null}
         </View>

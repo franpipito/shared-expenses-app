@@ -43,8 +43,8 @@ export function AvisoDeCola() {
               : `Hay ${enCamino.length} gastos sin enviar`}
           </Text>
           <Text style={estilos.bajada}>
-            Estan guardados en el telefono. Se mandan solos cuando haya senial, y
-            no se pierden aunque cierres la app. Toca para reintentar ahora.
+            Están guardados en el teléfono. Se mandan solos cuando haya señal, y
+            no se pierden aunque cierres la app. Tocá para reintentar ahora.
           </Text>
         </Pressable>
       ) : null}

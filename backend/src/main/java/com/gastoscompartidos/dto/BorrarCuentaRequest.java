@@ -9,7 +9,7 @@ import jakarta.validation.constraints.NotBlank;
  *                 borrar la cuenta.
  */
 public record BorrarCuentaRequest(
-        @NotBlank(message = "hace falta tu contrasena para confirmar")
+        @NotBlank(message = "hace falta tu contraseña para confirmar")
         String password
 ) {
 }
