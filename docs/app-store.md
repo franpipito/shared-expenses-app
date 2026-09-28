@@ -14,17 +14,22 @@ caracteres, no a ojo).
 
 ## 0. Pasos, en orden
 
-1. [ ] **El ping de Render está vivo.** Si el revisor abre la app con el servicio
+1. [x] **El ping de Render está vivo.** Si el revisor abre la app con el servicio
    dormido, espera 40-60 segundos y puede rechazarla por "no responde". Ver
-   `docs/deploy.md`, paso 5.
+   `docs/deploy.md`, paso 5. *Verificado el 28/9: después de 22 minutos sin
+   tráfico propio, `/actuator/health` respondió en 0,6 s. Render duerme a los
+   15, así que el cron externo está pegando.* Conviene volver a mirarlo el día
+   que se manda.
 2. [ ] **Build en TestFlight** con todo lo de la v1.0 (registro abierto, borrado
-   de cuenta, ícono, splash, descripción opcional, sin iPad). El build lo arma
-   EAS; subirlo a App Store Connect necesita el **Apple ID numérico de la app**
+   de cuenta, ícono, splash, descripción opcional, sin iPad). **El build ya está
+   hecho**: build 3 (versión 1.0.0, commit `7c0dcb4`), id de EAS
+   `cae27788-782b-40bd-b0de-ed85b1f2167b`. Falta subirlo: necesita el
+   **Apple ID numérico de la app**
    (`ascAppId`), que está en App Store Connect → la app → Información de la app
    → "Apple ID". Dos formas:
 
    ```
-   cd mobile; eas submit --platform ios --latest
+   cd mobile; eas submit --platform ios --id cae27788-782b-40bd-b0de-ed85b1f2167b
    ```
 
    (interactivo: pregunta lo que falte), o dejarlo fijo en `mobile/eas.json`
@@ -213,3 +218,9 @@ The demo account in Sign-In Information already has sample expenses for the curr
   vacío. Volver a correr `crear-cuenta-demo.ps1` carga el mes en curso sin
   duplicar lo anterior.
 - Si rechazan, el mensaje llega a App Store Connect → Resolution Center.
+- **Pendiente para la 1.0.1**: `npx expo-doctor` marca cuatro paquetes con la
+  versión de parche atrasada (`expo`, `expo-constants`, `expo-linking`,
+  `expo-router`). No se actualizaron antes de la revisión a propósito: el build
+  que se manda es el que se probó. Al actualizarlos, `npx expo install --check`,
+  y **mirar el CI antes de buildear**: el npm 11 local puede podar del lock una
+  dependencia opcional que el npm 10 de EAS espera (pasó en la v1.0).
