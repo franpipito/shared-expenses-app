@@ -10,7 +10,9 @@ import {
 } from '@expo-google-fonts/nunito-sans';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -30,8 +32,19 @@ import { colores } from '../src/tema/colores';
  * Todo lo que tiene que existir antes que cualquier pantalla vive aca: las
  * fuentes y la sesion.
  */
+/**
+ * La splash (la nutria contenta sobre el crema, configurada en app.json) se
+ * queda puesta hasta que cargan las fuentes. Si se ocultara sola, entre la
+ * nutria y la primera pantalla aparecia un crema con una ruedita: un paso de mas
+ * en lo primero que ve cualquiera que abre la app.
+ *
+ * Se llama a nivel de modulo, antes del primer render, que es lo que pide la
+ * documentacion de expo-splash-screen.
+ */
+void SplashScreen.preventAutoHideAsync();
+
 export default function LayoutRaiz() {
-  const [fuentesListas] = useFonts({
+  const [fuentesListas, errorDeFuentes] = useFonts({
     Fraunces_400Regular,
     Fraunces_600SemiBold,
     Fraunces_700Bold,
@@ -43,7 +56,16 @@ export default function LayoutRaiz() {
   // Sin esto la app se ve un instante con la fuente del sistema y despues salta
   // a Fraunces. En una app cuya mitad de la identidad es la tipografia, ese
   // salto se nota.
-  if (!fuentesListas) return <Cargando />;
+  // Se oculta tambien si las fuentes FALLARON, no solo si cargaron. Esperando
+  // solo el exito, un error de carga dejaba la splash puesta para siempre: la
+  // app no abriria nunca, sin ningun mensaje. Mejor abrir con la fuente del
+  // sistema que no abrir.
+  const listo = fuentesListas || errorDeFuentes != null;
+  useEffect(() => {
+    if (listo) SplashScreen.hide();
+  }, [listo]);
+
+  if (!listo) return <Cargando />;
 
   return (
     <SafeAreaProvider>
