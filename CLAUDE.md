@@ -1064,8 +1064,17 @@ con el lenguaje del producto.
       reemplaza texto que no controlas, va `split/join` o una funcion como
       reemplazo, nunca un string.
 
+      **Y otro, que rompio el primer build de EAS:** `npx expo install` con el
+      npm 11 local **podo** del `package-lock.json` una dependencia opcional
+      anidada (`expo/node_modules/react-native-worklets`). El npm 10 de los
+      servidores -- el del CI y el de EAS -- la espera, y su `npm ci` falla con
+      `EUSAGE` antes de instalar nada. El CI lo aviso en rojo y nadie lo miro
+      antes de lanzar el build. Se arreglo devolviendo esa entrada al lock y se
+      verifico con `npx npm@10.9 ci` en una carpeta aparte. **Despues de tocar
+      dependencias, mirar el CI antes de buildear.**
+
       Verificado: 121 tests, el smoke test (145 chequeos) contra Mongo local, y
-      el CI en verde en cada commit. Lo que falta es de un telefono y de App
+      el CI en verde. Lo que falta es de un telefono y de App
       Store Connect: ver los pasos de `docs/app-store.md`.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
