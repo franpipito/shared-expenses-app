@@ -50,7 +50,20 @@ public class ConfiguracionSeguridad {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(rutas -> rutas
-                        .requestMatchers("/auth/**").permitAll()
+                        // Solo estas cuatro son publicas de verdad: se llaman sin
+                        // tener todavia un token. cerrar-sesiones y borrar-cuenta
+                        // viven bajo /auth/ pero exigen uno, asi que NO van aca.
+                        //
+                        // Antes esto era .requestMatchers("/auth/**").permitAll(),
+                        // que dejaba pasar TODO /auth/ en esta capa -- cerrar-sesiones
+                        // y borrar-cuenta quedaban protegidos solo porque su servicio
+                        // llama a UsuarioActual.requerido(). Funcionaba, pero un
+                        // endpoint nuevo bajo /auth/ que se olvidara esa llamada
+                        // quedaria abierto sin que nada lo frenara aca. Encontrado en
+                        // la auditoria de seguridad de la v1.0.
+                        .requestMatchers("/auth/registro", "/auth/login",
+                                "/auth/olvide-contrasena", "/auth/restablecer-contrasena")
+                        .permitAll()
                         // Railway consulta este endpoint para saber si el
                         // contenedor esta listo antes de mandarle trafico, y lo
                         // hace sin token. Devuelve solo {"status":"UP"}:

@@ -380,6 +380,28 @@ Las reglas, cada una por un ataque concreto:
   y hacerlo bien pide Universal Links, o sea dominio propio. El campo del código
   usa `autoComplete="one-time-code"`, así iOS lo ofrece desde la app de Mail.
 
+### `/auth/**` dejaba pasar de mas, y una auditoria de seguridad lo encontro
+`cerrar-sesiones` y `borrar-cuenta` viven bajo `/auth/`, pero a diferencia de
+`registro`/`login`/`olvide-contrasena`/`restablecer-contrasena` SI exigen
+token. Hasta ahora, `.requestMatchers("/auth/**").permitAll()` los dejaba
+pasar igual en la capa de Spring Security: quedaban protegidos solo porque
+sus servicios llaman a `UsuarioActual.requerido()`. Andaba, pero era un solo
+punto de falla -- un endpoint nuevo bajo `/auth/` que se olvidara esa llamada
+quedaria abierto sin que nada lo frenara aca.
+
+Ahora el `permitAll()` lista los cuatro paths que son publicos de verdad, y
+`cerrar-sesiones`/`borrar-cuenta` caen en `.anyRequest().authenticated()`
+como el resto de la API: la cadena de filtros los rechaza antes de llegar al
+controlador, no solo el servicio despues.
+
+Ningun test de servicio prueba esto -- llaman al servicio directo, sin pasar
+por `ConfiguracionSeguridad`. Se intento un `@WebMvcTest`, pero
+`@EnableMongoAuditing` (declarado en `BackendApplication`) arrastra beans de
+Mongo al slice y lo rompe; seguir ese camino hubiera significado mockear medio
+modulo de Mongo para probar una regla de seguridad. Se verifica como ya se
+verificaba el 404-como-401: con el smoke test (`sin token, /auth/cerrar-sesiones
+da 401` y `.../borrar-cuenta da 401`).
+
 ### `descripcion` es opcional (desde la v1.0)
 La usuaria la eligio como uno de sus tres campos: "algo que me recuerde el
 momento". Es lo que le permite distinguir despues el gasto evitable del que no lo

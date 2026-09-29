@@ -351,6 +351,19 @@ Chequear ($idDeElla -is [string] -and $idDeElla.Length -eq 24) `
 EsperarCodigo { Invoke-RestMethod -Uri "$base/grupo" } 401 `
     "sin token, /grupo da 401"
 
+# cerrar-sesiones y borrar-cuenta viven bajo /auth/, pero a diferencia de
+# registro/login/olvide-contrasena/restablecer-contrasena SI exigen token.
+# Hasta la auditoria de seguridad de la v1.0, un unico
+# .requestMatchers("/auth/**").permitAll() dejaba pasar los dos en esta capa,
+# y quedaban protegidos solo porque el servicio llama a
+# UsuarioActual.requerido(). Esto prueba la cadena de filtros de verdad, que
+# ningun mock de servicio puede ejercitar.
+EsperarCodigo { Invoke-RestMethod -Uri "$base/auth/cerrar-sesiones" -Method Post } 401 `
+    "sin token, /auth/cerrar-sesiones da 401"
+EsperarCodigo { Invoke-RestMethod -Uri "$base/auth/borrar-cuenta" -Method Post `
+    -ContentType "application/json" -Body (@{ password = "cualquiera12345" } | ConvertTo-Json) } 401 `
+    "sin token, /auth/borrar-cuenta da 401"
+
 # Una ruta que no existe tiene que dar 404, no 401.
 #
 # Parece un detalle y no lo es: Boot reenvia el 404 a /error, ese reenvio vuelve
