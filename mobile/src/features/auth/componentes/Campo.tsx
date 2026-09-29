@@ -20,8 +20,8 @@ type Props = {
   valor: string;
   alCambiar: (v: string) => void;
   secreto?: boolean;
-  teclado?: 'default' | 'email-address';
-  autoComplete?: 'email' | 'current-password' | 'new-password' | 'name' | 'off';
+  teclado?: 'default' | 'email-address' | 'number-pad';
+  autoComplete?: 'email' | 'current-password' | 'new-password' | 'name' | 'one-time-code' | 'off';
   /** Texto chico debajo del campo: la regla ANTES de tipear, no despues de fallar. */
   ayuda?: string;
   /**

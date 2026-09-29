@@ -339,6 +339,47 @@ Decisiones que vale la pena poder explicar:
 - **Sin nutria en la pantalla de borrado.** Una nutria triste ahi seria usar al
   personaje para hacer sentir culpa a quien se quiere ir.
 
+### Olvidé mi contraseña: un código por mail, por la API de Gmail (v1.0)
+`POST /auth/olvide-contrasena` manda un código de seis dígitos al mail;
+`POST /auth/restablecer-contrasena` lo verifica con la contraseña nueva y deja
+adentro. Pantalla `app/recuperar.tsx`, desde el login.
+
+**Por dónde salen los mails fue la decisión difícil, y conviene poder contarla**
+(detalle en `docs/mails.md`). La restricción era no pagar nada:
+- **SMTP no**: Render gratis bloquea los puertos SMTP desde septiembre de 2025.
+- **Resend, Brevo, etc. no**: sin dominio propio no pueden autenticar un remitente
+  `@gmail.com`, y el mail termina en spam o rechazado por DMARC.
+- **Firebase Auth no**: resetea usuarios de Firebase, y los de acá viven en Mongo
+  con BCrypt. Habría que mudar todo el login por un botón.
+- **Sí: la API REST de Gmail**, por HTTPS, desde la cuenta de Franco. Sale firmada
+  por Google, llega a la bandeja, y es gratis. El precio es OAuth: un refresh
+  token con el scope `gmail.send` (solo mandar), con el proyecto de Google Cloud
+  **en producción** -- en "prueba" el token vence a los 7 días.
+
+`EnviadorDeMails` es una interfaz, como `UsuarioActual`: `EnviadorPorGmail` si
+están las credenciales, `EnviadorPorLog` si no (el código queda en el log, que
+sirve para ayudar a mano y para desarrollo). No frena el arranque si faltan: la
+app anda entera sin mails.
+
+Las reglas, cada una por un ataque concreto:
+- **El pedido responde 204 exista o no el email**, y todos los errores del código
+  dicen lo mismo: no es un verificador de cuentas.
+- **Vence a los 15 minutos y acepta 5 intentos**: un millón de combinaciones, y la
+  chance de adivinar queda en 1 en 200.000 por código pedido.
+- **Pedir códigos tiene tope por email y por IP**: si no, se le inunda la casilla
+  a alguien, o se usa la cuenta de Gmail de la app para mandar spam.
+- **El código se guarda con BCrypt**, no con un hash rápido: seis dígitos se
+  recorren enteros en milisegundos con SHA-256 si la base se filtra.
+- **Restablecer cierra las otras sesiones** (`token_version`), porque muchas veces
+  se resetea justo porque alguien más entró.
+- **La política de contraseñas va después del código y no gasta intentos**:
+  elegir una contraseña corta no es adivinar códigos.
+- **El mail que no sale se loguea y no se informa**: un error distinto revelaría
+  que la cuenta existe.
+- Código y no link: un link a `minutria://` lo bloquean muchos clientes de mail,
+  y hacerlo bien pide Universal Links, o sea dominio propio. El campo del código
+  usa `autoComplete="one-time-code"`, así iOS lo ofrece desde la app de Mail.
+
 ### `descripcion` es opcional (desde la v1.0)
 La usuaria la eligio como uno de sus tres campos: "algo que me recuerde el
 momento". Es lo que le permite distinguir despues el gasto evitable del que no lo
@@ -698,7 +739,7 @@ borra cuando cambia la PERSONA, no cuando se muere el TOKEN.
 
 
 ### Los tests: dos capas, y que prueba cada una
-**118 tests, y corren solos en cada push** (`.github/workflows/ci.yml`). Conviene
+**131 tests, y corren solos en cada push** (`.github/workflows/ci.yml`). Conviene
 saber por que estan partidos en dos clases de cosas.
 
 **Clases puras** (`Periodo`, `CalculadorDeAnimo`, `Pozo`, `PoliticaDeContrasenas`,
@@ -706,7 +747,8 @@ saber por que estan partidos en dos clases de cosas.
 corren en milisegundos.
 
 **Servicios con mocks** (`GastoServicioTest`, `PozoServicioTest`,
-`AutenticacionServicioTest`, `ResumenServicioTest`, `CuentaServicioTest`): los repositorios son objetos
+`AutenticacionServicioTest`, `ResumenServicioTest`, `CuentaServicioTest`,
+`RecuperacionServicioTest`): los repositorios son objetos
 falsos de Mockito, programados con `when(...).thenReturn(...)`. Asi se ejercita
 la LOGICA sin que exista una base. Cubren lo que mas duele si se rompe: el
 centavo del reparto, que un PERSONAL ajeno de 404 y no 403, que editar sin
@@ -767,6 +809,7 @@ cualquier runner Linux `./mvnw` da "Permission denied".
     seguridad/    JWT, filtro, config de Spring Security y UsuarioActual
     error/        excepciones de dominio + @RestControllerAdvice
     config/       conversores de Mongo y el sembrador de categorias
+    mail/         EnviadorDeMails: por la API de Gmail, o al log si no hay credenciales
 /mobile       Expo. Por features, no por capas: ver docs/diseno.md
 /web          React + Vite (despues del MVP)
 .github/workflows/ci.yml tests, tipos y bundle en cada push
@@ -784,6 +827,7 @@ docs/
   atajo-ios.md           atajo de Atajos que le pega a POST /gastos con Back Tap
   app-store.md           todo lo de App Store Connect, y los pasos para mandar a review
   soporte.md             la pagina de soporte publica (URL de soporte de la ficha)
+  mails.md               como configurar la API de Gmail para el codigo de reseteo
   aprendizaje/           notas de Java y Spring para el autor
 
 ```

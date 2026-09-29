@@ -939,6 +939,37 @@ Chequear ((Mongo "print(db.grupo.countDocuments({ _id: ObjectId('$GRUPO_BQ') }))
     "y el grupo tambien se borro"
 
 # ---------------------------------------------------------------------------
+Titulo "13. Olvide mi contrasena"
+
+# El camino feliz necesita el codigo, que sale por mail (o al log, en local): lo
+# cubren RecuperacionServicioTest y una prueba a mano. Lo que se prueba aca es lo
+# que protege contra un atacante, contra el backend de verdad.
+$pedidoExiste = Invoke-WebRequest "$base/auth/olvide-contrasena" -Method Post -UseBasicParsing `
+    -ContentType "application/json" -Body (@{ email = "sola@local" } | ConvertTo-Json)
+$pedidoNoExiste = Invoke-WebRequest "$base/auth/olvide-contrasena" -Method Post -UseBasicParsing `
+    -ContentType "application/json" -Body (@{ email = "nadie-nunca@local" } | ConvertTo-Json)
+Chequear ($pedidoExiste.StatusCode -eq 204 -and $pedidoNoExiste.StatusCode -eq 204) `
+    "pedir el codigo responde 204 exista o no la cuenta: no revela quien la tiene"
+
+$errorCuentaReal = $null
+try {
+    Invoke-RestMethod "$base/auth/restablecer-contrasena" -Method Post -ContentType "application/json" `
+        -Body (@{ email = "sola@local"; codigo = "000000"; password = "una frase larga nueva" } | ConvertTo-Json)
+} catch { $errorCuentaReal = CuerpoDelError $_ }
+$errorSinCuenta = $null
+try {
+    Invoke-RestMethod "$base/auth/restablecer-contrasena" -Method Post -ContentType "application/json" `
+        -Body (@{ email = "nadie-nunca@local"; codigo = "000000"; password = "una frase larga nueva" } | ConvertTo-Json)
+} catch { $errorSinCuenta = CuerpoDelError $_ }
+Chequear ($errorCuentaReal -match "no es v") "un codigo equivocado se rechaza -> $errorCuentaReal"
+Chequear ($errorCuentaReal -eq $errorSinCuenta) `
+    "codigo equivocado y cuenta inexistente dan el mismo mensaje"
+
+# La contrasena de Sola no cambio por intentar con un codigo equivocado.
+$sigueEntrando = Entrar "sola@local" $PASSWORD
+Chequear ($sigueEntrando.token.Length -gt 50) "un codigo equivocado no cambia la contrasena"
+
+# ---------------------------------------------------------------------------
 Write-Host ""
 if ($fallos -eq 0) {
     Write-Host "TODO OK" -ForegroundColor Green

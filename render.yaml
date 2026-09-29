@@ -48,6 +48,18 @@ services:
       - key: JWT_SECRETO
         sync: false
 
+      # El mail del codigo de "olvide mi contrasena", por la API de Gmail (Render
+      # gratis bloquea SMTP). Opcionales: sin ellos, el codigo va al log. Como
+      # conseguirlos: docs/mails.md.
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
+      - key: MAIL_REMITENTE
+        sync: false
+
       # ZONA_HORARIA no se declara: el default de la app ya es
       # America/Argentina/Buenos_Aires, y es el que define donde cae el corte de
       # mes. Render corre en UTC, igual que Railway.

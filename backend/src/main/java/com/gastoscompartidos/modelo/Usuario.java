@@ -5,6 +5,8 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
+import java.time.Instant;
+
 /**
  * Un usuario pertenece a exactamente un grupo.
  * La contrasena se guarda hasheada (BCrypt); nunca en texto plano.
@@ -123,6 +125,62 @@ public class Usuario {
 
     public long getTokenVersion() {
         return tokenVersion;
+    }
+
+    /**
+     * El reseteo de contrasena en curso, si hay uno: el hash del codigo que se
+     * mando por mail, cuando vence y cuantas veces se erro.
+     *
+     * Vive en el usuario y no en una coleccion aparte porque hay a lo sumo UNO
+     * por persona -- pedir otro codigo pisa el anterior -- y porque asi el
+     * reseteo se escribe junto con la contrasena nueva, en un solo documento,
+     * que en Mongo es atomico.
+     *
+     * El codigo se guarda hasheado con BCrypt, como una contrasena: son seis
+     * digitos, un millon de combinaciones, y un hash rapido (SHA-256) se
+     * recorreria entero en milisegundos si la base se filtrara.
+     */
+    @Field("reset_codigo_hash")
+    private String resetCodigoHash;
+
+    @Field("reset_vence")
+    private Instant resetVence;
+
+    @Field("reset_intentos")
+    private int resetIntentos;
+
+    public String getResetCodigoHash() {
+        return resetCodigoHash;
+    }
+
+    public Instant getResetVence() {
+        return resetVence;
+    }
+
+    public int getResetIntentos() {
+        return resetIntentos;
+    }
+
+    /** Arranca un reseteo nuevo. Pisa cualquier codigo anterior. */
+    public void iniciarReseteo(String codigoHash, Instant vence) {
+        this.resetCodigoHash = codigoHash;
+        this.resetVence = vence;
+        this.resetIntentos = 0;
+    }
+
+    public void registrarIntentoDeReseteo() {
+        this.resetIntentos++;
+    }
+
+    /** Cambia la contrasena y cierra el reseteo: el codigo no sirve dos veces. */
+    public void restablecerContrasena(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.resetCodigoHash = null;
+        this.resetVence = null;
+        this.resetIntentos = 0;
+        // Si alguien entro con la contrasena vieja (por eso se resetea, muchas
+        // veces), esa sesion no sigue viva.
+        invalidarSesiones();
     }
 
     /** Deja fuera a todos los tokens ya emitidos para este usuario. */

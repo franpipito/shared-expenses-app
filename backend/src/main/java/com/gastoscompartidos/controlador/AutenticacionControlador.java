@@ -2,10 +2,13 @@ package com.gastoscompartidos.controlador;
 
 import com.gastoscompartidos.dto.BorrarCuentaRequest;
 import com.gastoscompartidos.dto.LoginRequest;
+import com.gastoscompartidos.dto.OlvideContrasenaRequest;
 import com.gastoscompartidos.dto.RegistroRequest;
+import com.gastoscompartidos.dto.RestablecerContrasenaRequest;
 import com.gastoscompartidos.dto.TokenRespuesta;
 import com.gastoscompartidos.servicio.AutenticacionServicio;
 import com.gastoscompartidos.servicio.CuentaServicio;
+import com.gastoscompartidos.servicio.RecuperacionServicio;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,10 +28,13 @@ public class AutenticacionControlador {
 
     private final AutenticacionServicio servicio;
     private final CuentaServicio cuentas;
+    private final RecuperacionServicio recuperacion;
 
-    public AutenticacionControlador(AutenticacionServicio servicio, CuentaServicio cuentas) {
+    public AutenticacionControlador(AutenticacionServicio servicio, CuentaServicio cuentas,
+                                    RecuperacionServicio recuperacion) {
         this.servicio = servicio;
         this.cuentas = cuentas;
+        this.recuperacion = recuperacion;
     }
 
     /**
@@ -77,6 +83,24 @@ public class AutenticacionControlador {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void borrarCuenta(@Valid @RequestBody BorrarCuentaRequest req) {
         cuentas.borrar(req);
+    }
+
+    /**
+     * POST /auth/olvide-contrasena
+     *
+     * 204 siempre, exista o no el email: ver RecuperacionServicio.
+     */
+    @PostMapping("/olvide-contrasena")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void olvideContrasena(@Valid @RequestBody OlvideContrasenaRequest req,
+                                 HttpServletRequest http) {
+        recuperacion.pedirCodigo(req, ipDe(http));
+    }
+
+    /** POST /auth/restablecer-contrasena: codigo + contrasena nueva, y queda adentro. */
+    @PostMapping("/restablecer-contrasena")
+    public TokenRespuesta restablecerContrasena(@Valid @RequestBody RestablecerContrasenaRequest req) {
+        return recuperacion.restablecer(req);
     }
 
     private String ipDe(HttpServletRequest http) {

@@ -37,6 +37,15 @@ type Sesion = {
   registrarse: (datos: DatosDeRegistro) => Promise<void>;
   salir: (motivo?: MotivoDeSalida) => Promise<void>;
   borrarCuenta: (password: string) => Promise<void>;
+  pedirCodigo: (email: string) => Promise<void>;
+  restablecer: (datos: DatosDeRestablecer) => Promise<void>;
+};
+
+/** Lo que pide el reseteo: el email, el codigo del mail y la contrasena nueva. */
+export type DatosDeRestablecer = {
+  email: string;
+  codigo: string;
+  password: string;
 };
 
 const ContextoDeSesion = createContext<Sesion | null>(null);
@@ -144,6 +153,37 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   }, []);
 
 
+  /**
+   * "Me olvide la contrasena", paso 1: pedir el codigo. El backend responde
+   * igual exista o no la cuenta, asi que aca no hay nada que mirar.
+   */
+  const pedirCodigo = useCallback(async (email: string) => {
+    await pedir<void>('/auth/olvide-contrasena', {
+      metodo: 'POST',
+      cuerpo: { email },
+      sinToken: true,
+    });
+  }, []);
+
+  /**
+   * Paso 2: codigo + contrasena nueva. El backend devuelve un token, igual que
+   * el login, asi que la persona queda adentro sin volver a tipear la
+   * contrasena que acaba de elegir.
+   */
+  const restablecer = useCallback(async (datos: DatosDeRestablecer) => {
+    const respuesta = await pedir<TokenRespuesta>('/auth/restablecer-contrasena', {
+      metodo: 'POST',
+      cuerpo: datos,
+      sinToken: true,
+    });
+    await Promise.all([
+      guardarToken(respuesta.token),
+      guardarUsuario(respuesta.usuario),
+    ]);
+    fijarToken(respuesta.token);
+    setUsuario(respuesta.usuario);
+  }, []);
+
   const salir = useCallback(async (motivo: MotivoDeSalida = 'manual') => {
     // Solo local. NO se llama a /auth/cerrar-sesiones, que incrementa
     // token_version e invalida el token de TODOS los dispositivos: eso es el
@@ -212,8 +252,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   );
 
   const valor = useMemo<Sesion>(
-    () => ({ usuario, cargando, entrar, registrarse, salir, borrarCuenta }),
-    [usuario, cargando, entrar, registrarse, salir, borrarCuenta],
+    () => ({ usuario, cargando, entrar, registrarse, salir, borrarCuenta, pedirCodigo, restablecer }),
+    [usuario, cargando, entrar, registrarse, salir, borrarCuenta, pedirCodigo, restablecer],
   );
 
   return <ContextoDeSesion.Provider value={valor}>{children}</ContextoDeSesion.Provider>;

@@ -92,6 +92,14 @@ export default function Login() {
             deshabilitado={!email.trim() || !password}
           />
 
+          <Pressable
+            onPress={() => router.push('/recuperar')}
+            hitSlop={12}
+            accessibilityRole="button"
+          >
+            <Text style={estilos.crearCuenta}>¿Olvidaste tu contraseña?</Text>
+          </Pressable>
+
           {/*
             El camino al registro. Sin esto, la segunda persona del grupo no tiene
             forma de entrar a la app: el backend sabe registrar desde la sesion 4,
