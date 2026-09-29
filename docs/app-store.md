@@ -132,8 +132,12 @@ gastos,hormiga,ahorro,finanzas,plata,registro,control de gastos,billetera,cuenta
 
 ## 3. Capturas
 
-- **Slot obligatorio: iPhone 6,9"**, a 1290 × 2796. Con eso Apple escala para
-  los demás tamaños de iPhone. **No hacen falta capturas de iPad**: la app ya no
+- **Slot que pide la cuenta: iPhone 6,5"**, a 1284 × 2778 (o 1242 × 2688). La
+  documentación de Apple habla del 6,9", pero App Store Connect de esta cuenta
+  muestra el 6,5" y rechaza otros tamaños.
+- **No pasarlas por WhatsApp como foto**: llegan achicadas a 738 × 1600 y quedan
+  borrosas al llevarlas al tamaño de la tienda. AirDrop, cable, o WhatsApp como
+  documento. **No hacen falta capturas de iPad**: la app ya no
   declara soporte para iPad (`supportsTablet: false`).
 - Sacarlas **con la cuenta demo**, así no aparecen gastos reales.
 - Cuáles, en este orden (la primera es la que más se ve en la tienda):
@@ -150,7 +154,7 @@ gastos,hormiga,ahorro,finanzas,plata,registro,control de gastos,billetera,cuenta
   .\scripts\capturas-app-store.ps1
   ```
 
-  Quedan en `capturas\app-store\` a 1290 × 2796, sin canal alfa (App Store
+  Quedan en `capturas\app-store\` a 1284 × 2778, sin canal alfa (App Store
   Connect las rechaza con transparencia). La carpeta está en `.gitignore`.
 
 ---

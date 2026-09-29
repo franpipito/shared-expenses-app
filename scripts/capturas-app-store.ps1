@@ -1,9 +1,13 @@
 # Lleva las capturas del telefono al tamano que pide App Store Connect.
 #
-# El slot obligatorio de capturas es el de iPhone 6,9" (1290 x 2796, entre otros
-# tamanos aceptados), y un iPhone 13 Pro saca 1170 x 2532. La proporcion es casi
-# la misma: escalando a 2796 de alto quedan 1292 de ancho, y se recorta un pixel
-# de cada lado. Nada se deforma.
+# App Store Connect pide el slot de iPhone 6,5" (1284 x 2778 o 1242 x 2688; asi
+# lo muestra la cuenta, aunque la documentacion de Apple hable del 6,9"). Un
+# iPhone 13 Pro saca 1170 x 2532, con casi la misma proporcion: escalando a 1284
+# de ancho quedan 2779 de alto y se recorta un pixel. Nada se deforma.
+#
+# OJO CON WHATSAPP: si las capturas pasan por WhatsApp como foto, llegan achicadas
+# (738 x 1600) y estirarlas al tamano de la tienda las deja borrosas. Pasarlas
+# por AirDrop, por cable, o por WhatsApp como DOCUMENTO, que no las toca.
 #
 # Ademas App Store Connect rechaza imagenes con canal alfa, asi que se guardan
 # en RGB de 24 bits.
@@ -18,8 +22,8 @@
 param(
     [string]$Entrada = "capturas",
     [string]$Salida  = "capturas\app-store",
-    [int]$Ancho = 1290,
-    [int]$Alto  = 2796
+    [int]$Ancho = 1284,
+    [int]$Alto  = 2778
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,6 +58,9 @@ foreach ($f in $archivos) {
         $h = [int][Math]::Round($origen.Height * $escala)
         $recorteX = $w - $Ancho
         $recorteY = $h - $Alto
+        if ($escala -gt 1.05) {
+            Write-Host "  BORROSA   $($f.Name): mide $($origen.Width)x$($origen.Height), mas chica que el destino. Si paso por WhatsApp, mandala como documento o por AirDrop." -ForegroundColor Yellow
+        }
         if ($recorteX -gt $Ancho * 0.02 -or $recorteY -gt $Alto * 0.02) {
             Write-Host "  OJO       $($f.Name): $($origen.Width)x$($origen.Height) tiene otra proporcion; se recortan $recorteX x $recorteY px. Mirala antes de subirla." -ForegroundColor Yellow
         }
@@ -82,4 +89,4 @@ foreach ($f in $archivos) {
 }
 
 Write-Host ""
-Write-Host "Listas en '$Salida'. Van en App Store Connect -> la version -> iPhone 6,9`"." -ForegroundColor Cyan
+Write-Host "Listas en '$Salida'. Van en App Store Connect -> la version -> iPhone 6,5`"." -ForegroundColor Cyan
