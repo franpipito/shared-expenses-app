@@ -828,6 +828,7 @@ docs/
   app-store.md           todo lo de App Store Connect, y los pasos para mandar a review
   soporte.md             la pagina de soporte publica (URL de soporte de la ficha)
   mails.md               como configurar la API de Gmail para el codigo de reseteo
+  proxima-sesion.md      lo que falta: cerrar la v1.0 y el alcance de la v1.1
   aprendizaje/           notas de Java y Spring para el autor
 
 ```
