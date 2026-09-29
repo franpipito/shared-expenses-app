@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { GastoRespuesta } from '../../../api/tipos';
+import { nombreDeCategoria } from '../../../componentes/nombreDeCategoria';
 import { formatearMonto } from '../../../componentes/Monto';
 import { colores } from '../../../tema/colores';
 import { fuentes, numerosTabulares } from '../../../tema/tipografia';
@@ -59,10 +60,11 @@ export function FilaGasto({ gasto, idUsuarioActual, alTocar }: Props) {
   //
   // Sin descripcion, la categoria sube a titulo y sale del segundo renglon: si
   // no, "Cafe" apareceria dos veces en la misma fila.
-  const titulo = gasto.descripcion ?? gasto.categoria.nombre;
+  const categoria = nombreDeCategoria(gasto.categoria.nombre);
+  const titulo = gasto.descripcion ?? categoria;
   const detalle = [
     formatearDia(gasto.fecha),
-    gasto.descripcion ? gasto.categoria.nombre : null,
+    gasto.descripcion ? categoria : null,
     compartido ? (loPagoElOtro ? `pagó ${gasto.pagadoPor.nombre}` : 'compartido') : null,
   ]
     .filter(Boolean)

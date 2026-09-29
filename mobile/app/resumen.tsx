@@ -8,6 +8,7 @@ import type { AnimoNutria } from '../src/api/tipos';
 import { Boton } from '../src/componentes/Boton';
 import { IconoCategoria } from '../src/componentes/IconoCategoria';
 import { Monto, formatearMonto } from '../src/componentes/Monto';
+import { nombreDeCategoria } from '../src/componentes/nombreDeCategoria';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
@@ -239,7 +240,7 @@ export default function Resumen() {
                 {resumen.porCategoria.map((c) => (
                   <View key={c.categoriaId} style={estilos.categoria}>
                     <IconoCategoria nombre={c.icono} />
-                    <Text style={estilos.nombreCategoria}>{c.nombre}</Text>
+                    <Text style={estilos.nombreCategoria}>{nombreDeCategoria(c.nombre)}</Text>
                     <View style={estilos.montosCategoria}>
                       <Text style={estilos.totalCategoria}>{formatearMonto(c.total)}</Text>
                       {/* El ambar aparece solo si hubo gasto hormiga. */}

@@ -25,6 +25,7 @@ import { Boton } from '../../../componentes/Boton';
 import { IconoCategoria } from '../../../componentes/IconoCategoria';
 import { useSesion } from '../../auth/sesion';
 import { hoyLocal, traerCategorias, traerGrupo } from '../api';
+import { nombreDeCategoria } from '../../../componentes/nombreDeCategoria';
 import { traerPozoActivo } from '../../vaquita/api';
 import { colores } from '../../../tema/colores';
 import { fuentes, numerosTabulares } from '../../../tema/tipografia';
@@ -440,7 +441,7 @@ export function FormularioDeGasto({
                     color={elegida ? colores.rioProfundo : colores.corteza}
                   />
                   <Text style={[estilos.chipTexto, elegida && estilos.chipTextoElegido]}>
-                    {c.nombre}
+                    {nombreDeCategoria(c.nombre)}
                   </Text>
                 </Pressable>
               );
