@@ -103,7 +103,7 @@ El modelo asume dos en tres lugares, y los tres se rompen:
 - **Pregunta de producto**: ¿para qué lo quieren? ¿Un viaje con amigos? Si es eso,
   quizás alcanza con que la **vaquita** admita más personas que el grupo.
 
-### 2.3 Balance / saldar deudas
+### 2.3 Saldar deudas entre la pareja
 
 Hoy el saldo es del mes y no hay forma de registrar "ya te pagué".
 
@@ -112,17 +112,35 @@ Hoy el saldo es del mes y no hay forma de registrar "ya te pagué".
 - ¿Se muestra el histórico acumulado, o por mes con arrastre?
 - Un aporte a la vaquita ya es una liquidación anticipada: reusar el concepto.
 
-### 2.4 Dólares (multimoneda)
+### 2.3b Balance personal de Viole (distinto de lo anterior)
 
-- ¿Moneda por gasto (pesos o dólares) y totales separados, o todo convertido a
-  pesos? Convertir exige una cotización: ¿oficial, blue, tarjeta? ¿De qué fuente,
-  y congelada en el gasto al cargarlo (como el reparto) o recalculada?
-- **El total hormiga y el ánimo de la nutria** no pueden mezclar monedas sin
-  convertir. Recomendación de arranque: moneda por gasto, cotización congelada al
-  cargar, y los agregados en pesos.
-- Un campo más en el alta choca con la velocidad: moneda por defecto, y cambiarla
-  con un toque (quizás "moneda del viaje" en la vaquita).
-- **¿El viaje es afuera?** Si es así, esto es lo primero a tener antes del viaje.
+No confundir con 2.3: esto es la plata de Viole sola, no lo que se deben entre
+los dos. Franco le preguntó si prefiere que la app solo sume sus gastos, o que
+tenga un "balance" que se va descontando con cada gasto -- **la respuesta
+nunca quedó registrada en `docs/entrevista-usuaria.md`**. Confirmarla antes de
+diseñar nada de esto.
+
+Si la respuesta es que sí quiere el balance:
+- **Riesgo de fondo**: el número solo va a ser tan cierto como lo que ella
+  cargue. Un movimiento que no pase por la app (efectivo, una transferencia)
+  lo desalinea de su plata real -- puede ser peor que no tener el número.
+  Preguntarle si lo entiende como "lo que cargué en la app" y no como su saldo
+  bancario real.
+- **Nombre**: no usar "Saldo", ya significa "quién le debe a quién" entre la
+  pareja. Un nombre distinto (por ejemplo "Mi Plata") para no confundirlos.
+
+### 2.4 Ahorro en dólares (no es multimoneda de gastos)
+
+Ojo con esto: ya se le preguntó puntualmente a Franco si era "a veces paga un
+gasto en dólares" o "tiene un ahorro aparte", y contestó **lo segundo**. No es
+un campo de moneda en `Gasto` ni conversión de agregados -- es un concepto
+nuevo y separado, más parecido a una caja de ahorro que a un gasto. No toca
+`montoPagador` ni el ánimo de la nutria.
+
+Sigue pendiente de Viole (tampoco quedó registrado en
+`docs/entrevista-usuaria.md`): dónde tiene ese ahorro (efectivo, cuenta,
+broker), si lo carga a mano cada vez o espera algo automático, y si lo quiere
+ver convertido a pesos o solo en dólares.
 
 ### 2.5 Gráficos
 
