@@ -20,37 +20,26 @@ caracteres, no a ojo).
    tráfico propio, `/actuator/health` respondió en 0,6 s. Render duerme a los
    15, así que el cron externo está pegando.* Conviene volver a mirarlo el día
    que se manda.
-2. [ ] **Build en TestFlight** con todo lo de la v1.0 (registro abierto, borrado
-   de cuenta, ícono, splash, descripción opcional, sin iPad). **El build ya está
-   hecho**: build 3 (versión 1.0.0, commit `7c0dcb4`), id de EAS
-   `cae27788-782b-40bd-b0de-ed85b1f2167b`. Falta subirlo: necesita el
-   **Apple ID numérico de la app**
-   (`ascAppId`), que está en App Store Connect → la app → Información de la app
-   → "Apple ID". Dos formas:
-
-   ```
-   cd mobile; eas submit --platform ios --id cae27788-782b-40bd-b0de-ed85b1f2167b
-   ```
-
-   (interactivo: pregunta lo que falte), o dejarlo fijo en `mobile/eas.json`
-   para que `eas build --auto-submit` suba solo la próxima vez:
-
-   ```json
-   "submit": { "production": { "ios": { "ascAppId": "1234567890" } } }
-   ```
-
-   Después de subirlo, Apple lo procesa (10-30 minutos) y aparece en TestFlight.
-3. [ ] **Recorrido final en el teléfono** con ese build (sección 1).
-4. [ ] **Cuenta demo**: `.\scripts\crear-cuenta-demo.ps1`, **el mismo día que
+2. [ ] **Configurar Gmail para el código de "olvidé mi contraseña"**: los pasos
+   están en `docs/mails.md` (unos 15 minutos, gratis). Sin eso el código va al
+   log del servidor y no le llega a nadie: el revisor puede probar el botón.
+3. [ ] **Build 4 en TestFlight**: trae además el reseteo de contraseña, la
+   vaquita con "Aportar" y las categorías con mayúscula y tilde. Se armó con
+   `eas build --auto-submit`, que ya sube solo a App Store Connect porque
+   `mobile/eas.json` tiene el `ascAppId` real (6815433296). Apple lo procesa
+   en 10-30 minutos y aparece en TestFlight.
+4. [ ] **Recorrido final en el teléfono** con ese build (sección 1).
+5. [ ] **Cuenta demo**: `.\scripts\crear-cuenta-demo.ps1`, **el mismo día que
    mandás a revisión** (los gastos se fechan relativos a hoy).
-5. [ ] **Capturas**: con la cuenta demo, sacar 4 o 5 en el teléfono, copiarlas a
+6. [ ] **Capturas**: con la cuenta demo, sacar 4 o 5 en el teléfono, copiarlas a
    `capturas\` y correr `.\scripts\capturas-app-store.ps1` (sección 3).
-6. [ ] **Corregir la política de privacidad en Notion**: dice que la contraseña
+7. [ ] **Corregir la política de privacidad en Notion**: dice que la contraseña
    se guarda "cifrada (con BCrypt)". BCrypt es un hash, no un cifrado: lo
-   cifrado se puede descifrar, un hash no. Poner "hasheada" o "guardada con un
-   hash irreversible".
-7. [ ] **Completar App Store Connect** con las secciones 2, 4, 5 y 6.
-8. [ ] **Elegir el build** en la versión 1.0 y **Add for Review**.
+   cifrado se puede descifrar, un hash no. La frase queda: *"La contraseña se
+   guarda con un hash irreversible (BCrypt): ni siquiera quien administra la base
+   de datos puede leerla."*
+8. [ ] **Completar App Store Connect** con las secciones 2, 4, 5 y 6.
+9. [ ] **Elegir el build 4** en la versión 1.0 y **Add for Review**.
 
 ---
 
@@ -74,6 +63,11 @@ Lo que la v1.0 cambió y todavía no se vio en un teléfono:
       contraseña, avisa si hay gastos sin mandar, y al borrar vuelve al login.
       Después, esa cuenta ya no entra.
 - [ ] Con la cuenta de **Viole o Franco**: la sección de pareja sigue estando.
+- [ ] **¿Olvidaste tu contraseña?** desde el login, con la cuenta de prueba: llega
+      el mail de "MiNutria" con el código (iOS lo ofrece arriba del teclado), y
+      con la contraseña nueva queda adentro. Necesita Gmail configurado.
+- [ ] La **vaquita** dice "Aportar" y "Quién aportó cuánto".
+- [ ] Las **categorías** se ven "Café", "Uber", "Comida", con mayúscula y tilde.
 
 ---
 
