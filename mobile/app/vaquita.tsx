@@ -187,8 +187,8 @@ function SinVaquita({ onCreada }: PropsSinVaquita) {
       <Nutria animo="NOSOTROS" tamano={140} />
       <Text style={estilos.vacioTitulo}>Junten plata para un viaje</Text>
       <Text style={estilos.vacioBajada}>
-        Los dos ponen, y los gastos del viaje salen de ahí. Lo que sacan de la
-        vaquita no genera deuda entre ustedes: la plata ya se repartió al ponerla.
+        Los dos aportan, y los gastos del viaje salen de ahí. Lo que sacan de la
+        vaquita no genera deuda entre ustedes: la plata ya se repartió al aportarla.
       </Text>
 
       <View style={estilos.formulario}>
@@ -256,7 +256,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
   const montoValido = monto.trim() !== '' && Number.isFinite(montoNumero) && montoNumero > 0;
   const enRojo = pozo.restante < 0;
 
-  async function poner(signo: 1 | -1) {
+  async function registrarAporte(signo: 1 | -1) {
     setError(null);
     setEnviando(true);
     try {
@@ -277,7 +277,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
     Alert.alert(
       `Cerrar ${pozo.nombre}`,
       enRojo
-        ? 'Se pasaron de lo que pusieron. Al cerrarla no se va a poder aportar ni cargar más gastos, y no se puede reabrir.'
+        ? 'Se pasaron de lo que aportaron. Al cerrarla no se va a poder aportar ni cargar más gastos, y no se puede reabrir.'
         : `Quedan ${formatearMonto(pozo.restante)} sin usar. Al cerrarla no se va a poder aportar ni cargar más gastos, y no se puede reabrir.`,
       [
         { text: 'Dejarla abierta', style: 'cancel' },
@@ -325,7 +325,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
         </Text>
 
         <Text style={estilos.detalle}>
-          Pusieron {formatearMonto(pozo.aportado)} · gastaron {formatearMonto(pozo.gastado)}
+          Aportaron {formatearMonto(pozo.aportado)} · gastaron {formatearMonto(pozo.gastado)}
         </Text>
 
         {pozo.objetivo !== null ? (
@@ -345,7 +345,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
         estos dos numeros, la cuenta la hacen ellos.
       */}
       <View style={estilos.bloque}>
-        <Text style={estilos.rotuloSeccion}>Quién puso qué</Text>
+        <Text style={estilos.rotuloSeccion}>Quién aportó cuánto</Text>
         {pozo.porPersona.map((p) => (
           <View key={p.usuarioId} style={estilos.fila}>
             <Text style={estilos.filaEtiqueta}>{p.nombre}</Text>
@@ -355,7 +355,11 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
       </View>
 
       <View style={estilos.bloque}>
-        <Text style={estilos.rotuloSeccion}>Poner plata</Text>
+        {/*
+          "Aportar" y no "poner": "ponerla" tiene doble sentido en Argentina, y
+          aportar es ademas la palabra del dominio (Aporte en el backend).
+        */}
+        <Text style={estilos.rotuloSeccion}>Tu aporte</Text>
         <View style={estilos.filaAporte}>
           <TextInput
             value={monto}
@@ -374,8 +378,8 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
         <Text style={estilos.ayuda}>Queda a tu nombre.</Text>
         <View style={estilos.accion}>
           <Boton
-            titulo="Ponerla"
-            onPress={() => void poner(1)}
+            titulo="Aportar"
+            onPress={() => void registrarAporte(1)}
             cargando={enviando}
             deshabilitado={!montoValido}
           />
@@ -389,7 +393,7 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
           deja el rastro de los dos movimientos.
         */}
         <Pressable
-          onPress={() => void poner(-1)}
+          onPress={() => void registrarAporte(-1)}
           disabled={!montoValido || enviando}
           accessibilityRole="button"
           accessibilityLabel="Sacar del pozo, para corregir un aporte equivocado"

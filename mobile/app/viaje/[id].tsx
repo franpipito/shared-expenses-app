@@ -91,12 +91,12 @@ export default function Viaje() {
           {formatearMonto(Math.abs(pozo.restante))}
         </Text>
         <Text style={estilos.detalle}>
-          Pusieron {formatearMonto(pozo.aportado)} · gastaron {formatearMonto(pozo.gastado)}
+          Aportaron {formatearMonto(pozo.aportado)} · gastaron {formatearMonto(pozo.gastado)}
         </Text>
       </View>
 
       <View style={estilos.bloque}>
-        <Text style={estilos.rotuloSeccion}>Quién puso qué</Text>
+        <Text style={estilos.rotuloSeccion}>Quién aportó cuánto</Text>
         {pozo.porPersona.map((p) => (
           <View key={p.usuarioId} style={estilos.fila}>
             <Text style={estilos.filaEtiqueta}>{p.nombre}</Text>
