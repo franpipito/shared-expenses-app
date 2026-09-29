@@ -402,6 +402,28 @@ modulo de Mongo para probar una regla de seguridad. Se verifica como ya se
 verificaba el 404-como-401: con el smoke test (`sin token, /auth/cerrar-sesiones
 da 401` y `.../borrar-cuenta da 401`).
 
+### El fallback de mails al log, y el mismo audit
+
+Segundo hallazgo de la misma auditoria. Si a las credenciales de Gmail
+(`ConfiguracionMails`) les falta cualquiera de las cuatro, la app cae a
+`EnviadorPorLog`, que escribe el mail entero -- codigo de reseteo incluido --
+en el log de Render. Es a proposito (ver la seccion de arriba), pero hasta
+ahora el aviso era un `log.warn` igual en local que en produccion, y si las
+credenciales se caen DESPUES de un tiempo funcionando (se revocan a los 6
+meses sin uso, o si cambia la contrasena de la cuenta de Google), ese warning
+de arranque -- que nadie vuelve a mirar -- era la unica senial. Podia durar
+meses sin que nadie se entere de que los codigos de reseteo quedan en texto
+plano en el log.
+
+Ahora `enviadorDeMails` recibe el `Environment` y, con el perfil `produccion`
+activo, el mismo caso loguea en **ERROR** con un mensaje explicito. Sigue sin
+frenar el arranque -- eso seguiria siendo desproporcionado -- pero un ERROR en
+produccion es la clase de linea que una alerta de logs si mira. La decision de
+QUE enviador se devuelve no cambia, solo la severidad; `ConfiguracionMailsTest`
+prueba lo primero (con `MockEnvironment`, sin necesitar Spring) y no lo
+segundo, porque afirmar un nivel de log pediria capturar el appender de
+Logback para una sola linea que se revisa leyendo el codigo.
+
 ### `descripcion` es opcional (desde la v1.0)
 La usuaria la eligio como uno de sus tres campos: "algo que me recuerde el
 momento". Es lo que le permite distinguir despues el gasto evitable del que no lo
