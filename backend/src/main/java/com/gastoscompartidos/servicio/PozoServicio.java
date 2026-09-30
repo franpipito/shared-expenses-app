@@ -249,10 +249,12 @@ public class PozoServicio {
      * util -- es justamente lo que hay que mirar antes de salir de viaje.
      *
      * Y despues de los integrantes, quien aporto y YA NO ESTA en el grupo:
-     * alguien que borro su cuenta. Sin esto su aporte seguiria sumando en el
-     * total pero desapareceria del desglose, y "aportado" no cerraria contra la
-     * suma de las personas. Sale con el nombre del snapshot del aporte, que el
-     * borrado deja en "Cuenta eliminada".
+     * alguien que borro su cuenta, o que se sumo a la vaquita y despues salio
+     * del grupo (GrupoServicio.salir). Sin esto su aporte seguiria sumando en
+     * el total pero desapareceria del desglose, y "aportado" no cerraria
+     * contra la suma de las personas. Sale con el nombre del snapshot del
+     * aporte -- "Cuenta eliminada" si borro la cuenta, su nombre real si solo
+     * salio del grupo, porque en ese caso la cuenta sigue existiendo.
      */
     private List<TotalPorPersona> totalesPorPersona(Pozo pozo) {
         List<Usuario> integrantes = usuarios.findByGrupoIdOrderByIdAsc(pozo.getGrupoId());

@@ -9,5 +9,5 @@ import org.springframework.data.mongodb.repository.MongoRepository;
  * tiene el suyo, y el grupo de alguien se busca siempre por el `grupoId` de
  * su usuario, nunca por posicion.
  */
-public interface GrupoRepositorio extends MongoRepository<Grupo, String> {
+public interface GrupoRepositorio extends MongoRepository<Grupo, String>, GrupoConsultas {
 }

@@ -267,7 +267,8 @@ cualquiera que la baje.
 Sacar el codigo no era solo abrir el formulario. Con un unico grupo, un
 desconocido que baja la app caeria en el grupo de Viole y Franco. Ahora **cada
 registro crea su propio grupo, de un integrante**, y sumarse al de otra persona
-queda para la v1.1 (codigos por grupo, y ahi vuelve el tope de dos).
+queda para la v1.1 (codigos por grupo, y ahi vuelve el tope de dos). **Hecho en
+la 2.1**, ver mas abajo.
 
 Lo que arrastro, que es lo interesante:
 - **Un grupo de uno no puede compartir.** `UsuarioRepositorio.tienePareja()` es
@@ -297,6 +298,67 @@ Lo que arrastro, que es lo interesante:
 
 Los usuarios ya NO se siembran por SQL: los crea la API, que es lo unico que sabe
 hashear con BCrypt.
+
+### Sumarse a un grupo: codigos de invitacion (v1.1, seccion 2.1)
+Tres endpoints en `GrupoServicio`/`GrupoControlador`: `POST /grupo/invitar`
+genera un codigo, `POST /grupo/sumarse` lo consume, `POST /grupo/salir` deja
+el grupo compartido. El tope sigue en **dos integrantes** -- subirlo es 2.2,
+el cambio de modelo mas caro, y no hacia falta adelantarlo para esto.
+
+**Por que "salir" es simetrica y no hay un "expulsar".** La pregunta que lo
+disparo: que pasa si a la pareja le va mal y ya no quieren estar en el mismo
+grupo. Con el tope en dos, "me voy yo" y "te saco a vos" llegan al MISMO
+estado final -- la otra persona queda sola -- asi que no hace falta la
+segunda accion. Y conviene que no exista: en una pelea, darle a una persona
+el boton de sacar a la otra del grupo compartido abre la puerta a usarlo
+como forma de control, no solo como limite prolijo. Que cualquiera pueda
+salir, sin pedirle permiso a nadie, evita ese problema de raiz. (Si algun
+dia el tope sube con 2.2, esto hay que revisarlo: con tres o mas, "me voy"
+y "expulso a alguien" dejan de ser la misma accion.)
+
+**El codigo de invitacion NO se guarda hasheado**, a diferencia del codigo de
+reseteo de contrasena (`Usuario.resetCodigoHash`), y es a proposito:
+- El de reseteo tiene que resistir fuerza bruta con solo 6 digitos (un millon
+  de combinaciones); el hash mas el tope de 5 intentos son la defensa real.
+- Quien se suma no sabe de que grupo es el codigo -- a diferencia del reseteo,
+  donde el email ya identifica al usuario y el codigo solo se compara contra
+  EL SUYO -- asi que hace falta poder buscar el grupo directo por el valor del
+  codigo. Hasheado, esa busqueda seria un escaneo de todos los grupos con
+  invitacion activa (a esta escala no importaria, pero es un patron raro para
+  no ganar nada).
+- La defensa acá es la ENTROPIA: 8 caracteres de un alfabeto de 32 (sin
+  `0/O` ni `1/I/L`, que se confunden al leerlos o copiarlos) son ~2^40
+  combinaciones. Vence a los 7 dias, y el rate limit por cuenta en
+  `/grupo/sumarse` es defensa en profundidad, no la proteccion principal.
+
+**Consumir el codigo es atomico**, mismo patron UPDATE...WHERE que
+`PozoConsultasImpl.agregarAporte`: `GrupoConsultasImpl.consumirInvitacion`
+hace un `findAndModify` que busca por `codigo + vigencia` Y BORRA el codigo
+en la misma operacion. Si dos requests llegaran con el mismo codigo casi
+juntas, el filtro de la segunda ya no matchea nada -- no hace falta un lock
+aparte. La diferencia con `agregarAporte` es que aca si hace falta el
+documento (el id del grupo al que sumar a quien se une), asi que es
+`findAndModify` y no `updateFirst`: por default devuelve el documento COMO
+ESTABA ANTES del update.
+
+**`sumarse` y `salir` comparten `GastoConsultas.moverPersonalesA`**: los
+gastos PERSONAL de la persona la siguen a donde vaya, en las dos
+direcciones. Es deliberadamente MAS SIMPLE que
+`CuentaServicio.borrar()`: alla hay que anonimizar, porque la cuenta deja de
+existir. Aca la cuenta sigue existiendo -- solo cambia de grupo -- asi que
+los COMPARTIDO y los aportes a la vaquita que quedan atras NO se tocan: se
+ven con el nombre real, porque la persona real sigue siendo quien es. Solo
+"Cuenta eliminada" implica una cuenta borrada.
+
+**Lo que falta, y por que esta sesion se cierra sin eso.** Se hizo desde una
+sesion en la nube, sin Docker ni Mongo local (ver `docs/proxima-sesion.md`):
+el backend compila, y los 9 tests nuevos de `GrupoServicioTest` (mocks, sin
+base) pasan junto con los 144 que ya habia. Lo que ESO no prueba: que el
+indice unico parcial de `invitacion_codigo` exista de verdad, y que
+`findAndModify` sea atomico contra una base real -- eso es
+`scripts/smoke-test.ps1`, y falta agregarle los chequeos. Tampoco hay
+pantalla en mobile todavia: la app no puede invitar, sumarse ni salir desde
+la UI. Los dos quedan para cuando haya PC con Docker y telefono a mano.
 
 ### Borrar la cuenta (v1.0)
 Lo exige la App Store (guideline 5.1.1(v)): si la app deja crear cuenta, tiene

@@ -71,19 +71,30 @@ Cada ítem trae las preguntas que hay que contestar **antes** de programarlo.
 
 ### 2.1 Sumarse a un grupo (códigos por grupo) — la base de todo lo demás
 
-Hoy cada cuenta nueva queda sola en su grupo, y **no hay forma de sumar a otra
-persona**: la sección de pareja solo existe para Viole y Franco porque se
-registraron antes de la v1.0. Sin esto, nadie más puede usar lo compartido.
+**Backend hecho** (sesión en la nube, sin PC): `POST /grupo/invitar`,
+`POST /grupo/sumarse`, `POST /grupo/salir`. Diseño completo y el porqué de
+cada decisión en `CLAUDE.md` → "Sumarse a un grupo: códigos de invitación".
+Resumen rápido de lo que se resolvió:
 
-- Un código por grupo, que genera quien ya está adentro (Ajustes → "Invitar").
-  ¿Vence? ¿Se usa una sola vez? ¿Se puede regenerar?
-- ¿Qué pasa con los gastos PERSONAL de quien se suma y abandona su grupo de uno?
-  (Se mudan con la persona: siguen siendo suyos y privados.)
-- Vuelve el tope de integrantes (hoy `MAXIMO_INTEGRANTES` no existe; se sacó con
-  el registro abierto). Ver 2.2.
-- `tienePareja` en el resumen ya existe: la app muestra la sección de pareja sola
-  en cuanto el grupo tenga dos.
-- Salir de un grupo: ¿se puede? Hoy la única salida es borrar la cuenta.
+- **El código vence a los 7 días y NO se guarda hasheado** (a diferencia del
+  de reseteo): tiene mucha más entropía y hace falta poder buscarlo directo
+  por su valor, porque quien se suma no sabe de qué grupo es.
+- **El tope sigue en dos.** Subirlo es 2.2, no esto.
+- **Los PERSONAL de quien se suma se mudan con la persona** (`GastoConsultas.
+  moverPersonalesA`), como ya se había anticipado acá.
+- **Salir es simétrica: cualquiera puede salir cuando quiere, sin una acción
+  separada para "expulsar" a la otra persona.** Surgió de preguntar "¿y si
+  se pelean?": con el tope en dos, "me voy yo" y "te saco a vos" llegan al
+  mismo estado final, así que alcanza con una sola acción — y conviene que
+  sea la única, porque dejar que alguien saque a otro de un grupo compartido
+  en medio de una pelea es abrirle la puerta a usarlo como control.
+
+**Falta**: agregar los chequeos al smoke test (lo único que prueba que el
+índice único parcial de `invitacion_codigo` existe de verdad, y que
+`findAndModify` es atómico contra Mongo real) y las pantallas en mobile
+(Ajustes → "Invitar", un campo para pegar el código, y el botón de salir).
+Los 9 tests nuevos de `GrupoServicioTest` (mocks) pasan junto con los 144
+que ya había; `contextLoads` no se pudo correr en esta sesión (sin Mongo).
 
 ### 2.2 Grupos de más de 2 personas — el cambio de modelo más grande
 

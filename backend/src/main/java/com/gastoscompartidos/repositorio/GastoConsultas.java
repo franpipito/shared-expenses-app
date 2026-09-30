@@ -86,6 +86,14 @@ public interface GastoConsultas {
     long borrarPersonalesDe(String grupoId, String usuarioId);
 
     /**
+     * Sumarse a un grupo o salir de uno: los PERSONAL de esa persona se mudan
+     * con ella. A diferencia del borrado de cuenta, aca no se borra nada --
+     * son suyos y siguen siendolo, solo que ahora los busca por otro grupoId.
+     * Devuelve cuantos movio.
+     */
+    long moverPersonalesA(String grupoIdViejo, String usuarioId, String grupoIdNuevo);
+
+    /**
      * Borrado de cuenta: reemplaza el nombre del pagador en los gastos que pago
      * esa persona. Los gastos quedan -- son el historial de la otra -- pero sin
      * su nombre. Devuelve cuantos toco.

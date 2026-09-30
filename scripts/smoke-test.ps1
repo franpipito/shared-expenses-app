@@ -983,6 +983,87 @@ $sigueEntrando = Entrar "sola@local" $PASSWORD
 Chequear ($sigueEntrando.token.Length -gt 50) "un codigo equivocado no cambia la contrasena"
 
 # ---------------------------------------------------------------------------
+Titulo "14. Sumarse a un grupo, y salir"
+
+# Tres cuentas descartables, cada una en su propio grupo de uno (asi arranca
+# cualquier registro desde la v1.0). A diferencia de "12. Borrar la cuenta",
+# aca la API ya sabe juntar gente sola: no hace falta JuntarEnGrupo/mongosh.
+$sesionInvita  = RegistrarOEntrar "Invita"  "invita@local"  $PASSWORD
+$sesionSuma    = RegistrarOEntrar "Suma"    "suma@local"    $PASSWORD
+$sesionTercero = RegistrarOEntrar "Tercero" "tercero@local" $PASSWORD
+$invita  = @{ Authorization = "Bearer $($sesionInvita.token)" }
+$suma    = @{ Authorization = "Bearer $($sesionSuma.token)" }
+$tercero = @{ Authorization = "Bearer $($sesionTercero.token)" }
+
+# Un PERSONAL de Suma, ANTES de sumarse: tiene que seguir siendo suyo (y solo
+# suyo) despues de mudarse de grupo.
+$personalDeSumaAntes = Crear $suma @{ monto = 1500; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "antes de sumarme"; tipo = "PERSONAL" }
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/grupo/sumarse" -Method Post -Headers $suma `
+    -ContentType "application/json" -Body (@{ codigo = "NOEXISTE1" } | ConvertTo-Json) } `
+    "no es v" "un codigo inventado no suma a nadie"
+
+$invitacion = Invoke-RestMethod -Uri "$base/grupo/invitar" -Method Post -Headers $invita
+Chequear ($invitacion.codigo.Length -eq 8) "invitar genera un codigo de 8 caracteres"
+Chequear (([datetime]$invitacion.vence) -gt (Get-Date).ToUniversalTime()) "y una fecha de vencimiento futura"
+
+$grupoJunto = Invoke-RestMethod -Uri "$base/grupo/sumarse" -Method Post -Headers $suma `
+    -ContentType "application/json" -Body (@{ codigo = $invitacion.codigo } | ConvertTo-Json)
+Chequear (($grupoJunto.integrantes | Measure-Object).Count -eq 2) "sumarse con el codigo real junta a los dos"
+Chequear (($grupoJunto.integrantes.nombre -contains "Invita") -and ($grupoJunto.integrantes.nombre -contains "Suma")) `
+    "y el grupo tiene a Invita y a Suma"
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/grupo/invitar" -Method Post -Headers $invita } `
+    "ya tiene a las dos personas" "invitar de nuevo se rechaza: el grupo ya esta completo"
+
+$codigoDeTercero = (Invoke-RestMethod -Uri "$base/grupo/invitar" -Method Post -Headers $tercero).codigo
+EsperarRegla { Invoke-RestMethod -Uri "$base/grupo/sumarse" -Method Post -Headers $suma `
+    -ContentType "application/json" -Body (@{ codigo = $codigoDeTercero } | ConvertTo-Json) } `
+    "en un grupo compartido" "Suma no puede sumarse a un segundo grupo estando ya de a dos"
+
+Chequear ((Invoke-RestMethod -Uri "$base/gastos/$($personalDeSumaAntes.id)" -Headers $suma).id -eq $personalDeSumaAntes.id) `
+    "el PERSONAL de Suma se mudo con ella: lo sigue viendo en el grupo nuevo"
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($personalDeSumaAntes.id)" -Headers $invita } `
+    404 "pero Invita NO lo ve: mudarse de grupo no vuelve publico un PERSONAL"
+
+# Un COMPARTIDO que paga Suma mientras estan juntas, para probar que salir NO
+# anonimiza: a diferencia de borrar-cuenta, la cuenta de Suma sigue existiendo.
+$compartidoDeSuma = Crear $suma @{ monto = 3000; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "un cafe de las dos"; tipo = "COMPARTIDO"; porcentajePagador = 100 }
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/grupo/salir" -Method Post -Headers $suma `
+    -ContentType "application/json" -Body (@{ password = "no-es-mi-contrasena" } | ConvertTo-Json) } `
+    "no es correcta" "salir con la contrasena equivocada no mueve nada, y da 400 y no 401"
+
+$grupoSola = Invoke-RestMethod -Uri "$base/grupo/salir" -Method Post -Headers $suma `
+    -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json)
+Chequear ((($grupoSola.integrantes | Measure-Object).Count -eq 1) -and ($grupoSola.integrantes[0].nombre -eq "Suma")) `
+    "salir deja a Suma sola en un grupo nuevo"
+
+$grupoDeInvitaSolo = Invoke-RestMethod -Uri "$base/grupo" -Headers $invita
+Chequear ((($grupoDeInvitaSolo.integrantes | Measure-Object).Count -eq 1) -and ($grupoDeInvitaSolo.integrantes[0].nombre -eq "Invita")) `
+    "e Invita queda sola en el grupo viejo"
+
+$compartidoVistoPorInvita = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeSuma.id)" -Headers $invita
+Chequear ($compartidoVistoPorInvita.pagadoPor.nombre -eq "Suma") `
+    "el compartido que pago Suma le queda a Invita, con su nombre REAL (no 'Cuenta eliminada': la cuenta sigue existiendo)"
+EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeSuma.id)" -Headers $suma } `
+    404 "y Suma ya no lo ve: quedo en el grupo que dejo atras"
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/grupo/salir" -Method Post -Headers $suma `
+    -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) } `
+    "no hay nadie" "estando sola, salir se rechaza: no hay pareja de la cual salir"
+
+# Limpieza: borrar las tres cuentas descartables deja todo (gastos, grupos)
+# atras, igual que en "12. Borrar la cuenta". Asi la proxima corrida arranca
+# de cero sin tocar nada a mano.
+foreach ($h in @($invita, $suma, $tercero)) {
+    Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $h -UseBasicParsing `
+        -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
+}
+
+# ---------------------------------------------------------------------------
 Write-Host ""
 if ($fallos -eq 0) {
     Write-Host "TODO OK" -ForegroundColor Green

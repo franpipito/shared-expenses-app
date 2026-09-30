@@ -302,6 +302,15 @@ public class GastoConsultasImpl implements GastoConsultas {
     }
 
     @Override
+    public long moverPersonalesA(String grupoIdViejo, String usuarioId, String grupoIdNuevo) {
+        Query query = Query.query(Criteria.where("grupo_id").is(grupoIdViejo)
+                .and("tipo").is(TipoGasto.PERSONAL)
+                .and("pagadoPor.usuarioId").is(usuarioId));
+        Update update = new Update().set("grupo_id", grupoIdNuevo);
+        return mongoTemplate.updateMulti(query, update, Gasto.class).getModifiedCount();
+    }
+
+    @Override
     public long anonimizarPagador(String grupoId, String usuarioId, String nombre) {
         Query query = Query.query(Criteria.where("grupo_id").is(grupoId)
                 .and("pagadoPor.usuarioId").is(usuarioId));
