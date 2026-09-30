@@ -5,6 +5,7 @@ import com.gastoscompartidos.dto.RegistrarLiquidacionRequest;
 import com.gastoscompartidos.dto.SaldoTotalRespuesta;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Liquidacion;
+import com.gastoscompartidos.modelo.ReferenciaUsuario;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
 import com.gastoscompartidos.repositorio.LiquidacionRepositorio;
@@ -82,9 +83,10 @@ public class LiquidacionServicio {
 
     /**
      * Registra "yo le pagué esto a la otra persona" y devuelve el saldo total
-     * ya actualizado. Fijate lo que NO se pide: a quién -- sale del token
-     * (quien lo manda es "de") y del otro integrante del grupo, igual que un
-     * aporte a la vaquita.
+     * ya actualizado. Fijate lo que NO se pide: los ids de quien paga y quien
+     * recibe -- siempre son quien manda la request y el otro integrante del
+     * grupo. Lo que sí puede elegir es la dirección: ver
+     * {@link RegistrarLiquidacionRequest#meLoPagaron}.
      */
     public SaldoTotalRespuesta registrar(RegistrarLiquidacionRequest req) {
         Usuario actual = usuarioActual.requerido();
@@ -95,10 +97,13 @@ public class LiquidacionServicio {
                     "Para registrar un pago, la otra persona tiene que estar en tu grupo");
         }
 
+        ReferenciaUsuario de = req.meLoPagaron() ? otro.comoReferencia() : actual.comoReferencia();
+        ReferenciaUsuario para = req.meLoPagaron() ? actual.comoReferencia() : otro.comoReferencia();
+
         Liquidacion liquidacion = new Liquidacion(
                 actual.getGrupoId(),
-                actual.comoReferencia(),
-                otro.comoReferencia(),
+                de,
+                para,
                 normalizar(req.monto()),
                 LocalDate.now(reloj));
         liquidaciones.save(liquidacion);

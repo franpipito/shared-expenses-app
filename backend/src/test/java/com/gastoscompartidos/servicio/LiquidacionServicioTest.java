@@ -131,13 +131,13 @@ class LiquidacionServicioTest {
     }
 
     @Test
-    @DisplayName("registrar guarda de=quien pide, para=la otra persona, y devuelve el saldo actualizado")
+    @DisplayName("registrar (yo pague) guarda de=quien pide, para=la otra persona")
     void registrarGuardaLaDireccionCorrecta() {
         when(gastos.saldoHistoricoDe(GRUPO, "u-franco")).thenReturn(new BigDecimal("-1000.00"));
         // Antes de guardar (para armar el saldo actualizado que devuelve registrar()).
         when(liquidaciones.findByGrupoIdOrderByFechaDescIdDesc(GRUPO)).thenReturn(List.of());
 
-        servicio.registrar(new RegistrarLiquidacionRequest(new BigDecimal("300")));
+        servicio.registrar(new RegistrarLiquidacionRequest(new BigDecimal("300"), false));
 
         ArgumentCaptor<Liquidacion> captura = ArgumentCaptor.forClass(Liquidacion.class);
         verify(liquidaciones).save(captura.capture());
@@ -151,11 +151,27 @@ class LiquidacionServicioTest {
     }
 
     @Test
+    @DisplayName("registrar (me lo pagaron) invierte de y para: la otra persona pago")
+    void registrarConMeLoPagaronInvierteLaDireccion() {
+        when(gastos.saldoHistoricoDe(GRUPO, "u-franco")).thenReturn(new BigDecimal("1000.00"));
+        when(liquidaciones.findByGrupoIdOrderByFechaDescIdDesc(GRUPO)).thenReturn(List.of());
+
+        servicio.registrar(new RegistrarLiquidacionRequest(new BigDecimal("300"), true));
+
+        ArgumentCaptor<Liquidacion> captura = ArgumentCaptor.forClass(Liquidacion.class);
+        verify(liquidaciones).save(captura.capture());
+        Liquidacion guardada = captura.getValue();
+
+        assertThat(guardada.getDe()).isEqualTo(new ReferenciaUsuario("u-viole", "Viole"));
+        assertThat(guardada.getPara()).isEqualTo(new ReferenciaUsuario("u-franco", "Franco"));
+    }
+
+    @Test
     @DisplayName("registrar se rechaza si esta sola: no hay a quien pagarle")
     void registrarRechazaSinPareja() {
         when(usuarios.otroIntegranteDe(GRUPO, "u-franco")).thenReturn(null);
 
-        assertThatThrownBy(() -> servicio.registrar(new RegistrarLiquidacionRequest(new BigDecimal("100"))))
+        assertThatThrownBy(() -> servicio.registrar(new RegistrarLiquidacionRequest(new BigDecimal("100"), false)))
                 .isInstanceOf(ReglaDeNegocioException.class)
                 .hasMessageContaining("otra persona tiene que estar en tu grupo");
 

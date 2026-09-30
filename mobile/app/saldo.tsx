@@ -132,6 +132,23 @@ export default function Saldo() {
           <Text style={estilos.verGastos}>Ver los gastos del mes</Text>
           <Text style={estilos.flecha}>›</Text>
         </Pressable>
+
+        {/*
+          El histórico (seccion 2.3): un numero aparte, siempre vigente, que
+          no se resetea con el mes. Es un link y no otra tarjeta en esta
+          pantalla porque esta pantalla ya dice con todas las letras que es
+          "la cuenta del mes" -- mezclar los dos numeros en un mismo lugar
+          confundiria justo la distincion que la nota de arriba viene a
+          aclarar.
+        */}
+        <Pressable
+          onPress={() => router.push('/liquidaciones')}
+          accessibilityRole="button"
+          style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+        >
+          <Text style={estilos.verGastos}>Saldar cuentas (toda la historia)</Text>
+          <Text style={estilos.flecha}>›</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );

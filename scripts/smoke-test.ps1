@@ -1088,22 +1088,25 @@ $totalAcreedor = Invoke-RestMethod -Uri "$base/saldo/total" -Headers $acreedor
 Chequear ($totalAcreedor.aFavorMio -eq 500) "y del otro lado, a Acreedor le deben 500"
 
 EsperarValidacion { Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $deudor `
-    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    -ContentType "application/json" -Body (@{ monto = 0; meLoPagaron = $false } | ConvertTo-Json) } `
     "monto" "una liquidacion de cero se rechaza por Bean Validation, no por regla de negocio"
 
 EsperarRegla { Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $sola `
-    -ContentType "application/json" -Body (@{ monto = 100 } | ConvertTo-Json) } `
+    -ContentType "application/json" -Body (@{ monto = 100; meLoPagaron = $false } | ConvertTo-Json) } `
     "otra persona tiene que estar" "estando sola, no hay a quien pagarle"
 
-# Pago parcial: Deudor paga 200 de los 500.
+# Pago parcial: Deudor paga 200 de los 500. meLoPagaron = false: "yo pague".
 $despuesDelPrimerPago = Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $deudor `
-    -ContentType "application/json" -Body (@{ monto = 200 } | ConvertTo-Json)
+    -ContentType "application/json" -Body (@{ monto = 200; meLoPagaron = $false } | ConvertTo-Json)
 Chequear ($despuesDelPrimerPago.monto -eq 300 -and $despuesDelPrimerPago.deudorId -eq $sesionDeudor.usuario.id) `
     "el pago parcial baja la deuda de 500 a 300, y Deudor sigue debiendo"
 
-# Pago del resto: queda a mano.
-$despuesDelSegundoPago = Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $deudor `
-    -ContentType "application/json" -Body (@{ monto = 300 } | ConvertTo-Json)
+# Pago del resto, pero anotado por QUIEN LO RECIBIO: Acreedor llama con
+# meLoPagaron = true ("Deudor me pago 300"). Mismo resultado que si hubiera
+# llamado Deudor con meLoPagaron = false -- es la misma liquidacion, contada
+# desde el otro lado.
+$despuesDelSegundoPago = Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $acreedor `
+    -ContentType "application/json" -Body (@{ monto = 300; meLoPagaron = $true } | ConvertTo-Json)
 Chequear ($despuesDelSegundoPago.monto -eq 0 -and $null -eq $despuesDelSegundoPago.deudorId) `
     "el segundo pago liquida el resto: quedan a mano"
 
@@ -1111,7 +1114,7 @@ $historial = Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Headers $acreed
 Chequear ((($historial | Measure-Object).Count -eq 2) -and ($historial[0].monto -eq 300)) `
     "el historial tiene los dos pagos, el mas nuevo primero"
 Chequear ($historial[0].de.nombre -eq "Deudor" -and $historial[0].para.nombre -eq "Acreedor") `
-    "y cada uno dice quien pago y quien recibio"
+    "y el que anoto Acreedor con meLoPagaron queda IGUAL guardado: de Deudor, para Acreedor"
 
 # El saldo del MES no cambia por nada de esto: sigue siendo el mismo
 # endpoint de siempre, sin liquidaciones.

@@ -240,3 +240,25 @@ export type InvitacionRespuesta = {
   /** ISO 8601. Vence a los 7 dias. */
   vence: string;
 };
+
+/**
+ * El saldo de TODA la historia (deudas - pagos), no del mes. Mismo shape que
+ * SaldoRespuesta, sin `mes`: ver GET /saldo/total en CLAUDE.md, seccion 2.3.
+ */
+export type SaldoTotalRespuesta = {
+  monto: number;
+  deudorId: string | null;
+  deudorNombre: string | null;
+  acreedorId: string | null;
+  acreedorNombre: string | null;
+  aFavorMio: number;
+};
+
+/** Un pago ya registrado, tal como lo devuelve GET /saldo/liquidaciones. */
+export type LiquidacionRespuesta = {
+  id: string;
+  de: UsuarioRespuesta;
+  para: UsuarioRespuesta;
+  monto: number;
+  fecha: string;
+};

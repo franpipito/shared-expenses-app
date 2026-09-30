@@ -754,10 +754,25 @@ produccion estaba mal; lo que estaba desactualizado era el test. Es la
 misma leccion que "Los tests: dos capas" ya documenta sobre
 `tienePareja`, aplicada en el momento en que se la volvio a pisar.
 
-**Lo que falta**: la pantalla en mobile (un numero en la pantalla de saldo,
-un boton "Marcar como pagado", y el historial de liquidaciones) y los
-chequeos en `scripts/smoke-test.ps1`. Verificado con los 151 tests (144 + 7
-nuevos de `LiquidacionServicioTest`), todos en verde salvo `contextLoads`.
+**`RegistrarLiquidacionRequest.meLoPagaron`, agregado disenando la pantalla
+de mobile.** La primera version solo dejaba "yo pague" (`de` = quien manda
+la request), copiando literal el razonamiento de `AporteRequest` ("nadie
+puede aportar en nombre de otro"). Pero una liquidacion, a diferencia de un
+aporte, es un hecho ENTRE DOS personas: cualquiera de las dos puede ser
+quien abre la app para anotarlo, inclusive quien RECIBIO el pago. Sin este
+campo, si Viole le paga a Franco en efectivo y es FRANCO quien agarra el
+telefono para anotarlo, no habia forma de decir "me pagaron" -- el unico
+boton disponible diria lo contrario de lo que paso. `meLoPagaron` (default
+`false`, booleano primitivo y no `Boolean`: falta el campo en el JSON y
+Jackson lo llena con el default de Java, no hace falta mandarlo siempre)
+invierte `de`/`para` en el servicio. El smoke test lo prueba anotando el
+MISMO pago desde los dos lados: Deudor con `meLoPagaron=false` para el
+primero, Acreedor con `meLoPagaron=true` para el segundo, y los dos quedan
+guardados igual (de Deudor, para Acreedor).
+
+**Lo que falta**: probar las pantallas nuevas en un telefono de verdad, y
+correr `scripts/smoke-test.ps1` contra Mongo real (los chequeos ya estan
+escritos). Verificado con 152 tests, todos en verde salvo `contextLoads`.
 
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
