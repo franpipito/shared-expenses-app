@@ -380,18 +380,22 @@ herramientas de Expo), asi que se instalo con `npm install expo-clipboard@~57.0.
 directo y se verifico con `npm ci` en una carpeta aparte -- el mismo chequeo
 que ya delato el problema de lockfile de la 6.11, para no repetirlo.
 
-**Lo que falta, y por que esta sesion se cierra sin eso.** Se hizo desde
-una sesion en la nube, sin Docker ni Mongo local, y sin telefono a mano
-(ver `docs/proxima-sesion.md`). Verificado: el backend compila y los 9
-tests nuevos de `GrupoServicioTest` (mocks, sin base) pasan junto con los
-144 que ya habia; el mobile con `tsc --noEmit` (tambien con
-`--noUnusedLocals`) y `expo export`, que bundlea de verdad. Lo que NINGUNA
-de esas dos cosas prueba: que el indice unico parcial de
-`invitacion_codigo` exista de verdad, que `findAndModify` sea atomico
-contra una base real -- eso es `scripts/smoke-test.ps1`, con los chequeos
-ya agregados pero sin correr -- y que las pantallas nuevas se vean y se
-usen bien en un telefono de verdad. Los tres quedan para cuando haya PC con
-Docker y telefono a mano.
+**Se hizo desde una sesion en la nube**, sin Docker ni Mongo local, y sin
+telefono a mano. Verificado ahi: el backend compila y los 9 tests nuevos de
+`GrupoServicioTest` (mocks, sin base) pasan junto con los 144 que ya habia; el
+mobile con `tsc --noEmit` (tambien con `--noUnusedLocals`) y `expo export`, que
+bundlea de verdad. Lo que NINGUNA de esas dos cosas prueba: que el indice unico
+parcial de `invitacion_codigo` exista de verdad, que `findAndModify` sea
+atomico contra una base real, y que las pantallas nuevas se vean y se usen bien
+en un telefono de verdad.
+
+**Los tres se cerraron despues, con PC y telefono.** `scripts/smoke-test.ps1`
+corrio contra Mongo local (Docker) y dio "TODO OK", incluida la seccion 14
+("Sumarse a un grupo, y salir") -- confirma el indice y el `findAndModify` de
+verdad. Y Franco probo invitar/sumarse/salir por Expo Go en su telefono: anduvo
+bien, salvo el hallazgo de copiar codigo que ya esta contado mas arriba. Con
+eso, la seccion 2.1 queda verificada en las tres capas que este documento pide
+(regla 1: cerrar con algo corriendo y probado).
 
 ### Borrar la cuenta (v1.0)
 Lo exige la App Store (guideline 5.1.1(v)): si la app deja crear cuenta, tiene
@@ -782,9 +786,42 @@ MISMO pago desde los dos lados: Deudor con `meLoPagaron=false` para el
 primero, Acreedor con `meLoPagaron=true` para el segundo, y los dos quedan
 guardados igual (de Deudor, para Acreedor).
 
-**Lo que falta**: probar las pantallas nuevas en un telefono de verdad, y
-correr `scripts/smoke-test.ps1` contra Mongo real (los chequeos ya estan
-escritos). Verificado con 152 tests, todos en verde salvo `contextLoads`.
+Verificado en el backend: 152 tests, todos en verde salvo `contextLoads`, y
+`scripts/smoke-test.ps1` contra Mongo real (seccion 15).
+
+**Y probarlo en el telefono encontro un bug real: `saldo.tsx` no se enteraba
+de los pagos.** La pantalla "Gastos compartidos" (la seccion pareja principal,
+`GET /saldo?mes=`) y "Saldar cuentas" (`GET /saldo/total`) son dos consultas
+completamente separadas. Franco anoto que Viole le pago $4.000 de una deuda
+de $5.000 -- "Saldar cuentas" bajo a $1.000, como corresponde -- pero al
+volver a "Gastos compartidos" seguia diciendo que Viole le debia $5.000. La
+causa esta en `ResumenServicio.saldo()`: hace `gastos.saldoDe(...)` puro,
+sin tocar `Liquidacion` para nada. No es un bug de escritura, es que esa
+consulta nunca supo que las liquidaciones existen.
+
+**La decision, discutida antes de tocar codigo (regla 3):** la razon
+original para que el saldo fuera del mes y no historico era "no hay forma de
+saldar la cuenta" (ver "El saldo es del mes, no historico" mas arriba) -- sin
+`Liquidacion`, un numero historico solo crecia. Esa razon ya no existe: es
+exactamente lo que esta seccion construyo. Restar las liquidaciones TAMBIEN
+al saldo del mes se descarto por ambiguo (si la deuda abarca mas de un mes,
+no hay un mes correcto al que restarle el pago). Se opto por lo mas simple y
+lo unico sin ambiguedad: `app/saldo.tsx` -- la pantalla que dice "quien le
+debe a quien" -- ahora muestra el MISMO numero que "Saldar cuentas"
+(`GET /saldo/total`, ya neto de pagos), y dejo de pedir `GET /saldo?mes=`.
+El selector de mes salio de esa pantalla (dejo de aplicar); "Ver los gastos
+del mes" sigue, para ver el detalle. El endpoint `GET /saldo?mes=` sigue
+existiendo en el backend sin tocarse -- "cuanto generaron los gastos de este
+mes" sigue siendo una pregunta valida, solo que ya ninguna pantalla la hace.
+
+Con eso, `traerSaldo()` y el tipo `SaldoRespuesta` quedaron sin ningun
+llamador en el cliente y se borraron (`mobile/src/features/saldo/api.ts`,
+`mobile/src/api/tipos.ts`): codigo muerto con un comentario que además ya
+mentia ("sigue siendo el pulso del mes"), la misma clase de cosa que ya paso
+con el comentario de `Campo.tsx` en la seccion 2.1.
+
+Verificado con `tsc --noEmit --noUnusedLocals` y `expo export`. Falta
+volver a probar esta pantalla en el telefono con el fix.
 
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.

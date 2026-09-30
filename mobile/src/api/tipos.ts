@@ -143,17 +143,6 @@ export type ResumenRespuesta = {
   tienePareja?: boolean;
 };
 
-export type SaldoRespuesta = {
-  mes: string;
-  monto: number;
-  deudorId: string | null;
-  deudorNombre: string | null;
-  acreedorId: string | null;
-  acreedorNombre: string | null;
-  /** Positivo si me deben; negativo si debo. */
-  aFavorMio: number;
-};
-
 /** Lo que devuelve `ManejadorDeErrores` en cualquier respuesta que no sea 2xx. */
 export type ErrorRespuesta = {
   mensaje: string;
@@ -242,8 +231,9 @@ export type InvitacionRespuesta = {
 };
 
 /**
- * El saldo de TODA la historia (deudas - pagos), no del mes. Mismo shape que
- * SaldoRespuesta, sin `mes`: ver GET /saldo/total en CLAUDE.md, seccion 2.3.
+ * El saldo de TODA la historia (deudas - pagos), no del mes: quien le debe a
+ * quien, ya con los pagos restados. Ver GET /saldo/total en CLAUDE.md,
+ * seccion 2.3.
  */
 export type SaldoTotalRespuesta = {
   monto: number;

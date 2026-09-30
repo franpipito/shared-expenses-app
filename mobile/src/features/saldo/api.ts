@@ -1,24 +1,14 @@
 import { pedir } from '../../api/cliente';
-import type { LiquidacionRespuesta, SaldoRespuesta, SaldoTotalRespuesta } from '../../api/tipos';
+import type { LiquidacionRespuesta, SaldoTotalRespuesta } from '../../api/tipos';
 
 /**
- * El saldo del mes: quien le debe a quien.
- *
- * OJO CON EL ALCANCE, que es una decision de producto y no un limite tecnico:
- * **este saldo es del mes pedido, no historico.** Acotarlo al mes lo
- * mantiene chico y accionable, al costo de asumir que se arreglan mes a
- * mes. La pantalla lo dice con todas las letras, porque un saldo que se
- * resetea sin avisar es peor que no tenerlo.
- *
- * El historico SI existe, aparte (seccion 2.3 de CLAUDE.md): ver
- * `traerSaldoTotal`. Este endpoint no cambia -- sigue siendo el pulso del
- * mes, no la cuenta completa.
+ * El saldo de toda la historia: deudas - pagos, sin recorte por mes. Es el
+ * que muestra `app/saldo.tsx` como "quien le debe a quien" (ver el
+ * comentario de esa pantalla): `GET /saldo?mes=` sigue existiendo en el
+ * backend -- "cuanto generaron los gastos compartidos ESTE mes" sigue siendo
+ * una pregunta valida -- pero ya nada en el cliente la usa, asi que no tiene
+ * wrapper aca. Si algun dia hace falta de nuevo, es un `pedir` mas.
  */
-export function traerSaldo(mes: string): Promise<SaldoRespuesta> {
-  return pedir<SaldoRespuesta>(`/saldo?mes=${mes}`);
-}
-
-/** El saldo de toda la historia: deudas - pagos, sin recorte por mes. */
 export function traerSaldoTotal(): Promise<SaldoTotalRespuesta> {
   return pedir<SaldoTotalRespuesta>('/saldo/total');
 }

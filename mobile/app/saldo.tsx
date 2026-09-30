@@ -6,8 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
-import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
-import { useMes } from '../src/features/mes/mes';
 import { useSaldo } from '../src/features/saldo/hooks/useSaldo';
 import { colores } from '../src/tema/colores';
 import { fuentes, numerosTabulares } from '../src/tema/tipografia';
@@ -27,10 +25,18 @@ import { Cargando } from './_layout';
  * No hay ambar en toda la pantalla. El ambar es del gasto hormiga, y un gasto
  * compartido puede ser hormiga o no -- eso se mira en la lista, no aca. El color
  * de esta seccion es el teal.
+ *
+ * **El numero es el total historico (`GET /saldo/total`), no el del mes.**
+ * Fue al reves hasta que Franco probo la app: anoto un pago en "Saldar
+ * cuentas" y esta pantalla siguio mostrando la deuda vieja, porque el saldo
+ * del mes nunca resta liquidaciones. El motivo original para acotarlo al mes
+ * -- "no hay forma de saldar la cuenta" -- dejo de existir en cuanto se
+ * construyo `Liquidacion` (seccion 2.3), asi que seguir mostrando ACA el
+ * numero que se desactualiza con cada pago ya no tenia sentido. El detalle
+ * del mes sigue accesible mas abajo, en "Ver los gastos del mes".
  */
 export default function Saldo() {
   const { saldo, cargando, error, recargar } = useSaldo();
-  const { esElMesActual } = useMes();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -61,15 +67,13 @@ export default function Saldo() {
       >
         <View style={estilos.encabezado}>
           <View style={estilos.encabezadoTexto}>
-            <Text style={estilos.seccion}>La cuenta del mes</Text>
+            <Text style={estilos.seccion}>Al día de hoy</Text>
             <Text style={estilos.titulo}>Quién le debe a quién</Text>
           </View>
           <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
             <Text style={estilos.volver}>Resumen</Text>
           </Pressable>
         </View>
-
-        <SelectorDeMes />
 
         {error ? <Text style={estilos.error}>{error}</Text> : null}
 
@@ -80,11 +84,7 @@ export default function Saldo() {
             {aMano ? (
               <>
                 <Text style={estilos.aMano}>Están a mano</Text>
-                <Text style={estilos.bajada}>
-                  {esElMesActual
-                    ? 'Ningún gasto compartido quedó sin equilibrar este mes.'
-                    : 'Ningún gasto compartido quedó sin equilibrar ese mes.'}
-                </Text>
+                <Text style={estilos.bajada}>Ningún gasto compartido quedó sin equilibrar.</Text>
               </>
             ) : (
               <>
@@ -113,16 +113,7 @@ export default function Saldo() {
           </View>
         ) : null}
 
-        {/*
-          Esto no es letra chica: el saldo se resetea todos los meses, y un
-          numero que desaparece sin aviso es peor que no tenerlo. La alternativa
-          (saldo historico) se descarto porque sin una entidad de liquidacion
-          -- un "ya te pague" -- solo crece y deja de significar algo.
-        */}
-        <Text style={estilos.nota}>
-          Es la cuenta del mes, no el histórico. Arranca de cero cada mes, así que
-          conviene arreglarla antes de que termine.
-        </Text>
+        <Text style={estilos.nota}>Ya incluye los pagos anotados en "Saldar cuentas".</Text>
 
         <Pressable
           onPress={() => router.push('/gastos')}
@@ -134,19 +125,17 @@ export default function Saldo() {
         </Pressable>
 
         {/*
-          El histórico (seccion 2.3): un numero aparte, siempre vigente, que
-          no se resetea con el mes. Es un link y no otra tarjeta en esta
-          pantalla porque esta pantalla ya dice con todas las letras que es
-          "la cuenta del mes" -- mezclar los dos numeros en un mismo lugar
-          confundiria justo la distincion que la nota de arriba viene a
-          aclarar.
+          No es "ver otro numero": es el mismo total de arriba, con la accion
+          de anotar un pago y el historial completo. Separado de esta pantalla
+          por la misma razon que "ver los gastos del mes" esta separado del
+          resumen: un numero a la vista, el detalle a un toque.
         */}
         <Pressable
           onPress={() => router.push('/liquidaciones')}
           accessibilityRole="button"
           style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
         >
-          <Text style={estilos.verGastos}>Saldar cuentas (toda la historia)</Text>
+          <Text style={estilos.verGastos}>Saldar cuentas</Text>
           <Text style={estilos.flecha}>›</Text>
         </Pressable>
       </ScrollView>

@@ -24,9 +24,12 @@ import { fuentes, numerosTabulares } from '../src/tema/tipografia';
 import { Cargando } from './_layout';
 
 /**
- * Saldar cuentas: el saldo de toda la historia, y anotar un pago (v1.1,
- * seccion 2.3). Aparte de `saldo.tsx`, que sigue siendo el pulso del mes --
- * ver el porque en `src/features/saldo/api.ts`.
+ * Saldar cuentas: el mismo total que ya muestra `saldo.tsx` (v1.1, seccion
+ * 2.3), con lo que ese numero por si solo no puede dar: anotar un pago
+ * nuevo y ver el historial completo. Antes `saldo.tsx` mostraba un numero
+ * DISTINTO (el del mes, sin restar pagos) -- se corrigio porque quedaba
+ * desactualizado apenas alguien pagaba algo aca. Ver el comentario de esa
+ * pantalla.
  *
  * LA DIRECCION DEL PAGO NO SE PREGUNTA. `RegistrarLiquidacionRequest` admite
  * `meLoPagaron` porque cualquiera de los dos puede abrir esta pantalla para
