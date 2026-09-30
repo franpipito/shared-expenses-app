@@ -200,6 +200,17 @@ public class GastoConsultasImpl implements GastoConsultas {
     }
 
     @Override
+    public BigDecimal totalPersonalDe(String grupoId, String usuarioId) {
+        Criteria filtro = new Criteria().andOperator(
+                Criteria.where("grupo_id").is(grupoId),
+                Criteria.where("tipo").is(TipoGasto.PERSONAL),
+                Criteria.where("pagadoPor.usuarioId").is(usuarioId),
+                sinPozo()
+        );
+        return sumar(filtro, "$monto");
+    }
+
+    @Override
     public List<Gasto> buscarDelPozo(String pozoId, String grupoId) {
         // Sin rango de fechas, a proposito: el pozo ES el recorte. Es el primer
         // listado de la app que no se corta por mes, y esta bien -- un viaje

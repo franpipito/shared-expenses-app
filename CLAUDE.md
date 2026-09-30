@@ -823,6 +823,107 @@ con el comentario de `Campo.tsx` en la seccion 2.1.
 Verificado con `tsc --noEmit --noUnusedLocals` y `expo export`. Falta
 volver a probar esta pantalla en el telefono con el fix.
 
+### "Mi Plata": el saldo personal, y el rediseno del resumen (v1.1, seccion 2.3b)
+
+Viole mando dos audios de WhatsApp usando la app de verdad, no en la
+entrevista: **"algo muy importante para mi es saber cuanta plata me
+queda"**, y pidio que la pantalla principal muestre a la vez cuanto gasto,
+cuanto le queda, el gasto hormiga y la nutria -- aclarando que la nutria le
+gusta tal cual esta ("me reta y eso esta buenisimo"). De paso propuso ganar
+espacio: un boton flotante en vez del ancho de "Cargar un gasto", y un menu
+de tres rayitas para las filas de navegacion.
+
+**Esto contesta 2.3b**, que quedaba pendiente desde la sesion de la
+vaquita: "Franco le pregunto si prefiere que la app solo sume sus gastos, o
+que tenga un balance que se va descontando -- la respuesta nunca quedo
+registrada". La respuesta es la segunda opcion, con una vuelta de rosca:
+Franco senalo que un solo valor editable no alcanza, porque tiene VARIOS
+ingresos a lo largo del tiempo (le pagan, le regalan plata, vende algo,
+genera rendimientos) y necesita poder cargar todos, no resetear un numero.
+
+**Cuatro decisiones, discutidas antes de tocar codigo (regla 3):**
+
+1. **El gasto hormiga deja de ser el unico numero gigante.** Es un cambio
+   consciente contra "el numero grande es el hormiga, no se negocia" (la
+   frase textual del mockup de Lovable, en la seccion de diseno mas
+   arriba): esa regla salio de una entrevista unica, y esto sale de meses
+   de uso real, que en este proyecto ya peso mas antes -- la descripcion
+   volviendose opcional es la misma clase de correccion. El hormiga NO se
+   achica ni se saca: sigue con su nutria, en ambar, con la comparacion
+   contra el mes pasado. Solo deja de ser el UNICO numero: ahora convive
+   arriba con dos tiles nuevos, "Gastaste este mes" y "Mi Plata".
+2. **"Mi Plata" es un ledger, no un campo que se pisa** -- exactamente el
+   patron de `Pozo`/`Aporte`, pero para una sola persona: una lista de
+   `Ingreso` (monto + fecha) embebida en `Usuario`, `restante = ingresado -
+   gastado` calculado al vuelo, sin fechas ni corte de mes. Un ingreso mal
+   cargado se corrige con un monto NEGATIVO -- mismo mecanismo que un
+   aporte a la vaquita -- y cero se rechaza, tampoco es ingreso ni
+   correccion.
+   - **Deliberadamente AFUERA**: cuentas separadas por medio de pago,
+     categorias de ingreso, graficos, tendencias de ahorro. Es lo que
+     describe una app de finanzas personales completa, y contradice "todo
+     es plata" (respuesta 11 de la entrevista) ademas de gastos/metas
+     fuera de alcance del MVP. Se construyo el minimo que resuelve lo que
+     Viole pidio, con un patron que ya existia y ya estaba probado.
+   - **Solo resta gastos PERSONAL**, nunca la parte de un COMPARTIDO: eso
+     ya lo trackea `saldo`/`Liquidacion` aparte, y mezclarlos seria doble
+     contabilidad de la misma plata.
+   - **No se llama "Saldo"**: ya lo usa la seccion de pareja. "Mi Plata" es
+     copy de la UI unicamente -- el nombre tecnico es `BalancePersonal`
+     (servicio) y `/balance-personal` (ruta), mismo criterio que "Saldar
+     cuentas" (UI) vs `Liquidacion`/`/saldo/...` (codigo).
+3. **El boton "Cargar un gasto" NO cambia.** Sigue ancho, terracota, abajo.
+   No hay un solo precedente de boton flotante en toda la base de codigo, y
+   es la interaccion mas probada de la app -- literalmente la que Viole
+   eligio al evaluar los mockups ("boton de accion ancho abajo, se ve
+   disenado"). El espacio se gano reorganizando las tarjetas de arriba, no
+   achicando el CTA principal.
+4. **Las tres filas de navegacion si se agrupan en un menu** ("ver los
+   gastos del mes", "gastos compartidos", "la vaquita del viaje"). Es un
+   patron nuevo -- no existia ningun drawer/menu en la app -- pero es la
+   decision de Franco, pese a la advertencia de que oculta a "Gastos
+   compartidos", uno de los dos pilares del producto.
+
+**El modelo**: `Usuario` gano `List<Ingreso> ingresos` (embebido, sin campo
+`usuario` a diferencia de `Aporte` -- ya esta adentro del dueno, no hace
+falta decir de quien es). Sin `@Version` en `Usuario`, el `$push` atomico de
+`UsuarioConsultasImpl.agregarIngreso` no necesita el `.inc` manual que si
+hace falta en `PozoConsultasImpl.agregarAporte`. `GastoConsultas.
+totalPersonalDe` es el lado de los debitos: mismo `sumar()` que ya usan
+`saldoDe`/`sumarDelPozo`, sin `$cond` porque un PERSONAL siempre lo paga
+entero quien lo carga.
+
+**`BalancePersonalServicio` es propio**, no una lectura mas de
+`ResumenServicio` -- mismo criterio que separo `PozoServicio` de
+`GastoServicio` y `LiquidacionServicio` de `ResumenServicio`.
+
+**En mobile**: `app/mi-plata.tsx` (mismo espiritu que `vaquita.tsx`: numero
+grande, agregar/corregir con signo, historial), pero **sin nutria** -- no
+hay un animo real para esta pantalla, y ponerle una decorativa vaciaria de
+sentido el personaje, igual que ya se decidio para `borrar-cuenta.tsx`.
+Color: nunca ambar (es del hormiga) ni teal (es de lo compartido) -- `hoja`
+si alcanza, `terracotaProfunda` si no, mismo tono que usa el resto de la app
+para "mira esto".
+
+**El menu se hizo con el `Modal` nativo de React Native**, sin sumar
+ninguna libreria de navegacion: alcanza para tres filas de texto. Un
+`Pressable` de fondo semitransparente cierra al tocar afuera; tocar una fila
+cierra el menu y navega en el mismo gesto.
+
+**`resumen.tsx` ahora pide dos hooks en paralelo** (`useResumen` y el nuevo
+`useBalance`), cada uno con su propio `sincronizar()` -- mismo patron ya
+establecido entre `useSaldo` y `useResumen`, no una coordinacion nueva. Sin
+esto, "Mi Plata" podria mostrar un numero viejo justo al lado de un resumen
+ya sincronizado, que es la misma clase de inconsistencia que el bug de
+`saldo.tsx` de mas arriba.
+
+Verificado: 157 tests en el backend (152 + 5 nuevos de
+`BalancePersonalServicioTest`), todos en verde salvo `contextLoads`;
+`tsc --noEmit --noUnusedLocals` y `expo export` en mobile; y una seccion
+nueva en `scripts/smoke-test.ps1` (16), sin correr todavia contra Mongo
+real. **Falta probar la pantalla en un telefono**, que es la unica prueba
+real para un rediseno de la pantalla mas vista de toda la app.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

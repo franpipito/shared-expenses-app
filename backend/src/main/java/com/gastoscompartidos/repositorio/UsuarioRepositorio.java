@@ -6,7 +6,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.List;
 import java.util.Optional;
 
-public interface UsuarioRepositorio extends MongoRepository<Usuario, String> {
+public interface UsuarioRepositorio extends MongoRepository<Usuario, String>, UsuarioConsultas {
 
     /**
      * Optional en vez de devolver null: obliga a quien llama a contemplar el

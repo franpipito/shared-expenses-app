@@ -194,3 +194,46 @@ ella misma eligio, y es lo que le da sentido al gasto despues.
 - **El reparto 50/50 por defecto puede no ser lo justo para ellos.** Respuesta 15
   menciona "ingresos diferentes y separados". Es una conversacion entre ellos,
   no una decision tecnica, pero conviene tenerla antes de fijar el default.
+
+---
+
+## Actualizacion: dos audios de WhatsApp (29/9/2026)
+
+No son parte de la entrevista original -- son feedback de Viole usando la
+app de verdad, meses despues. Se transcribieron a mano (la transcripcion de
+WhatsApp no daba abasto) y quedan aca como evidencia nueva, con el mismo
+peso que las respuestas de arriba: **esta es la usuaria real, no una
+suposicion.**
+
+**Primer audio** (sobre la pantalla de resumen): "A mi me gusta que la
+nutria este ahi porque me reta y eso esta buenisimo, pero algo muy
+importante para mi es saber cuanta plata me queda y siento que tambien para
+otras personas que la usen. Pienso que quizas esta parte este como dividida:
+en vez de que esten los gastos hormiga en primer plano, podria ser 'esto es
+lo que venis gastando y esto es tu saldo de plata'. Si bien yo no cobro
+mensualmente, quizas puedo utilizarlo de manera mensual para ordenarme un
+poco mas, y que la pantalla principal sea cuanto gastaste, cual es tu saldo,
+el gasto hormiga y la nutria."
+
+**Segundo audio** (sobre un mockup propio con zonas marcadas): "En lo rojo
+a la derecha la plata que tengo disponible, y a la izquierda en verde lo
+que llevo gastado, y en el medio abajo, en violeta o rosa, los gastos
+hormiga. Y despues, capaz para ahorrar espacio, en vez de tener un boton
+grande que diga 'cargar un gasto' puede tener un circulo con un + arriba a
+la derecha -- por intuicion ya se sabe que es para cargar un gasto. Y el
+resto de las opciones, como ver los gastos del mes, etc, pueden estar en un
+menu tipo las tres rayitas."
+
+**Lo que se hizo con esto** (sesion v1.1, seccion 2.3b): se construyo "Mi
+Plata" (el balance que pidio) y se reorganizo el resumen para que conviva
+con el gasto hormiga en vez de reemplazarlo. El boton ancho de "cargar un
+gasto" NO se cambio por el circulo -- es la interaccion mas probada de la
+app, y no tiene precedente en el codigo -- pero el menu de tres rayitas si
+se construyo tal cual lo pidio. Detalle completo, con el porque de cada
+decision, en `CLAUDE.md`.
+
+**Dato aparte, para la discusion pendiente de "que tan dura es la nutria
+enojada"** (ver CLAUDE.md, seccion de las nutrias): Viole uso espontaneamente
+la palabra "enojada" para el estado que el backend llama `PREOCUPADA`. Es
+senial, no evidencia decisiva -- pero vale tenerla presente cuando se
+retome esa conversacion.

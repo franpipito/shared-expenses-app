@@ -5,7 +5,10 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Un usuario pertenece a exactamente un grupo.
@@ -71,6 +74,19 @@ public class Usuario {
      */
     @Field("grupo_id")
     private String grupoId;
+
+    /**
+     * "Mi Plata" (sección 2.3b): la plata que esta persona declaró tener, a
+     * lo largo del tiempo. Se agrega con {@code $push} atómico, nunca con
+     * {@code save()} -- mismo motivo que {@code Pozo.aportes}: dos escrituras
+     * casi simultáneas no se pisen entre sí.
+     *
+     * No es una cuenta bancaria ni un presupuesto: es el lado de los
+     * créditos de {@code restante = ingresos - gastos personales}, calculado
+     * al vuelo y sin corte de mes, igual que el invariante de la vaquita.
+     */
+    @Field("ingresos")
+    private List<Ingreso> ingresos = new ArrayList<>();
 
     protected Usuario() {
     }
@@ -194,5 +210,16 @@ public class Usuario {
 
     public void setGrupoId(String grupoId) {
         this.grupoId = grupoId;
+    }
+
+    public List<Ingreso> getIngresos() {
+        return ingresos;
+    }
+
+    /** Cuanto declaró tener en total. Son pocos ingresos por persona. */
+    public BigDecimal totalIngresado() {
+        return ingresos.stream()
+                .map(Ingreso::monto)
+                .reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
     }
 }

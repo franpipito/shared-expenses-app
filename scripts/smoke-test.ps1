@@ -1127,6 +1127,49 @@ foreach ($h in @($deudor, $acreedor)) {
 }
 
 # ---------------------------------------------------------------------------
+Titulo "16. Mi Plata: el balance personal"
+
+$sesionAhorrista = RegistrarOEntrar "Ahorrista" "ahorrista@local" $PASSWORD
+$ahorrista = @{ Authorization = "Bearer $($sesionAhorrista.token)" }
+
+$vacio = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ahorrista
+Chequear ($vacio.ingresado -eq 0 -and $vacio.gastado -eq 0 -and $vacio.restante -eq 0) `
+    "sin nada cargado, Mi Plata arranca en cero"
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
+    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    "no puede ser cero" "un ingreso de cero se rechaza: no es ingreso ni correccion"
+
+$conIngreso = Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
+    -ContentType "application/json" -Body (@{ monto = 80000 } | ConvertTo-Json)
+Chequear ($conIngreso.ingresado -eq 80000 -and $conIngreso.restante -eq 80000) `
+    "el primer ingreso queda reflejado, y el restante es igual porque todavia no gasto nada"
+
+# Un gasto PERSONAL descuenta solo del restante, sin ningun paso extra.
+$gastoPersonal = Crear $ahorrista @{
+    monto = 25000; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "compras de la semana"; tipo = "PERSONAL"
+}
+$despuesDelGasto = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ahorrista
+Chequear ($despuesDelGasto.gastado -eq 25000 -and $despuesDelGasto.restante -eq 55000) `
+    "un gasto personal baja el restante solo, sin tocar el ingreso"
+
+# Corregir un ingreso mal cargado: un monto negativo, mismo mecanismo que un
+# aporte a la vaquita.
+$corregido = Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
+    -ContentType "application/json" -Body (@{ monto = -10000 } | ConvertTo-Json)
+Chequear ($corregido.ingresado -eq 70000 -and $corregido.restante -eq 45000) `
+    "un ingreso negativo corrige uno mal cargado, igual que un aporte a la vaquita"
+
+$historialIngresos = (Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ahorrista).ingresos
+Chequear ((($historialIngresos | Measure-Object).Count -eq 2)) `
+    "el historial tiene los dos ingresos, el original y la correccion"
+
+Invoke-RestMethod -Uri "$base/gastos/$($gastoPersonal.id)" -Method Delete -Headers $ahorrista | Out-Null
+Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $ahorrista -UseBasicParsing `
+    -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
+
+# ---------------------------------------------------------------------------
 Write-Host ""
 if ($fallos -eq 0) {
     Write-Host "TODO OK" -ForegroundColor Green

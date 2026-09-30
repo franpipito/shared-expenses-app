@@ -1,7 +1,8 @@
 import { useFocusEffect, useRouter } from 'expo-router';
+import MenuIcono from 'lucide-react-native/icons/menu';
 import Settings from 'lucide-react-native/icons/settings';
-import { useCallback } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { AnimoNutria } from '../src/api/tipos';
@@ -10,6 +11,7 @@ import { IconoCategoria } from '../src/componentes/IconoCategoria';
 import { Monto, formatearMonto } from '../src/componentes/Monto';
 import { nombreDeCategoria } from '../src/componentes/nombreDeCategoria';
 import { Nutria } from '../src/componentes/Nutria';
+import { useBalance } from '../src/features/balance/hooks/useBalance';
 import { useSesion } from '../src/features/auth/sesion';
 import { SelectorDeMes } from '../src/features/mes/SelectorDeMes';
 import { useMes } from '../src/features/mes/mes';
@@ -70,23 +72,57 @@ function fraseDelAnimo(
   return FRASES[animo];
 }
 
+/**
+ * Rediseño de sección 2.3b (v1.1), a pedido de Viole por audio de WhatsApp,
+ * probando la app de verdad: quería ver "cuánto gastaste, tu saldo, el
+ * gasto hormiga y la nutria" en la misma pantalla, en vez de que el gasto
+ * hormiga fuera el único protagonista.
+ *
+ * Es un cambio consciente contra "el número grande es el gasto hormiga, no
+ * se negocia" (comentario histórico de `tarjetaHormiga` más abajo): esa
+ * regla salió del mockup de Lovable, antes de que existiera un solo día de
+ * uso real. Meses de uso real ya pesaron más que la entrevista original en
+ * este proyecto (ver "descripción opcional" en CLAUDE.md), y esta es la
+ * misma clase de corrección.
+ *
+ * El gasto hormiga NO se achica ni se saca: sigue con la nutria, en ámbar,
+ * con la comparación contra el mes pasado. Solo deja de ser el único número
+ * de la pantalla -- ahora convive arriba con "Gastaste este mes" y "Mi
+ * Plata" (`app/mi-plata.tsx`, sección 2.3b).
+ *
+ * Las tres filas de navegación (gastos del mes, gastos compartidos, la
+ * vaquita) se movieron a un menú -- pedido explícito de Viole para ganar
+ * espacio. Es un patrón nuevo en esta app (antes no había ningún
+ * drawer/menu): un `Modal` nativo alcanza para tres filas de texto, sin
+ * sumar ninguna librería de navegación.
+ */
 export default function Resumen() {
   const { usuario } = useSesion();
   const { resumen, cargando, error, recargar } = useResumen();
+  const { balance, cargando: cargandoBalance, recargar: recargarBalance } = useBalance();
   const { esElMesActual } = useMes();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   // Vuelve a pedir el resumen cada vez que la pantalla toma foco. Es lo que hace
   // que al cerrar el modal de "nuevo gasto" el numero ya este actualizado, sin
-  // tener que pasarse mensajes entre pantallas.
+  // tener que pasarse mensajes entre pantallas. "Mi Plata" se recarga junto con
+  // el resumen: un gasto personal recien cargado tiene que bajar el restante
+  // sin que haga falta entrar a su propia pantalla.
   useFocusEffect(
     useCallback(() => {
       void recargar();
-    }, [recargar]),
+      void recargarBalance();
+    }, [recargar, recargarBalance]),
   );
 
   if (cargando && !resumen) return <Cargando />;
+
+  function irA(ruta: '/gastos' | '/saldo' | '/vaquita') {
+    setMenuAbierto(false);
+    router.push(ruta);
+  }
 
   return (
     <View style={estilos.pantalla}>
@@ -109,22 +145,39 @@ export default function Resumen() {
             <Text style={estilos.saludo}>{usuario?.nombre ? `Hola, ${usuario.nombre}` : 'Hola'}</Text>
             <Text style={estilos.seccion}>Tus gastos del mes</Text>
           </View>
-          {/*
-            Aca estaba "Cerrar sesion". Se mudo a Ajustes cuando llego el
-            borrado de cuenta: dos acciones sobre la cuenta no entran en el
-            encabezado de la pantalla de los gastos. La pastilla queda, con el
-            mismo formato, y ahora abre Ajustes.
-          */}
-          <Pressable
-            onPress={() => router.push('/ajustes')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Ajustes"
-            style={({ pressed }) => [estilos.pastilla, pressed && estilos.pastillaPresionada]}
-          >
-            <Settings size={16} color={colores.rioProfundo} strokeWidth={1.75} />
-            <Text style={estilos.pastillaTexto}>Ajustes</Text>
-          </Pressable>
+          <View style={estilos.accionesEncabezado}>
+            {/*
+              El menu (seccion 2.3b): agrupa "ver los gastos del mes",
+              "gastos compartidos" y "la vaquita", que antes eran filas
+              sueltas mas abajo. Pedido explicito de Viole para ganar
+              espacio arriba, para los dos tiles nuevos.
+            */}
+            <Pressable
+              onPress={() => setMenuAbierto(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Más opciones"
+              style={({ pressed }) => [estilos.iconoMenu, pressed && estilos.pastillaPresionada]}
+            >
+              <MenuIcono size={18} color={colores.rioProfundo} strokeWidth={1.75} />
+            </Pressable>
+            {/*
+              Aca estaba "Cerrar sesion". Se mudo a Ajustes cuando llego el
+              borrado de cuenta: dos acciones sobre la cuenta no entran en el
+              encabezado de la pantalla de los gastos. La pastilla queda, con el
+              mismo formato, y ahora abre Ajustes.
+            */}
+            <Pressable
+              onPress={() => router.push('/ajustes')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Ajustes"
+              style={({ pressed }) => [estilos.pastilla, pressed && estilos.pastillaPresionada]}
+            >
+              <Settings size={16} color={colores.rioProfundo} strokeWidth={1.75} />
+              <Text style={estilos.pastillaTexto}>Ajustes</Text>
+            </Pressable>
+          </View>
         </View>
 
         <SelectorDeMes />
@@ -135,12 +188,48 @@ export default function Resumen() {
 
         {resumen ? (
           <>
+            {/*
+              Los dos tiles nuevos (seccion 2.3b). "Gastaste este mes" es el
+              mismo dato que antes vivia en la fila "Total del mes" -- solo
+              cambia de lugar y de tamano. "Mi Plata" es nuevo: toca para
+              abrir `app/mi-plata.tsx`, donde se carga un ingreso y se ve el
+              historial. Nunca ambar (es del gasto hormiga) ni teal (es de lo
+              compartido) -- positivo va `hoja`, negativo `terracotaProfunda`.
+            */}
+            <View style={estilos.filaTiles}>
+              <View style={estilos.tile}>
+                <Text style={estilos.tileEtiqueta}>Gastaste este mes</Text>
+                <Monto valor={resumen.total} tamano={22} />
+              </View>
+              <Pressable
+                onPress={() => router.push('/mi-plata')}
+                accessibilityRole="button"
+                style={({ pressed }) => [estilos.tile, pressed && estilos.filaPresionada]}
+              >
+                <Text style={estilos.tileEtiqueta}>Mi Plata</Text>
+                {cargandoBalance && !balance ? (
+                  <Text style={estilos.tileMonto}>···</Text>
+                ) : balance && balance.ingresos.length > 0 ? (
+                  <Text
+                    style={[estilos.tileMonto, balance.restante < 0 && estilos.tileMontoNegativo]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {formatearMonto(Math.abs(balance.restante))}
+                  </Text>
+                ) : (
+                  <Text style={estilos.tileAgregar}>Agregar</Text>
+                )}
+              </Pressable>
+            </View>
+
             <View style={estilos.tarjetaHormiga}>
               <Nutria animo={resumen.animo} tamano={140} />
               {/*
-                El numero grande es el TOTAL HORMIGA, no el total del mes. Es la
-                decision del mockup de Lovable que no se negocia: la app existe
-                para que ese numero se vea primero.
+                El numero grande sigue siendo el TOTAL HORMIGA. Dejo de ser el
+                UNICO numero de la pantalla (ver el comentario de arriba del
+                componente), pero sigue siendo EL numero de esta tarjeta: la
+                marca central del producto no se diluye por compartir espacio.
               */}
               <Text style={estilos.rotulo}>Gasto hormiga</Text>
               <Text
@@ -159,80 +248,6 @@ export default function Resumen() {
                 Mismo tramo del mes pasado: {formatearMonto(resumen.totalHormigaMesAnterior)}
               </Text>
             </View>
-
-            <View style={estilos.fila}>
-              <Text style={estilos.filaEtiqueta}>Total del mes</Text>
-              <Monto valor={resumen.total} tamano={18} />
-            </View>
-
-            {/*
-              La entrada a la lista. Es un link y no un segundo boton terracota:
-              `docs/diseno.md` pide un solo boton principal por pantalla, y el de
-              esta es "Cargar un gasto".
-            */}
-            <Pressable
-              onPress={() => router.push('/gastos')}
-              accessibilityRole="button"
-              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-            >
-              <Text style={estilos.verGastos}>Ver los gastos del mes</Text>
-              <Text style={estilos.flecha}>›</Text>
-            </Pressable>
-
-            {/*
-              La entrada a la seccion de pareja.
-
-              El LINK dice "Gastos compartidos" y el TITULO de esa pantalla sigue
-              diciendo "Quien le debe a quien". No es indecision: un link dice
-              adonde vas, y para eso sirve un sustantivo; el titulo dice que
-              contesta la pantalla, y para eso sirve la pregunta. "Quien le debe a
-              quien" como link se leia como una pregunta suelta en el medio del
-              resumen.
-
-              Lo que NO puede decir es "nuestra plata" ni nada que sugiera
-              economia compartida: tienen ingresos separados, y ese encuadre es
-              del producto, no del copy.
-            */}
-            {/*
-              Las dos filas de pareja (compartidos y vaquita) desaparecen si el
-              grupo tiene un solo integrante: no hay saldo con nadie ni pozo que
-              armar, y el backend rechazaria las dos cosas. Mostrarlas con un
-              "proximamente" es justo lo que App Review rechaza por incompleto.
-
-              `!== false` y NO `=== true`, a proposito: el backend que no
-              conoce el campo no lo manda, y `undefined` tiene que leerse como
-              "como siempre". Si no, la app nueva contra el backend viejo les
-              esconderia la seccion de pareja a Viole y Franco.
-            */}
-            {resumen.tienePareja !== false ? (
-              <>
-                <Pressable
-                  onPress={() => router.push('/saldo')}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-                >
-                  <Text style={estilos.verGastos}>Gastos compartidos</Text>
-                  <Text style={estilos.flecha}>›</Text>
-                </Pressable>
-
-                {/*
-                  La fila esta siempre, aunque no haya ninguna vaquita abierta, y no
-                  condicionada a que exista una. Preguntar por el pozo activo aca
-                  costaria una request mas en la pantalla que se abre primero y mas
-                  seguido de toda la app, y para decidir si mostrar UNA fila. La
-                  pantalla de la vaquita sabe dibujar su estado vacio, y ese estado
-                  vacio ES el formulario para abrirla.
-                */}
-                <Pressable
-                  onPress={() => router.push('/vaquita')}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-                >
-                  <Text style={estilos.verGastos}>La vaquita del viaje</Text>
-                  <Text style={estilos.flecha}>›</Text>
-                </Pressable>
-              </>
-            ) : null}
 
             {resumen.porCategoria.length > 0 ? (
               <View style={estilos.categorias}>
@@ -263,6 +278,66 @@ export default function Resumen() {
       <View style={[estilos.pie, { paddingBottom: insets.bottom + 12 }]}>
         <Boton titulo="Cargar un gasto" onPress={() => router.push('/gasto/nuevo')} />
       </View>
+
+      {/*
+        El menu (seccion 2.3b). Nunca existio un drawer/bottom-sheet en esta
+        app -- el `Modal` nativo de React Native alcanza para tres filas de
+        texto, sin sumar ninguna libreria de navegacion nueva. El fondo
+        semitransparente es un `Pressable` que cierra al tocar afuera; tocar
+        una fila cierra el menu Y navega en el mismo gesto.
+      */}
+      <Modal
+        visible={menuAbierto}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuAbierto(false)}
+      >
+        <Pressable
+          style={[estilos.fondoMenu, { paddingTop: insets.top + 56 }]}
+          onPress={() => setMenuAbierto(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar el menú"
+        >
+          <View style={estilos.menu}>
+            <Pressable
+              onPress={() => irA('/gastos')}
+              accessibilityRole="button"
+              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+            >
+              <Text style={estilos.verGastos}>Ver los gastos del mes</Text>
+              <Text style={estilos.flecha}>›</Text>
+            </Pressable>
+
+            {/*
+              Mismo criterio que antes de moverlas aca: sin pareja no hay
+              saldo con nadie ni pozo que armar, y el backend rechazaria las
+              dos cosas. `!== false` y no `=== true`: un backend viejo que no
+              manda el campo no tiene que esconderle la seccion de pareja a
+              nadie.
+            */}
+            {resumen?.tienePareja !== false ? (
+              <>
+                <Pressable
+                  onPress={() => irA('/saldo')}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+                >
+                  <Text style={estilos.verGastos}>Gastos compartidos</Text>
+                  <Text style={estilos.flecha}>›</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => irA('/vaquita')}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+                >
+                  <Text style={estilos.verGastos}>La vaquita del viaje</Text>
+                  <Text style={estilos.flecha}>›</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -281,6 +356,19 @@ const estilos = StyleSheet.create({
     marginTop: 4,
   },
   encabezadoTexto: { flex: 1 },
+  accionesEncabezado: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Mismo alto que la pastilla (36), pero cuadrado: es un icono solo, sin
+  // texto al lado.
+  iconoMenu: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    backgroundColor: colores.tarjeta,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Pastilla con borde en vez de un texto suelto. Nacio para "Cerrar sesion",
   // que como texto a secas se leia como un link mas de la pantalla; hoy abre
   // Ajustes y conserva la forma, que la separa de las filas que navegan a los
@@ -300,6 +388,56 @@ const estilos = StyleSheet.create({
   },
   pastillaPresionada: { backgroundColor: colores.arena },
   pastillaTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 13, color: colores.rioProfundo },
+
+  filaTiles: { flexDirection: 'row', gap: 12 },
+  tile: {
+    flex: 1,
+    backgroundColor: colores.tarjeta,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  tileEtiqueta: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: colores.textoSuave,
+  },
+  tileMonto: {
+    fontFamily: fuentes.displaySemi,
+    fontSize: 22,
+    // Nunca ambar (es del gasto hormiga) ni teal (es de lo compartido):
+    // "Mi Plata" es individual. Verde de "buenas noticias" cuando alcanza.
+    color: colores.hoja,
+    marginTop: 6,
+    ...numerosTabulares,
+  },
+  tileMontoNegativo: { color: colores.terracotaProfunda },
+  tileAgregar: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 15,
+    color: colores.rioProfundo,
+    marginTop: 6,
+  },
+
+  fondoMenu: {
+    flex: 1,
+    backgroundColor: 'rgba(79, 55, 36, 0.35)',
+    alignItems: 'flex-end',
+    paddingRight: 20,
+  },
+  menu: {
+    width: 240,
+    gap: 8,
+    backgroundColor: colores.fondo,
+    borderRadius: 16,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: colores.borde,
+  },
 
   tarjetaHormiga: {
     backgroundColor: colores.tarjeta,

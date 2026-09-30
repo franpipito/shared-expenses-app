@@ -85,6 +85,19 @@ public interface GastoConsultas {
      */
     BigDecimal saldoHistoricoDe(String grupoId, String usuarioId);
 
+    /**
+     * Cuanto gasto en total en gastos PERSONAL, sin recorte por mes: es el
+     * lado de los debitos de "Mi Plata" (sección 2.3b), {@code restante =
+     * ingresado - gastado}, mismo invariante que la vaquita pero para una
+     * sola persona.
+     *
+     * Sin {@code $cond}: un PERSONAL siempre lo paga entero quien lo carga,
+     * a diferencia de un COMPARTIDO. Y {@code sinPozo()} igual que los demas
+     * agregados personales, por si algun dia existiera un PERSONAL con
+     * pozoId -- esa plata ya la cuenta la vaquita, no "Mi Plata".
+     */
+    BigDecimal totalPersonalDe(String grupoId, String usuarioId);
+
     /** Todos los gastos de un pozo, sin recorte por mes: un viaje puede cruzarlo. */
     List<Gasto> buscarDelPozo(String pozoId, String grupoId);
 

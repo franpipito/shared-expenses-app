@@ -252,3 +252,22 @@ export type LiquidacionRespuesta = {
   monto: number;
   fecha: string;
 };
+
+/** Un ingreso de "Mi Plata", tal como lo devuelve el backend. */
+export type IngresoRespuesta = {
+  monto: number;
+  /** yyyy-MM-dd */
+  fecha: string;
+};
+
+/**
+ * "Mi Plata" (seccion 2.3b): restante = ingresado - gastado, mismo
+ * invariante que la vaquita (aportado/gastado/restante) pero para una sola
+ * persona y sin fechas. Puede dar restante negativo, y no es un error.
+ */
+export type BalancePersonalRespuesta = {
+  ingresado: number;
+  gastado: number;
+  restante: number;
+  ingresos: IngresoRespuesta[];
+};

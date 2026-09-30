@@ -213,22 +213,30 @@ dos tests que ya estaban en verde — corregido, y vale como anécdota de
 historial) y los chequeos en `scripts/smoke-test.ps1`. 151 tests en verde
 (144 + 7 nuevos de `LiquidacionServicioTest`), salvo `contextLoads`.
 
-### 2.3b Balance personal de Viole (distinto de lo anterior)
+### 2.3b Balance personal de Viole — RESUELTO
 
-No confundir con 2.3: esto es la plata de Viole sola, no lo que se deben entre
-los dos. Franco le preguntó si prefiere que la app solo sume sus gastos, o que
-tenga un "balance" que se va descontando con cada gasto -- **la respuesta
-nunca quedó registrada en `docs/entrevista-usuaria.md`**. Confirmarla antes de
-diseñar nada de esto.
+**Contestado por audio de WhatsApp**, usando la app de verdad: sí quiere el
+balance, y con una vuelta de rosca sobre lo que se había planteado acá —
+necesita poder cargar VARIOS ingresos a lo largo del tiempo (le pagan, le
+regalan plata, vende algo, genera rendimientos), no resetear un solo valor.
+Detalle completo, con las cuatro decisiones discutidas y por qué, en
+`CLAUDE.md` → "Mi Plata: el saldo personal, y el rediseño del resumen".
 
-Si la respuesta es que sí quiere el balance:
-- **Riesgo de fondo**: el número solo va a ser tan cierto como lo que ella
-  cargue. Un movimiento que no pase por la app (efectivo, una transferencia)
-  lo desalinea de su plata real -- puede ser peor que no tener el número.
-  Preguntarle si lo entiende como "lo que cargué en la app" y no como su saldo
-  bancario real.
-- **Nombre**: no usar "Saldo", ya significa "quién le debe a quién" entre la
-  pareja. Un nombre distinto (por ejemplo "Mi Plata") para no confundirlos.
+Resumen rápido:
+- **Ledger, no un campo que se pisa**: mismo patrón que `Pozo`/`Aporte`, una
+  lista de `Ingreso` embebida en `Usuario`, corrección con monto negativo.
+- **Riesgo de fondo, aceptado**: el número es tan cierto como lo que ella
+  cargue — es lo mismo que ya vale para toda la app (nadie audita un gasto).
+- **Nombre**: "Mi Plata" en la UI, como ya se había anticipado acá; técnico
+  es `BalancePersonal`/`/balance-personal`.
+- **De paso**, el pedido vino junto con un rediseño del resumen (el gasto
+  hormiga deja de ser el único número grande) y un menú nuevo para las filas
+  de navegación — también en CLAUDE.md.
+
+**Falta probarlo en un teléfono de verdad** — es la pantalla más vista de
+toda la app. Backend verificado con 157 tests y una sección nueva del smoke
+test (16), sin correr contra Mongo real. Mobile con `tsc --noEmit` y
+`expo export`.
 
 ### 2.4 Ahorro en dólares (no es multimoneda de gastos)
 
