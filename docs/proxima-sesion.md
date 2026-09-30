@@ -30,6 +30,81 @@ Abrí una sesión nueva sobre este repo y pegá:
 
 ---
 
+## 0. Lo que se hizo en la sesión de la nube (2.1 + 2.3): probarlo primero
+
+Antes de leer nada más, esto es lo que hay que verificar apenas te sientes
+con la PC. Todo el código ya está commiteado localmente; falta pushearlo
+(quedaron los bloques de `git add`/`git commit` listos en la conversación de
+esa sesión) y probarlo de verdad, que es algo que la nube no puede hacer.
+
+**Lo que se construyó, completo (backend + mobile) en las dos features:**
+
+- **2.1 — Sumarse a un grupo.** `POST /grupo/invitar`, `/sumarse`, `/salir`.
+  En mobile: `app/grupo.tsx` (invitar/sumarse en una pantalla) y
+  `app/salir-del-grupo.tsx`, con Ajustes decidiendo cuál mostrar.
+- **2.3 — Saldar cuentas.** `GET /saldo/total` y `POST`/`GET` sobre
+  `/saldo/liquidaciones`. En mobile: `app/liquidaciones.tsx`, linkeado desde
+  `saldo.tsx` como "Saldar cuentas (toda la historia)".
+- De paso: `npm audit fix` en mobile (lockfile al día), y se confirmó que el
+  dependency-check de OWASP para el backend no se puede correr desde la nube
+  (bloqueado por la política de red del sandbox) — hace falta tu PC o
+  sumarlo al CI, ver sección 3.
+
+Detalle completo de cada decisión de diseño en `CLAUDE.md`, buscando
+"Sumarse a un grupo" y "Saldar deudas".
+
+### Paso a paso para probarlo
+
+**1. Pushear.** `git push` con lo que ya está commiteado. Esperá a que el CI
+   dé verde (`contextLoads` corre ahí, con Mongo de verdad — nunca corrió en
+   la nube) y a que Render termine de deployar (mirá el dashboard; el
+   backend viejo no tiene estos endpoints todavía).
+
+**2. Correr el smoke test completo, con Docker:**
+   ```powershell
+   docker compose up -d
+   cd backend; $env:REGISTRO_MAX_POR_IP = "100"; .\mvnw.cmd spring-boot:run
+   # en otra terminal:
+   .\scripts\smoke-test.ps1
+   ```
+   Prestale atención a las secciones **14** (sumarse/invitar/salir) y **15**
+   (liquidaciones) — son nuevas y nunca corrieron contra Mongo real. Si algo
+   falla ahí, es la primera vez que se prueba de verdad el índice único
+   parcial de `invitacion_codigo` y que `findAndModify` sea atómico.
+
+**3. `cd backend; .\mvnw.cmd test`** completo, para ver `contextLoads` en
+   verde por tu cuenta (el CI ya lo confirmó, pero vale la corrida local).
+
+**4. Probar 2.1 en el teléfono** (Expo Go o tu dev client alcanza — no se
+   agregó ninguna dependencia nativa nueva, así que no hace falta un build
+   de EAS nuevo para esto):
+   - Con una cuenta sola, Ajustes → "Sumarse a un grupo" → pestaña
+     "Invitar" → "Generar código" → "Compartir".
+   - Con otra cuenta (o la de Viole), pegar el código en "Ya tengo un
+     código" → "Sumarme".
+   - Confirmar que las dos ven a la otra persona en Ajustes.
+   - Cargar un gasto COMPARTIDO desde una y verlo aparecer para la otra.
+   - Probar "Salir del grupo": confirmar con la contraseña, y verificar que
+     el compartido sigue en el historial de quien se queda, **con el nombre
+     real** (no "Cuenta eliminada": la cuenta no se borró).
+
+**5. Probar 2.3 en el teléfono**, con las dos cuentas ya juntas:
+   - Cargar un COMPARTIDO con reparto (para tener algo que saldar).
+   - Saldo → "Saldar cuentas (toda la historia)". El número tiene que
+     coincidir con el saldo del mes si no hay más historia previa.
+   - "Marcar como pagado" con un monto MENOR al total (pago parcial):
+     confirmar que el número baja y aparece en el historial.
+   - Desde la OTRA cuenta (la que cobra), marcar el resto como pagado: esto
+     ejercita `meLoPagaron`, que nunca se probó en un teléfono. Confirmar
+     que también funciona y que el historial muestra la dirección correcta
+     de los dos pagos.
+   - Confirmar que terminan en "Están a mano".
+
+Si algo de esto no anda, es información real que la nube no podía darte —
+avisá en la próxima sesión y se corrige antes de seguir con lo de Viole.
+
+---
+
 ## 1. Cerrar la v1.0 (primero, y lo más urgente arriba)
 
 - [ ] **1 de octubre: volver a correr `.\scripts\crear-cuenta-demo.ps1`** (en la
