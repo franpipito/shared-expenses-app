@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
@@ -36,6 +37,7 @@ export default function Grupo() {
   const [codigoGenerado, setCodigoGenerado] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
   const [errorInvitar, setErrorInvitar] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
 
   async function generar() {
     setErrorInvitar(null);
@@ -53,12 +55,20 @@ export default function Grupo() {
   function compartir() {
     if (!codigoGenerado) return;
     // Share.share es de react-native, no de Expo: ya la tiene cualquier app
-    // RN, sin agregar una dependencia nueva. En iOS, la hoja de compartir del
-    // sistema ya incluye "Copiar", así que no hace falta un botón aparte para
-    // eso.
+    // RN, sin agregar una dependencia nueva.
     void Share.share({
       message: `Sumate a MiNutria conmigo. Abrí la app, Ajustes → "Ya tengo un código", y poné: ${codigoGenerado}`,
     });
+  }
+
+  // Probado en el teléfono: la hoja de compartir de iOS trae "Copiar", pero
+  // hay quien prefiere copiar directo sin abrirla. Antes solo estaba
+  // "Compartir", asumiendo que alcanzaba -- no alcanzaba.
+  async function copiarCodigo() {
+    if (!codigoGenerado) return;
+    await Clipboard.setStringAsync(codigoGenerado);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1500);
   }
 
   const [codigo, setCodigo] = useState('');
@@ -129,9 +139,22 @@ export default function Grupo() {
               <Text style={estilos.punto}>
                 Vence en 7 días, y sirve una sola vez. Compartíselo a quien quieras sumar.
               </Text>
-              <Pressable onPress={compartir} accessibilityRole="button" style={estilos.secundario}>
-                <Text style={estilos.secundarioTexto}>Compartir</Text>
-              </Pressable>
+              <View style={estilos.filaSecundarios}>
+                <Pressable
+                  onPress={() => void copiarCodigo()}
+                  accessibilityRole="button"
+                  style={[estilos.secundario, estilos.secundarioMitad]}
+                >
+                  <Text style={estilos.secundarioTexto}>{copiado ? '¡Copiado!' : 'Copiar código'}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={compartir}
+                  accessibilityRole="button"
+                  style={[estilos.secundario, estilos.secundarioMitad]}
+                >
+                  <Text style={estilos.secundarioTexto}>Compartir</Text>
+                </Pressable>
+              </View>
             </View>
           ) : (
             <>
@@ -225,6 +248,7 @@ const estilos = StyleSheet.create({
   punto: { fontFamily: fuentes.cuerpo, fontSize: 15, lineHeight: 21, color: colores.texto },
   error: { fontFamily: fuentes.cuerpo, fontSize: 14, color: colores.terracotaProfunda },
 
+  filaSecundarios: { flexDirection: 'row', gap: 10 },
   secundario: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -233,5 +257,6 @@ const estilos = StyleSheet.create({
     borderWidth: 1,
     borderColor: colores.rioProfundo,
   },
+  secundarioMitad: { flex: 1 },
   secundarioTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 15, color: colores.rioProfundo },
 });

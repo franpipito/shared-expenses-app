@@ -354,12 +354,11 @@ ven con el nombre real, porque la persona real sigue siendo quien es. Solo
 sumarse en una sola pantalla con dos modos (mismo espiritu que la vaquita:
 el estado depende de lo que la persona elige, no de una pantalla nueva por
 camino), con "Compartir" usando el `Share` de React Native -- sin agregar
-ninguna dependencia nueva, alcanza para mandarlo por WhatsApp y la hoja de
-compartir de iOS ya trae "Copiar" solo. `app/salir-del-grupo.tsx` es el
-mismo molde que `borrar-cuenta.tsx` (explicar, pedir contrasena, confirmar
-con un Alert) con otro final: la cuenta sigue existiendo, asi que no hay
-nada que anonimizar. `Ajustes` decide sola, con `GET /grupo`, cual de las
-dos ofrecer.
+ninguna dependencia nueva, alcanza para mandarlo por WhatsApp.
+`app/salir-del-grupo.tsx` es el mismo molde que `borrar-cuenta.tsx` (explicar,
+pedir contrasena, confirmar con un Alert) con otro final: la cuenta sigue
+existiendo, asi que no hay nada que anonimizar. `Ajustes` decide sola, con
+`GET /grupo`, cual de las dos ofrecer.
 
 De paso se encontro y se corrigio un comentario en `Campo.tsx` que predecia
 mal el futuro: preveia que el codigo de invitacion de la v1.1 iba a
@@ -367,6 +366,19 @@ necesitar `capitalizar={false}` por el mismo bug que el codigo viejo (iOS
 poniendole mayuscula a la primera letra mientras se escribe). No hizo
 falta: el backend normaliza a mayusculas antes de comparar, asi que da
 igual como salga tipeado.
+
+**Y probando en el telefono de verdad salio que la asuncion de arriba estaba
+mal.** La primera version de "invitar" solo tenia "Compartir", asumiendo que
+alcanzaba con la hoja de compartir de iOS, que ya trae "Copiar". Franco lo
+probo por Expo Go y encontro que hace falta poder copiar directo, sin pasar
+por esa hoja. Se agrego un boton "Copiar codigo" al lado, con
+`expo-clipboard` -- la unica dependencia nueva de la sesion 2.1, instalada en
+`~57.0.2` para seguir la misma convencion de version que el resto de los
+paquetes `expo-*` de este SDK. `npx expo install` no funciono desde el
+sandbox de la nube (la misma clase de bloqueo de red que ya afecto a otras
+herramientas de Expo), asi que se instalo con `npm install expo-clipboard@~57.0.2`
+directo y se verifico con `npm ci` en una carpeta aparte -- el mismo chequeo
+que ya delato el problema de lockfile de la 6.11, para no repetirlo.
 
 **Lo que falta, y por que esta sesion se cierra sin eso.** Se hizo desde
 una sesion en la nube, sin Docker ni Mongo local, y sin telefono a mano
