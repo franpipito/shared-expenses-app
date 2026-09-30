@@ -79,7 +79,11 @@ class ResumenServicioTest {
         viole = usuario("u-viole", "Viole");
 
         when(usuarioActual.requerido()).thenReturn(franco);
-        when(usuarios.findByGrupoIdOrderByIdAsc(GRUPO)).thenReturn(List.of(franco, viole));
+        // otroIntegranteDe es un metodo default de la interfaz: el mock no
+        // corre su cuerpo (ver la nota en GastoServicioTest sobre
+        // tienePareja), asi que hay que programarlo directo y no armando la
+        // lista que ese default recorreria si corriera de verdad.
+        when(usuarios.otroIntegranteDe(GRUPO, "u-franco")).thenReturn(viole);
         when(gastos.sumarHormigaDe(anyString(), anyString(), any(), any())).thenReturn(CERO);
         when(gastos.contarEn(anyString(), anyString(), any(), any())).thenReturn(0L);
         when(gastos.saldoDe(anyString(), anyString(), any(), any())).thenReturn(CERO);
@@ -240,10 +244,10 @@ class ResumenServicioTest {
         @DisplayName("solo en el grupo: sin la otra persona, el saldo es cero")
         void sinLaOtraPersona() {
             // Desde el registro abierto es el estado de toda cuenta nueva, y
-            // tambien el de quien queda cuando la otra persona borra la suya. Sin
-            // esto, buscar al otro integrante devolveria null y la respuesta se
-            // armaria con un nombre en null.
-            when(usuarios.findByGrupoIdOrderByIdAsc(GRUPO)).thenReturn(List.of(franco));
+            // tambien el de quien queda cuando la otra persona borra la suya.
+            // Pisa el stub del @BeforeEach: sin esto, buscar al otro
+            // integrante devolveria a Viole y la respuesta no saldria en cero.
+            when(usuarios.otroIntegranteDe(GRUPO, "u-franco")).thenReturn(null);
             when(gastos.saldoDe(anyString(), anyString(), any(), any()))
                     .thenReturn(new BigDecimal("505.00"));
 

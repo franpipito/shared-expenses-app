@@ -185,6 +185,21 @@ public class GastoConsultasImpl implements GastoConsultas {
     }
 
     @Override
+    public BigDecimal saldoHistoricoDe(String grupoId, String usuarioId) {
+        // Igual que saldoDe, sin enElPeriodo(): la deuda de un COMPARTIDO de
+        // hace ocho meses sigue contando si nunca se liquido.
+        Criteria filtro = new Criteria().andOperator(
+                Criteria.where("grupo_id").is(grupoId),
+                Criteria.where("tipo").is(TipoGasto.COMPARTIDO),
+                sinPozo()
+        );
+
+        return sumar(filtro, condicional(usuarioId,
+                new Document("$subtract", List.of("$monto", "$monto_pagador")),
+                new Document("$subtract", List.of("$monto_pagador", "$monto"))));
+    }
+
+    @Override
     public List<Gasto> buscarDelPozo(String pozoId, String grupoId) {
         // Sin rango de fechas, a proposito: el pozo ES el recorte. Es el primer
         // listado de la app que no se corta por mes, y esta bien -- un viaje

@@ -703,6 +703,62 @@ se hicieron. De ahi sale que sacar plata del pozo no genere deuda entre ellos, y
 que el filtro `sinPozo()` saque los gastos del viaje del saldo, del total hormiga
 y del conteo que alimenta a la nutria. Ver **`docs/vaquita.md`**.
 
+### Saldar deudas: `Liquidacion`, sin acotar a un viaje (v1.1, seccion 2.3)
+La version general de la entidad de arriba. `GET /saldo` (del mes) sigue
+existiendo sin cambios; esto es aparte: `GET /saldo/total` (un numero
+siempre vigente, "te deben $X" / "le debes $X"), `POST /saldo/liquidaciones`
+("ya le pague esto"), y `GET /saldo/liquidaciones` (el historial). Viven en
+`LiquidacionServicio`/`LiquidacionControlador`, servicio propio y no una
+lectura mas de `ResumenServicio` -- mismo criterio que separo `PozoServicio`
+de `GastoServicio`.
+
+**Por que un numero solo y no un extracto mes a mes con arrastre**, que era
+la otra forma de mostrar la misma cuenta: es la misma forma que ya usa la
+vaquita (`restante = aportes - gastos`, un numero), y evita construir una
+pantalla de estado de cuenta para una pareja de dos personas.
+
+**`Liquidacion.de`/`para` son snapshots** (`ReferenciaUsuario`), igual que
+`Gasto.pagadoPor`: si alguien sale del grupo (seccion 2.1) despues de una
+liquidacion, esta sigue leyendose con el nombre de quien pago en ese momento.
+
+**Inmutable, como `Aporte`, pero la correccion es distinta.** Un aporte mal
+cargado se corrige con un monto NEGATIVO del mismo lado (`docs/vaquita.md`).
+Una liquidacion no admite negativo (`@Positive`): si se cargo al reves, la
+correccion es otra liquidacion con `de` y `para` invertidos. La diferencia de
+fondo es que un aporte es un numero con signo desde un solo lado (cuanto
+puso una persona), mientras que en una liquidacion lo que importa leer
+despues es LA DIRECCION -- quien le pago a quien -- y un monto negativo ahi
+se leeria raro ("Franco le pago -1000 a Viole").
+
+**`saldoHistoricoDe` es `saldoDe` sin `enElPeriodo`**: la misma agregacion de
+Mongo, sin el recorte de fechas, porque una deuda de hace ocho meses sigue
+contando si nunca se liquido. Las liquidaciones en cambio se suman en Java,
+no con un pipeline: se esperan pocas (un puñado por año), a diferencia de
+los gastos.
+
+**Se subio `otroIntegranteDe` a `UsuarioRepositorio`** como metodo default,
+mismo lugar que `tienePareja`: `ResumenServicio` y `LiquidacionServicio`
+necesitaban la misma regla ("la otra persona del grupo, o null"), y tenerla
+en dos servicios es tenerla en dos lugares que se pueden desincronizar.
+
+**Y ese refactor rompio dos tests que ya estaban en verde**, que vale la
+pena contar porque es exactamente el tipo de cosa que un mock no avisa
+sola: `ResumenServicioTest.meDeben` y `.debo` stubeaban
+`findByGrupoIdOrderByIdAsc` (lo que el metodo privado viejo llamaba de
+verdad, porque vivia en el servicio). Al mudar la logica a un metodo
+default de la interfaz MOCKEADA, Mockito dejo de correr ese cuerpo -- no
+hay stub, no hay comportamiento -- y las dos pruebas empezaron a fallar
+(esperaban 505.00, daba 0.00). Se corrigio estubeando `otroIntegranteDe`
+directo, igual que ya hacia falta con `tienePareja`. Ningun cambio de
+produccion estaba mal; lo que estaba desactualizado era el test. Es la
+misma leccion que "Los tests: dos capas" ya documenta sobre
+`tienePareja`, aplicada en el momento en que se la volvio a pisar.
+
+**Lo que falta**: la pantalla en mobile (un numero en la pantalla de saldo,
+un boton "Marcar como pagado", y el historial de liquidaciones) y los
+chequeos en `scripts/smoke-test.ps1`. Verificado con los 151 tests (144 + 7
+nuevos de `LiquidacionServicioTest`), todos en verde salvo `contextLoads`.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

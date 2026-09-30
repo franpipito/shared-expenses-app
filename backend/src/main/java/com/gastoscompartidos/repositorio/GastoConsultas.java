@@ -76,6 +76,15 @@ public interface GastoConsultas {
      */
     BigDecimal saldoDe(String grupoId, String usuarioId, LocalDate desde, LocalDate hasta);
 
+    /**
+     * Lo mismo que {@link #saldoDe}, pero de TODA la historia: sin
+     * {@code enElPeriodo}. Es la mitad "deudas" de {@code saldo = deudas -
+     * pagos} (sección 2.3 de docs/proxima-sesion.md); la otra mitad son las
+     * {@link com.gastoscompartidos.modelo.Liquidacion} ya registradas, que se
+     * restan en el servicio.
+     */
+    BigDecimal saldoHistoricoDe(String grupoId, String usuarioId);
+
     /** Todos los gastos de un pozo, sin recorte por mes: un viaje puede cruzarlo. */
     List<Gasto> buscarDelPozo(String pozoId, String grupoId);
 

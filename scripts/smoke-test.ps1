@@ -1064,6 +1064,66 @@ foreach ($h in @($invita, $suma, $tercero)) {
 }
 
 # ---------------------------------------------------------------------------
+Titulo "15. Saldar deudas: liquidaciones"
+
+# Pareja descartable propia, igual que en "12. Borrar la cuenta": asi el
+# monto exacto del saldo total no depende de nada que hicieron las secciones
+# anteriores. JuntarEnGrupo y no /grupo/sumarse: juntarlos no es lo que se
+# prueba aca, eso ya lo cubre la seccion 14.
+$sesionDeudor   = RegistrarOEntrar "Deudor"   "deudor@local"   $PASSWORD
+$sesionAcreedor = RegistrarOEntrar "Acreedor" "acreedor@local" $PASSWORD
+JuntarEnGrupo "deudor@local" "acreedor@local"
+$deudor   = @{ Authorization = "Bearer $($sesionDeudor.token)" }
+$acreedor = @{ Authorization = "Bearer $($sesionAcreedor.token)" }
+
+# Acreedor paga $1000 al 50/50: Deudor le queda debiendo 500.
+Crear $acreedor @{ monto = 1000; categoriaId = $CAFE; fecha = "2026-09-06"
+    descripcion = "compartido para el saldo total"; tipo = "COMPARTIDO"; porcentajePagador = 50 } | Out-Null
+
+$totalDeudor = Invoke-RestMethod -Uri "$base/saldo/total" -Headers $deudor
+Chequear ($totalDeudor.monto -eq 500 -and $totalDeudor.aFavorMio -eq -500) `
+    "el saldo total (sin liquidaciones) es la deuda del compartido: Deudor debe 500"
+
+$totalAcreedor = Invoke-RestMethod -Uri "$base/saldo/total" -Headers $acreedor
+Chequear ($totalAcreedor.aFavorMio -eq 500) "y del otro lado, a Acreedor le deben 500"
+
+EsperarValidacion { Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $deudor `
+    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    "monto" "una liquidacion de cero se rechaza por Bean Validation, no por regla de negocio"
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $sola `
+    -ContentType "application/json" -Body (@{ monto = 100 } | ConvertTo-Json) } `
+    "otra persona tiene que estar" "estando sola, no hay a quien pagarle"
+
+# Pago parcial: Deudor paga 200 de los 500.
+$despuesDelPrimerPago = Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $deudor `
+    -ContentType "application/json" -Body (@{ monto = 200 } | ConvertTo-Json)
+Chequear ($despuesDelPrimerPago.monto -eq 300 -and $despuesDelPrimerPago.deudorId -eq $sesionDeudor.usuario.id) `
+    "el pago parcial baja la deuda de 500 a 300, y Deudor sigue debiendo"
+
+# Pago del resto: queda a mano.
+$despuesDelSegundoPago = Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Method Post -Headers $deudor `
+    -ContentType "application/json" -Body (@{ monto = 300 } | ConvertTo-Json)
+Chequear ($despuesDelSegundoPago.monto -eq 0 -and $null -eq $despuesDelSegundoPago.deudorId) `
+    "el segundo pago liquida el resto: quedan a mano"
+
+$historial = Invoke-RestMethod -Uri "$base/saldo/liquidaciones" -Headers $acreedor
+Chequear ((($historial | Measure-Object).Count -eq 2) -and ($historial[0].monto -eq 300)) `
+    "el historial tiene los dos pagos, el mas nuevo primero"
+Chequear ($historial[0].de.nombre -eq "Deudor" -and $historial[0].para.nombre -eq "Acreedor") `
+    "y cada uno dice quien pago y quien recibio"
+
+# El saldo del MES no cambia por nada de esto: sigue siendo el mismo
+# endpoint de siempre, sin liquidaciones.
+$saldoDelMes = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $deudor
+Chequear ($saldoDelMes.monto -eq 500) "GET /saldo del mes no se toco: sigue viendo la deuda sin descontar los pagos"
+
+foreach ($h in @($deudor, $acreedor)) {
+    Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $h -UseBasicParsing `
+        -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
+}
+
+# ---------------------------------------------------------------------------
 Write-Host ""
 if ($fallos -eq 0) {
     Write-Host "TODO OK" -ForegroundColor Green

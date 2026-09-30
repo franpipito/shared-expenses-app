@@ -120,7 +120,7 @@ public class ResumenServicio {
         BigDecimal aFavorMio = gastos.saldoDe(
                 grupoId, yo, periodo.desde(), periodo.hasta());
 
-        Usuario otro = otroIntegrante(grupoId, yo);
+        Usuario otro = usuarios.otroIntegranteDe(grupoId, yo);
 
         if (aFavorMio.signum() == 0 || otro == null) {
             return new SaldoRespuesta(periodoPedido.toString(), CERO,
@@ -171,10 +171,4 @@ public class ResumenServicio {
         return montos.stream().reduce(CERO, BigDecimal::add);
     }
 
-    private Usuario otroIntegrante(String grupoId, String yo) {
-        return usuarios.findByGrupoIdOrderByIdAsc(grupoId).stream()
-                .filter(u -> !u.getId().equals(yo))
-                .findFirst()
-                .orElse(null);
-    }
 }

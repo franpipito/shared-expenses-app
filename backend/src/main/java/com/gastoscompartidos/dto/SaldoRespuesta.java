@@ -11,7 +11,8 @@ import java.math.BigDecimal;
  * chico y accionable, al costo de asumir que se arreglan mes a mes.
  *
  * Si algun dia quieren llevar la cuenta en serio, la solucion es una entidad
- * Liquidacion y saldo = deudas - pagos.
+ * Liquidacion y saldo = deudas - pagos. **Hecho en la seccion 2.3**: ver
+ * {@link SaldoTotalRespuesta}, que es ese saldo historico, aparte de este.
  *
  * @param monto     siempre positivo o cero. Cuanto se debe
  * @param deudorId  quien debe. null si estan a mano

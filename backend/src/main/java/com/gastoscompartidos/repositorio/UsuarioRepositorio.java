@@ -35,4 +35,19 @@ public interface UsuarioRepositorio extends MongoRepository<Usuario, String> {
     default boolean tienePareja(String grupoId) {
         return countByGrupoId(grupoId) >= 2;
     }
+
+    /**
+     * La otra persona del grupo, o null si no hay (grupo de uno).
+     *
+     * Antes vivia duplicado como un metodo privado de ResumenServicio; con
+     * LiquidacionServicio necesitandolo tambien, se sube aca por el mismo
+     * motivo que tienePareja: una regla que se repite en dos servicios es una
+     * regla que puede quedar desincronizada en un tercero.
+     */
+    default Usuario otroIntegranteDe(String grupoId, String usuarioId) {
+        return findByGrupoIdOrderByIdAsc(grupoId).stream()
+                .filter(u -> !u.getId().equals(usuarioId))
+                .findFirst()
+                .orElse(null);
+    }
 }

@@ -121,12 +121,22 @@ El modelo asume dos en tres lugares, y los tres se rompen:
 
 ### 2.3 Saldar deudas entre la pareja
 
-Hoy el saldo es del mes y no hay forma de registrar "ya te pagué".
+**Backend hecho** (misma sesión en la nube que 2.1): `GET /saldo/total`,
+`POST /saldo/liquidaciones`, `GET /saldo/liquidaciones`, en
+`LiquidacionServicio`/`LiquidacionControlador`. `GET /saldo` (del mes) no
+cambió. Diseño completo en `CLAUDE.md` → "Saldar deudas: `Liquidacion`, sin
+acotar a un viaje". Se resolvió la pregunta pendiente: **un número solo**
+("te deben $X"), no un extracto mes a mes con arrastre — misma forma que ya
+usa la vaquita.
 
-- La entidad está pensada en CLAUDE.md: `Liquidacion(grupo, de, para, monto,
-  fecha)` y `saldo = deudas - pagos`, histórico y no mensual.
-- ¿Se muestra el histórico acumulado, o por mes con arrastre?
-- Un aporte a la vaquita ya es una liquidación anticipada: reusar el concepto.
+De paso se subió `otroIntegranteDe` a `UsuarioRepositorio` (lo necesitaban
+`ResumenServicio` y `LiquidacionServicio` por igual) y el refactor rompió
+dos tests que ya estaban en verde — corregido, y vale como anécdota de
+"Los tests: dos capas" en CLAUDE.md.
+
+**Falta**: la pantalla en mobile (el número en saldo, "Marcar como pagado",
+historial) y los chequeos en `scripts/smoke-test.ps1`. 151 tests en verde
+(144 + 7 nuevos de `LiquidacionServicioTest`), salvo `contextLoads`.
 
 ### 2.3b Balance personal de Viole (distinto de lo anterior)
 
