@@ -1,8 +1,10 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSesion } from '../src/features/auth/sesion';
+import { traerGrupo } from '../src/features/grupo/api';
 import { colores } from '../src/tema/colores';
 import { fuentes } from '../src/tema/tipografia';
 
@@ -31,6 +33,25 @@ export default function Ajustes() {
   const { usuario, salir } = useSesion();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  // null mientras carga o si el pedido falla: en los dos casos no se muestra
+  // ninguna fila de grupo, en vez de arriesgarse a mostrar la fila que no
+  // corresponde (p. ej. "Sumarse" a alguien que ya tiene pareja).
+  const [otroNombre, setOtroNombre] = useState<string | null>(null);
+  const [tienePareja, setTienePareja] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const grupo = await traerGrupo();
+        const otro = grupo.integrantes.find((i) => i.id !== usuario?.id);
+        setTienePareja(grupo.integrantes.length >= 2);
+        setOtroNombre(otro?.nombre ?? null);
+      } catch {
+        setTienePareja(null);
+      }
+    })();
+  }, [usuario?.id]);
 
   return (
     <View style={estilos.pantalla}>
@@ -69,6 +90,30 @@ export default function Ajustes() {
             <Text style={estilos.filaTexto}>Política de privacidad</Text>
             <Text style={estilos.flecha}>›</Text>
           </Pressable>
+
+          {tienePareja === false ? (
+            <Pressable
+              onPress={() => router.push('/grupo')}
+              accessibilityRole="button"
+              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+            >
+              <Text style={estilos.filaTexto}>Sumarse a un grupo</Text>
+              <Text style={estilos.flecha}>›</Text>
+            </Pressable>
+          ) : null}
+
+          {tienePareja === true ? (
+            <Pressable
+              onPress={() => router.push('/salir-del-grupo')}
+              accessibilityRole="button"
+              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+            >
+              <Text style={estilos.filaTexto}>
+                {otroNombre ? `Compartís gastos con ${otroNombre}` : 'Salir del grupo compartido'}
+              </Text>
+              <Text style={estilos.flecha}>›</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/*

@@ -350,15 +350,36 @@ los COMPARTIDO y los aportes a la vaquita que quedan atras NO se tocan: se
 ven con el nombre real, porque la persona real sigue siendo quien es. Solo
 "Cuenta eliminada" implica una cuenta borrada.
 
-**Lo que falta, y por que esta sesion se cierra sin eso.** Se hizo desde una
-sesion en la nube, sin Docker ni Mongo local (ver `docs/proxima-sesion.md`):
-el backend compila, y los 9 tests nuevos de `GrupoServicioTest` (mocks, sin
-base) pasan junto con los 144 que ya habia. Lo que ESO no prueba: que el
-indice unico parcial de `invitacion_codigo` exista de verdad, y que
-`findAndModify` sea atomico contra una base real -- eso es
-`scripts/smoke-test.ps1`, y falta agregarle los chequeos. Tampoco hay
-pantalla en mobile todavia: la app no puede invitar, sumarse ni salir desde
-la UI. Los dos quedan para cuando haya PC con Docker y telefono a mano.
+**La pantalla en mobile tambien esta.** `app/grupo.tsx` junta invitar y
+sumarse en una sola pantalla con dos modos (mismo espiritu que la vaquita:
+el estado depende de lo que la persona elige, no de una pantalla nueva por
+camino), con "Compartir" usando el `Share` de React Native -- sin agregar
+ninguna dependencia nueva, alcanza para mandarlo por WhatsApp y la hoja de
+compartir de iOS ya trae "Copiar" solo. `app/salir-del-grupo.tsx` es el
+mismo molde que `borrar-cuenta.tsx` (explicar, pedir contrasena, confirmar
+con un Alert) con otro final: la cuenta sigue existiendo, asi que no hay
+nada que anonimizar. `Ajustes` decide sola, con `GET /grupo`, cual de las
+dos ofrecer.
+
+De paso se encontro y se corrigio un comentario en `Campo.tsx` que predecia
+mal el futuro: preveia que el codigo de invitacion de la v1.1 iba a
+necesitar `capitalizar={false}` por el mismo bug que el codigo viejo (iOS
+poniendole mayuscula a la primera letra mientras se escribe). No hizo
+falta: el backend normaliza a mayusculas antes de comparar, asi que da
+igual como salga tipeado.
+
+**Lo que falta, y por que esta sesion se cierra sin eso.** Se hizo desde
+una sesion en la nube, sin Docker ni Mongo local, y sin telefono a mano
+(ver `docs/proxima-sesion.md`). Verificado: el backend compila y los 9
+tests nuevos de `GrupoServicioTest` (mocks, sin base) pasan junto con los
+144 que ya habia; el mobile con `tsc --noEmit` (tambien con
+`--noUnusedLocals`) y `expo export`, que bundlea de verdad. Lo que NINGUNA
+de esas dos cosas prueba: que el indice unico parcial de
+`invitacion_codigo` exista de verdad, que `findAndModify` sea atomico
+contra una base real -- eso es `scripts/smoke-test.ps1`, con los chequeos
+ya agregados pero sin correr -- y que las pantallas nuevas se vean y se
+usen bien en un telefono de verdad. Los tres quedan para cuando haya PC con
+Docker y telefono a mano.
 
 ### Borrar la cuenta (v1.0)
 Lo exige la App Store (guideline 5.1.1(v)): si la app deja crear cuenta, tiene

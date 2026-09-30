@@ -226,6 +226,17 @@ export type AporteRequest = {
 export type GrupoRespuesta = {
   id: string;
   nombre: string;
-  /** Son dos: el modelo de reparto asume dos integrantes. */
+  /**
+   * Uno si todavia esta sola, dos si tiene pareja: el modelo de reparto de un
+   * COMPARTIDO asume como maximo dos. Sumarse a un grupo y salir de el (v1.1,
+   * seccion 2.1) son las dos formas en que este numero cambia.
+   */
   integrantes: UsuarioRespuesta[];
+};
+
+/** La respuesta de POST /grupo/invitar: el codigo recien generado. */
+export type InvitacionRespuesta = {
+  codigo: string;
+  /** ISO 8601. Vence a los 7 dias. */
+  vence: string;
 };

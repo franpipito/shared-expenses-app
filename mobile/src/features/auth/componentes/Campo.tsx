@@ -37,8 +37,12 @@ type Props = {
    * un valor de referencia externo que el teclado pueda desalinear.
    *
    * En la v1.0 el codigo de invitacion se saco y hoy nadie pasa `false`. Se
-   * queda porque la v1.1 trae codigos por grupo, que van a tener el mismo
-   * problema.
+   * queda por el codigo de grupo de la v1.1 (seccion 2.1) -- pero ESE termino
+   * sin necesitarlo: el backend normaliza a mayusculas antes de comparar
+   * (`GrupoServicio.sumarse`), asi que da igual que iOS le haya puesto
+   * mayuscula a la primera letra. La prediccion de este comentario no se
+   * cumplio, y vale la leccion: la prop sigue quedandose para el proximo
+   * campo que SI compare exacto sin normalizar.
    */
   capitalizar?: boolean;
 };

@@ -89,10 +89,15 @@ Resumen rápido de lo que se resolvió:
   sea la única, porque dejar que alguien saque a otro de un grupo compartido
   en medio de una pelea es abrirle la puerta a usarlo como control.
 
-**Falta**: agregar los chequeos al smoke test (lo único que prueba que el
-índice único parcial de `invitacion_codigo` existe de verdad, y que
-`findAndModify` es atómico contra Mongo real) y las pantallas en mobile
-(Ajustes → "Invitar", un campo para pegar el código, y el botón de salir).
+**Mobile también hecho**, en la misma sesión: `app/grupo.tsx` (invitar y
+sumarse, un solo lugar) y `app/salir-del-grupo.tsx` (mismo molde que
+borrar-cuenta). Ajustes ya decide cuál mostrar según `GET /grupo`.
+Verificado con `tsc --noEmit` y `expo export` — no en un teléfono.
+
+**Falta, y necesita la PC**: correr `scripts/smoke-test.ps1` (ya tiene los
+chequeos de la sección 14, sin correr — es lo único que prueba el índice
+único parcial de `invitacion_codigo` y que `findAndModify` es atómico
+contra Mongo real) y probar las pantallas nuevas en un teléfono de verdad.
 Los 9 tests nuevos de `GrupoServicioTest` (mocks) pasan junto con los 144
 que ya había; `contextLoads` no se pudo correr en esta sesión (sin Mongo).
 
