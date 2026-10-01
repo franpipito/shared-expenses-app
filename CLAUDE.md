@@ -921,8 +921,120 @@ Verificado: 157 tests en el backend (152 + 5 nuevos de
 `BalancePersonalServicioTest`), todos en verde salvo `contextLoads`;
 `tsc --noEmit --noUnusedLocals` y `expo export` en mobile; y una seccion
 nueva en `scripts/smoke-test.ps1` (16), sin correr todavia contra Mongo
-real. **Falta probar la pantalla en un telefono**, que es la unica prueba
-real para un rediseno de la pantalla mas vista de toda la app.
+real. **Se probo en el telefono en la sesion siguiente**, y de ahi salieron
+tres correcciones -- ver "Corrigiendo Mi Plata con el uso real" mas abajo.
+
+### Corrigiendo "Mi Plata" con el uso real: CRUD de Ingreso, el cartel en rojo, y el menu unico (v1.1, seccion 2.3c)
+
+Primera vez que "Mi Plata" y el resumen rediseñado se probaron en un telefono
+de verdad (regla 1: cerrar con algo probado, no solo compilado). De ese uso
+salieron tres correcciones, discutidas con Franco antes de tocar codigo
+(regla 3) y no decididas en silencio.
+
+**1. `Ingreso` ahora se edita y se borra de verdad, tocando la fila.**
+
+Hasta ahora, `Ingreso` (igual que `Aporte` de la vaquita y `Liquidacion`)
+era un ledger inmutable: corregir un error de carga era anotar el asiento
+contrario, con un monto negativo. Es el mismo patron en los tres, documentado
+asi en los tres modelos.
+
+Probandolo en el telefono, ese mecanismo se sintio como vueltas de mas para
+algo tan simple como un error de tipeo. La primera propuesta fue mejorar el
+boton de correccion; Franco pidio ir mas lejos: tocar la fila del historial
+tiene que abrir un menu con **Editar** y **Borrar**, mismo espiritu que el
+menu contextual de WhatsApp sobre un mensaje (pero disparado con un toque
+simple, no con mantener presionado).
+
+Eso **rompe a proposito la consistencia con `Aporte` y `Liquidacion`**, que
+siguen siendo ledgers inmutables -- no se tocaron en esta sesion, y la
+inconsistencia resultante es consciente, no un olvido. La diferencia de
+fondo, que vale para una entrevista: en un aporte a la vaquita o una
+liquidacion importa el RASTRO de los dos movimientos (quien aporto, quien le
+pago a quien), porque son hechos entre dos personas. Un ingreso personal mal
+tipeado no tiene ese valor historico -- es un dato a corregir, no un hecho
+contable a enmendar.
+
+Lo que costo tecnicamente, porque `Ingreso` era un `record` embebido sin
+identidad (`BigDecimal monto, LocalDate fecha`):
+
+- **Gano un campo `id`** (`UUID.randomUUID()`, generado en el servicio al
+  crear). Sin el, no habia forma de direccionar CUAL ingreso tocar.
+- **`UsuarioConsultasImpl.editarIngreso`** usa el operador posicional `$` a
+  secas (`ingresos.$.monto`), con el filtro `_id + ingresos.id` en la MISMA
+  query: si el id no existe, la query entera no matchea nada, y
+  `modifiedCount` queda en 0 de una. A diferencia del `arrayFilters` que usa
+  el borrado de cuenta para los aportes, aca alcanza el `$` simple porque el
+  id ya es unico -- no hay el problema de "el primero que matchea" que
+  `arrayFilters` existe para resolver.
+- **`borrarIngreso`** usa `$pull` con una query por `id` sobre el array.
+- Los dos devuelven `boolean` (matcheo o no), y el servicio lo traduce a
+  `RecursoNoEncontradoException` (404) si no -- mismo patron que
+  `GastoServicio.buscarVisible` con un gasto ajeno o inexistente.
+- **`POST /balance-personal/ingresos` dejo de admitir negativo.** Si ya existe
+  edicion de verdad, mantener el asiento-en-contrario como alternativa es una
+  segunda forma de hacer lo mismo, y una innecesaria: `RegistrarIngresoRequest.monto`
+  paso a `@Positive`, y el chequeo manual de "cero rechazado" que vivia en el
+  servicio se borro -- Bean Validation ya cubre cero Y negativo en un solo
+  lugar. El test que probaba el negativo-como-correccion se borro con el,
+  porque el premiso que probaba dejo de ser cierto.
+
+**2. El cartel en rojo: fondo tintado, no solo texto rojo.**
+
+"Te pasaste por $X" en texto `terracotaProfunda` no se notaba lo suficiente
+de un vistazo, y ademas suena a reto -- lo que choca con el principio que ya
+regia la nutria ("una app que hace sentir culpable se desinstala").
+
+Se evaluaron tres alternativas (regla 3): mejorar el cartel actual, mostrar
+"ingresaste"/"gastaste" como dos numeros iguales, o una barra de progreso
+estilo Mint/YNAB. La barra se descarto explicitamente: una barra que "se
+llena" se lee como un tope o presupuesto, y los presupuestos estan
+descartados a proposito en este proyecto por los ingresos irregulares de
+Viole (respuesta 14 de la entrevista). Ganó la primera, la mas barata y la
+que no arriesgaba reintroducir esa lectura.
+
+Cambio: fondo `terracotaSuave` (color nuevo, agregado a `colores.ts` con la
+misma formula oklch que ya usan `hormigaSuave`/`rioSuave` -- alta luminosidad,
+poca saturacion, el matiz de `terracotaProfunda`) en vez de solo texto en
+rojo, "Te pasaste por" paso a "Te falta" (mas corto, sin acusar), y se sumo
+una linea nueva solo cuando esta en rojo invitando a la accion: "Cargá un
+ingreso para ponerte al día". Mismo tratamiento en el tile de "Mi Plata" en
+`resumen.tsx`, que muestra el mismo dato.
+
+**3. El menu unico, mirando como lo resuelve Instagram.**
+
+Antes habia DOS botones en el encabezado del resumen: el icono de menu
+(seccion 2.3b, las tres filas de navegacion) y la pastilla de "Ajustes"
+(aparte, pantalla propia). Franco penso que no cerraba a nivel de UX tener
+dos entradas separadas, y pidio juntarlas bajo un unico icono hamburguesa,
+con secciones -- mandando de referencia una captura de la pantalla de
+ajustes de Instagram.
+
+Se evaluo si "Tu cuenta" debia vivir inline en la pantalla nueva o seguir
+siendo un link a `/ajustes` sin tocar. Gano inline, que es ademas lo que
+pidio Franco literalmente ("que CONTENGA" las dos cosas): `app/menu.tsx` es
+una pantalla nueva con dos secciones (`rotuloSeccion`, el mismo estilo de
+encabezado gris que ya usa el resto de la app) -- "Navegacion" (las tres
+filas de siempre) y "Tu cuenta" (las filas de `ajustes.tsx`, movidas tal
+cual, con su mismo `useEffect` de `traerGrupo()` para `tienePareja`).
+`app/ajustes.tsx` se borro: ya no tiene ningun lugar desde donde se la
+pueda abrir.
+
+El `Modal` chico que `resumen.tsx` usaba para las tres filas de navegacion
+tambien se borro: ahora es una pantalla real, pusheada como cualquier otra.
+La diferencia de UX es minima (ir y volver hace lo mismo), pero el codigo es
+mas simple: una pantalla menos un estado de visibilidad, en vez de una
+pantalla mas un modal superpuesto.
+
+**Verificado:** 159 tests en el backend (161 - 2 tests que probaban el
+negativo-como-correccion, que dejo de existir), todos en verde salvo
+`contextLoads` (sin Mongo local en esta sandbox, mismo caso de siempre);
+`tsc --noEmit --noUnusedLocals` y `expo export --platform ios` en mobile, los
+dos limpios; `scripts/smoke-test.ps1` actualizado con los casos de editar,
+borrar, e id inexistente (404), pero **sin correr todavia contra Mongo real**
+-- esta sandbox no tiene Docker. Lo que eso no prueba, y que solo prueba un
+telefono: que el `ActionSheetIOS` se vea y se sienta como el menu de
+WhatsApp que pidio Franco, y que el `$pull`/`$set` posicional sean atomicos
+de verdad contra una base real.
 
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.

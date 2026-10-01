@@ -3,12 +3,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorDeApi } from '../../../api/cliente';
 import { sincronizar } from '../../gastos/sincronizador';
 import type { BalancePersonalRespuesta } from '../../../api/tipos';
-import { agregarIngreso, traerBalance } from '../api';
+import { agregarIngreso, borrarIngreso, editarIngreso, traerBalance } from '../api';
 
 /**
  * El "controlador" de Mi Plata: mismo molde que `useSaldo`/`useResumen`
- * (datos/cargando/error/recargar), con `registrar` para agregar un ingreso
- * (o corregir uno anterior, con un monto negativo).
+ * (datos/cargando/error/recargar), con `registrar`/`editar`/`borrar` para
+ * las tres operaciones que admite un ingreso (sección 2.3c: editar y borrar
+ * son reales, no un asiento en contrario como en la vaquita).
  *
  * Sincroniza antes de leer, igual que esos dos hooks: sin esto, un gasto
  * personal recien cargado offline no entraria en "gastado" hasta que la
@@ -37,11 +38,23 @@ export function useBalance() {
     void recargar();
   }, [recargar]);
 
-  /** Agrega un ingreso y refresca el balance. */
+  /** Agrega un ingreso nuevo y refresca el balance. */
   const registrar = useCallback(async (monto: number) => {
     await agregarIngreso(monto);
     await recargar();
   }, [recargar]);
 
-  return { balance, cargando, error, recargar, registrar };
+  /** Corrige el monto de un ingreso ya cargado y refresca el balance. */
+  const editar = useCallback(async (id: string, monto: number) => {
+    await editarIngreso(id, monto);
+    await recargar();
+  }, [recargar]);
+
+  /** Saca un ingreso del historial y refresca el balance. */
+  const borrar = useCallback(async (id: string) => {
+    await borrarIngreso(id);
+    await recargar();
+  }, [recargar]);
+
+  return { balance, cargando, error, recargar, registrar, editar, borrar };
 }

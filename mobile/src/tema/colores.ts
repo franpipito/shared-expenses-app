@@ -35,6 +35,8 @@ export const colores = {
   /** Terracota: la accion principal. Un solo boton terracota por pantalla. */
   terracota: '#BC6A49', // oklch(0.61 0.115 42)
   terracotaProfunda: '#8D4C33', // oklch(0.49 0.095 42)
+  /** Fondo tintado para un aviso en terracota (p. ej. "Mi Plata" en rojo). */
+  terracotaSuave: '#FFDECE', // oklch(0.93 0.05 42)
 
   /** Buenas noticias. */
   hoja: '#3F8B6D', // oklch(0.58 0.09 165)

@@ -1136,14 +1136,25 @@ $vacio = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ahorrista
 Chequear ($vacio.ingresado -eq 0 -and $vacio.gastado -eq 0 -and $vacio.restante -eq 0) `
     "sin nada cargado, Mi Plata arranca en cero"
 
-EsperarRegla { Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
+EsperarValidacion { Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
     -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
-    "no puede ser cero" "un ingreso de cero se rechaza: no es ingreso ni correccion"
+    "monto" "un ingreso de cero se rechaza por Bean Validation (seccion 2.3c: ya no por regla de negocio)"
+
+# A diferencia de un Aporte, un Ingreso ya NO admite negativo: ver mas abajo
+# donde se edita y se borra de verdad, que es lo que reemplazo al asiento en
+# contrario (seccion 2.3c, a pedido de Franco probando la app en el telefono).
+EsperarValidacion { Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
+    -ContentType "application/json" -Body (@{ monto = -10000 } | ConvertTo-Json) } `
+    "monto" "un ingreso negativo tambien se rechaza: ya no es la forma de corregir uno mal cargado"
 
 $conIngreso = Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
     -ContentType "application/json" -Body (@{ monto = 80000 } | ConvertTo-Json)
 Chequear ($conIngreso.ingresado -eq 80000 -and $conIngreso.restante -eq 80000) `
     "el primer ingreso queda reflejado, y el restante es igual porque todavia no gasto nada"
+
+$idIngreso = $conIngreso.ingresos[0].id
+Chequear ($null -ne $idIngreso) `
+    "el ingreso que vuelve trae id (seccion 2.3c): hace falta para poder editarlo o borrarlo"
 
 # Un gasto PERSONAL descuenta solo del restante, sin ningun paso extra.
 $gastoPersonal = Crear $ahorrista @{
@@ -1154,16 +1165,28 @@ $despuesDelGasto = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $aho
 Chequear ($despuesDelGasto.gastado -eq 25000 -and $despuesDelGasto.restante -eq 55000) `
     "un gasto personal baja el restante solo, sin tocar el ingreso"
 
-# Corregir un ingreso mal cargado: un monto negativo, mismo mecanismo que un
-# aporte a la vaquita.
-$corregido = Invoke-RestMethod -Uri "$base/balance-personal/ingresos" -Method Post -Headers $ahorrista `
-    -ContentType "application/json" -Body (@{ monto = -10000 } | ConvertTo-Json)
-Chequear ($corregido.ingresado -eq 70000 -and $corregido.restante -eq 45000) `
-    "un ingreso negativo corrige uno mal cargado, igual que un aporte a la vaquita"
+# Editar y borrar (seccion 2.3c): a diferencia de un aporte a la vaquita o una
+# liquidacion -- que siguen siendo ledgers inmutables -- un ingreso mal
+# cargado ahora se corrige o se saca de verdad, tocando la fila.
+EsperarValidacion { Invoke-RestMethod -Uri "$base/balance-personal/ingresos/$idIngreso" -Method Put -Headers $ahorrista `
+    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    "monto" "editar un ingreso a cero se rechaza, mismo @Positive que crearlo"
 
-$historialIngresos = (Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ahorrista).ingresos
-Chequear ((($historialIngresos | Measure-Object).Count -eq 2)) `
-    "el historial tiene los dos ingresos, el original y la correccion"
+$editado = Invoke-RestMethod -Uri "$base/balance-personal/ingresos/$idIngreso" -Method Put -Headers $ahorrista `
+    -ContentType "application/json" -Body (@{ monto = 60000 } | ConvertTo-Json)
+Chequear ($editado.ingresado -eq 60000 -and $editado.restante -eq 35000) `
+    "editar un ingreso corrige el monto de verdad, sin dejar un segundo asiento"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/balance-personal/ingresos/id-que-no-existe" -Method Put -Headers $ahorrista `
+    -ContentType "application/json" -Body (@{ monto = 1000 } | ConvertTo-Json) } 404 `
+    "editar un id de ingreso inexistente da 404"
+
+$borrado = Invoke-RestMethod -Uri "$base/balance-personal/ingresos/$idIngreso" -Method Delete -Headers $ahorrista
+Chequear ($borrado.ingresado -eq 0 -and $borrado.restante -eq -25000 -and (($borrado.ingresos | Measure-Object).Count -eq 0)) `
+    "borrar el unico ingreso lo saca del todo: ingresado vuelve a cero y el historial queda vacio"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/balance-personal/ingresos/$idIngreso" -Method Delete -Headers $ahorrista } 404 `
+    "borrar el mismo id de nuevo da 404: ya no existe"
 
 Invoke-RestMethod -Uri "$base/gastos/$($gastoPersonal.id)" -Method Delete -Headers $ahorrista | Out-Null
 Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $ahorrista -UseBasicParsing `

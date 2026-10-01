@@ -238,6 +238,37 @@ toda la app. Backend verificado con 157 tests y una sección nueva del smoke
 test (16), sin correr contra Mongo real. Mobile con `tsc --noEmit` y
 `expo export`.
 
+### 2.3c Corrigiendo "Mi Plata" con el uso real — RESUELTO
+
+**De probar 2.3b en el teléfono por primera vez**, tres correcciones.
+Detalle completo (por qué de cada una) en `CLAUDE.md` → "Corrigiendo 'Mi
+Plata' con el uso real".
+
+- **`Ingreso` ahora se edita y se borra de verdad**, tocando la fila del
+  historial abre un menú Editar/Borrar (estilo WhatsApp, con
+  `ActionSheetIOS`). Rompe a propósito la consistencia con `Aporte`
+  (vaquita) y `Liquidacion` (saldar deudas), que siguen siendo ledgers
+  inmutables -- no se tocaron. `Ingreso` ganó un `id`, y
+  `POST /balance-personal/ingresos` dejó de admitir negativo (ya no hace
+  falta el asiento en contrario).
+- **El cartel en rojo de "Mi Plata"** pasa a tener fondo tintado
+  (`colores.terracotaSuave`, color nuevo) en vez de solo texto rojo, y un
+  copy menos "a reto" ("Te falta" en vez de "Te pasaste por", más una línea
+  invitando a cargar un ingreso). Se evaluó y se descartó una barra de
+  progreso estilo Mint/YNAB: se lee como un presupuesto, y eso sigue fuera
+  de alcance por los ingresos irregulares de Viole.
+- **Menú único**, mirando la pantalla de ajustes de Instagram que mandó
+  Franco de referencia: un solo ícono hamburguesa abre `app/menu.tsx`, que
+  junta la navegación (2.3b) y lo que antes era `app/ajustes.tsx` (se
+  borró, igual que el `Modal` chico que usaba `resumen.tsx`).
+
+**Falta probarlo en el teléfono**: ni el `ActionSheetIOS` ni el
+`$pull`/`$set` posicional nuevos de `UsuarioConsultasImpl` se probaron
+contra Mongo real (esta sandbox no tiene Docker). 159 tests en el backend
+(161 menos los 2 que probaban el negativo-como-corrección, que dejó de
+existir), `tsc --noEmit --noUnusedLocals` y `expo export` limpios, y
+`scripts/smoke-test.ps1` actualizado con los casos nuevos.
+
 ### 2.4 Ahorro en dólares (no es multimoneda de gastos)
 
 Ojo con esto: ya se le preguntó puntualmente a Franco si era "a veces paga un

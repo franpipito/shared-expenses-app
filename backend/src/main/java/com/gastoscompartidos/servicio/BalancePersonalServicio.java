@@ -1,9 +1,10 @@
 package com.gastoscompartidos.servicio;
 
 import com.gastoscompartidos.dto.BalancePersonalRespuesta;
+import com.gastoscompartidos.dto.EditarIngresoRequest;
 import com.gastoscompartidos.dto.IngresoRespuesta;
 import com.gastoscompartidos.dto.RegistrarIngresoRequest;
-import com.gastoscompartidos.error.ReglaDeNegocioException;
+import com.gastoscompartidos.error.RecursoNoEncontradoException;
 import com.gastoscompartidos.modelo.Ingreso;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.UUID;
 
 /**
  * "Mi Plata" (sección 2.3b): {@code restante = ingresado - gastado}, mismo
@@ -59,22 +61,47 @@ public class BalancePersonalServicio {
     public BalancePersonalRespuesta agregarIngreso(RegistrarIngresoRequest req) {
         Usuario actual = usuarioActual.requerido();
 
-        // Cero no es un ingreso ni una correccion: es ruido en el historial.
-        // El negativo si vale, y es como se deshace un ingreso equivocado --
-        // mismo criterio que PozoServicio.aportar() con los aportes.
+        // A diferencia de un Aporte, acá no hace falta un chequeo de cero a
+        // mano: @Positive en el DTO ya rechaza cero y negativo antes de que
+        // este método se ejecute (sección 2.3c -- ver RegistrarIngresoRequest).
         BigDecimal monto = normalizar(req.monto());
-        if (monto.signum() == 0) {
-            throw new ReglaDeNegocioException("El monto no puede ser cero");
-        }
-
-        Ingreso ingreso = new Ingreso(monto, LocalDate.now(reloj));
+        Ingreso ingreso = new Ingreso(UUID.randomUUID().toString(), monto, LocalDate.now(reloj));
         usuarios.agregarIngreso(actual.getId(), ingreso);
 
-        // Se relee: el $push fue atomico contra la base, no contra el
-        // `actual` que ya tenemos en memoria desactualizado.
-        Usuario actualizado = usuarios.findById(actual.getId())
-                .orElseThrow(() -> new IllegalStateException("El usuario desaparecio durante el alta"));
-        return respuesta(actualizado);
+        return respuesta(releer(actual.getId()));
+    }
+
+    /**
+     * Corrige el monto de un ingreso ya cargado (sección 2.3c). A diferencia
+     * de {@code agregarIngreso}, acá SÍ se edita de verdad: probándolo en el
+     * teléfono, "anotar el asiento contrario" para un error de tipeo se
+     * sintió como vueltas de más -- a diferencia de un {@code Aporte} o una
+     * {@code Liquidacion}, donde el rastro de los dos movimientos importa.
+     */
+    public BalancePersonalRespuesta editarIngreso(String ingresoId, EditarIngresoRequest req) {
+        Usuario actual = usuarioActual.requerido();
+        boolean existia = usuarios.editarIngreso(actual.getId(), ingresoId, normalizar(req.monto()));
+        if (!existia) {
+            throw new RecursoNoEncontradoException("No existe el ingreso " + ingresoId);
+        }
+        return respuesta(releer(actual.getId()));
+    }
+
+    /** Saca un ingreso del historial. Mismo criterio que editarIngreso. */
+    public BalancePersonalRespuesta borrarIngreso(String ingresoId) {
+        Usuario actual = usuarioActual.requerido();
+        boolean existia = usuarios.borrarIngreso(actual.getId(), ingresoId);
+        if (!existia) {
+            throw new RecursoNoEncontradoException("No existe el ingreso " + ingresoId);
+        }
+        return respuesta(releer(actual.getId()));
+    }
+
+    // Se relee en los tres casos: la escritura fue atomica contra la base,
+    // no contra el `actual` que ya tenemos en memoria desactualizado.
+    private Usuario releer(String usuarioId) {
+        return usuarios.findById(usuarioId)
+                .orElseThrow(() -> new IllegalStateException("El usuario desaparecio"));
     }
 
     private BalancePersonalRespuesta respuesta(Usuario usuario) {

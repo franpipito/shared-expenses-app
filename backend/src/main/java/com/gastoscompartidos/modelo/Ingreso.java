@@ -12,8 +12,12 @@ import java.time.LocalDate;
  * Por eso no lleva un campo `usuario` como Aporte -- ya está embebido dentro
  * del dueño, no hace falta decir de quién es.
  *
- * Record, inmutable: un ingreso no se edita; si se cargó mal, se compensa
- * con otro de signo contrario, igual que un {@link Aporte}.
+ * A DIFERENCIA de {@link Aporte} y {@link com.gastoscompartidos.modelo.Liquidacion}
+ * (sección 2.3c, v1.1): este SÍ se edita y se borra. Los otros dos siguen
+ * siendo ledgers inmutables (corrección = asiento contrario) porque ahí
+ * importa el rastro de los dos movimientos; acá, probándolo en el teléfono,
+ * un ingreso cargado mal se sintió como un dato a corregir, no un hecho
+ * contable a enmendar -- de ahí el `id`, que los otros dos no necesitan.
  */
-public record Ingreso(BigDecimal monto, LocalDate fecha) {
+public record Ingreso(String id, BigDecimal monto, LocalDate fecha) {
 }

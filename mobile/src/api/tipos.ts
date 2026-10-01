@@ -253,8 +253,15 @@ export type LiquidacionRespuesta = {
   fecha: string;
 };
 
-/** Un ingreso de "Mi Plata", tal como lo devuelve el backend. */
+/**
+ * Un ingreso de "Mi Plata", tal como lo devuelve el backend.
+ *
+ * Trae `id` (sección 2.3c): a diferencia de un aporte a la vaquita o una
+ * liquidación, un ingreso se puede editar y borrar de verdad, y hace falta
+ * algo para direccionar CUÁL fila del historial se tocó.
+ */
 export type IngresoRespuesta = {
+  id: string;
   monto: number;
   /** yyyy-MM-dd */
   fecha: string;

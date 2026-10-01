@@ -1,11 +1,15 @@
 package com.gastoscompartidos.controlador;
 
 import com.gastoscompartidos.dto.BalancePersonalRespuesta;
+import com.gastoscompartidos.dto.EditarIngresoRequest;
 import com.gastoscompartidos.dto.RegistrarIngresoRequest;
 import com.gastoscompartidos.servicio.BalancePersonalServicio;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,5 +40,22 @@ public class BalancePersonalControlador {
     @PostMapping("/ingresos")
     public BalancePersonalRespuesta agregarIngreso(@Valid @RequestBody RegistrarIngresoRequest req) {
         return servicio.agregarIngreso(req);
+    }
+
+    /**
+     * PUT /balance-personal/ingresos/{id}. Corrige un ingreso ya cargado
+     * (sección 2.3c) -- a diferencia de un aporte o una liquidación, un
+     * ingreso se puede editar de verdad. Devuelve el balance ya actualizado.
+     */
+    @PutMapping("/ingresos/{id}")
+    public BalancePersonalRespuesta editarIngreso(
+            @PathVariable String id, @Valid @RequestBody EditarIngresoRequest req) {
+        return servicio.editarIngreso(id, req);
+    }
+
+    /** DELETE /balance-personal/ingresos/{id}. Devuelve el balance ya actualizado. */
+    @DeleteMapping("/ingresos/{id}")
+    public BalancePersonalRespuesta borrarIngreso(@PathVariable String id) {
+        return servicio.borrarIngreso(id);
     }
 }

@@ -1,8 +1,9 @@
 package com.gastoscompartidos.servicio;
 
 import com.gastoscompartidos.dto.BalancePersonalRespuesta;
+import com.gastoscompartidos.dto.EditarIngresoRequest;
 import com.gastoscompartidos.dto.RegistrarIngresoRequest;
-import com.gastoscompartidos.error.ReglaDeNegocioException;
+import com.gastoscompartidos.error.RecursoNoEncontradoException;
 import com.gastoscompartidos.modelo.Ingreso;
 import com.gastoscompartidos.modelo.Usuario;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
@@ -76,7 +77,7 @@ class BalancePersonalServicioTest {
         @DisplayName("restante = ingresado - gastado")
         void restaBien() {
             escribirCampo(viole, "ingresos", new ArrayList<>(List.of(
-                    new Ingreso(new BigDecimal("80000.00"), java.time.LocalDate.of(2026, 9, 1)))));
+                    new Ingreso("ing-1", new BigDecimal("80000.00"), java.time.LocalDate.of(2026, 9, 1)))));
             when(gastos.totalPersonalDe(GRUPO, "u-viole")).thenReturn(new BigDecimal("25000.00"));
 
             BalancePersonalRespuesta r = servicio.ver();
@@ -90,7 +91,7 @@ class BalancePersonalServicioTest {
         @DisplayName("el restante puede dar negativo, y no explota")
         void restanteNegativoNoExplota() {
             escribirCampo(viole, "ingresos", new ArrayList<>(List.of(
-                    new Ingreso(new BigDecimal("10000.00"), java.time.LocalDate.of(2026, 9, 1)))));
+                    new Ingreso("ing-1", new BigDecimal("10000.00"), java.time.LocalDate.of(2026, 9, 1)))));
             when(gastos.totalPersonalDe(GRUPO, "u-viole")).thenReturn(new BigDecimal("40000.00"));
 
             BalancePersonalRespuesta r = servicio.ver();
@@ -117,27 +118,69 @@ class BalancePersonalServicioTest {
             assertThat(capturado.getValue().fecha()).isEqualTo(java.time.LocalDate.of(2026, 9, 6));
         }
 
+        // Ya no hay un caso "negativo se permite" ni "cero se rechaza" aca:
+        // RegistrarIngresoRequest.monto es @Positive (seccion 2.3c), asi que
+        // Bean Validation rechaza los dos ANTES de que este metodo corra.
+        // Un mock no ejecuta @Valid, por eso ese contrato se prueba en
+        // scripts/smoke-test.ps1 contra el servidor real, no aca.
+    }
+
+    @Nested
+    @DisplayName("Editar un ingreso (seccion 2.3c)")
+    class Editar {
+
         @Test
-        @DisplayName("un ingreso negativo se permite: es como se deshace uno equivocado")
-        void negativoEsElAsientoEnContrario() {
+        @DisplayName("si el id existe, corrige el monto y relee para responder")
+        void corrigeYRelee() {
+            when(usuarios.editarIngreso("u-viole", "ing-1", new BigDecimal("60000.00"))).thenReturn(true);
+            Usuario actualizado = usuario("u-viole", "Viole");
+            escribirCampo(actualizado, "ingresos", new ArrayList<>(List.of(
+                    new Ingreso("ing-1", new BigDecimal("60000.00"), java.time.LocalDate.of(2026, 9, 1)))));
+            when(usuarios.findById("u-viole")).thenReturn(Optional.of(actualizado));
             when(gastos.totalPersonalDe(anyString(), anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
-            when(usuarios.findById("u-viole")).thenReturn(Optional.of(viole));
 
-            servicio.agregarIngreso(new RegistrarIngresoRequest(new BigDecimal("-5000.00")));
+            BalancePersonalRespuesta r = servicio.editarIngreso("ing-1", new EditarIngresoRequest(new BigDecimal("60000.00")));
 
-            ArgumentCaptor<Ingreso> capturado = ArgumentCaptor.forClass(Ingreso.class);
-            verify(usuarios).agregarIngreso(anyString(), capturado.capture());
-            assertThat(capturado.getValue().monto()).isEqualByComparingTo("-5000.00");
+            assertThat(r.ingresado()).isEqualByComparingTo("60000.00");
         }
 
         @Test
-        @DisplayName("cero se rechaza: no es ingreso ni correccion")
-        void ceroNoEsNada() {
-            assertThatThrownBy(() -> servicio.agregarIngreso(new RegistrarIngresoRequest(BigDecimal.ZERO)))
-                    .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("no puede ser cero");
+        @DisplayName("si el id no existe (ya se borro, o es de otro usuario), tira 404")
+        void idInexistenteTira404() {
+            when(usuarios.editarIngreso("u-viole", "ing-ajeno", new BigDecimal("1000.00"))).thenReturn(false);
 
-            verify(usuarios, never()).agregarIngreso(anyString(), any());
+            assertThatThrownBy(() -> servicio.editarIngreso("ing-ajeno", new EditarIngresoRequest(new BigDecimal("1000.00"))))
+                    .isInstanceOf(RecursoNoEncontradoException.class);
+
+            verify(usuarios, never()).findById(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Borrar un ingreso (seccion 2.3c)")
+    class Borrar {
+
+        @Test
+        @DisplayName("si el id existe, lo saca y relee para responder")
+        void borraYRelee() {
+            when(usuarios.borrarIngreso("u-viole", "ing-1")).thenReturn(true);
+            when(usuarios.findById("u-viole")).thenReturn(Optional.of(viole));
+            when(gastos.totalPersonalDe(anyString(), anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+
+            servicio.borrarIngreso("ing-1");
+
+            verify(usuarios).borrarIngreso("u-viole", "ing-1");
+        }
+
+        @Test
+        @DisplayName("si el id no existe, tira 404")
+        void idInexistenteTira404() {
+            when(usuarios.borrarIngreso("u-viole", "ing-ajeno")).thenReturn(false);
+
+            assertThatThrownBy(() -> servicio.borrarIngreso("ing-ajeno"))
+                    .isInstanceOf(RecursoNoEncontradoException.class);
+
+            verify(usuarios, never()).findById(any());
         }
     }
 

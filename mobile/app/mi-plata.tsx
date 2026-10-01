@@ -1,6 +1,8 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorDeApi } from '../src/api/cliente';
+import type { IngresoRespuesta } from '../src/api/tipos';
 import { Boton } from '../src/componentes/Boton';
 import { formatearMonto } from '../src/componentes/Monto';
 import { useBalance } from '../src/features/balance/hooks/useBalance';
@@ -28,8 +31,14 @@ import { Cargando } from './_layout';
  *
  * MISMO INVARIANTE QUE LA VAQUITA (`app/vaquita.tsx`), pero para una sola
  * persona: `restante = ingresos - gastos`, calculado en el backend, sin
- * fechas ni corte de mes. Un ingreso corrige un error de carga con un monto
- * NEGATIVO, nunca se edita ni se borra -- mismo mecanismo que un aporte.
+ * fechas ni corte de mes.
+ *
+ * CORREGIR UN INGRESO ES EDITARLO O BORRARLO DE VERDAD (sección 2.3c) --
+ * A DIFERENCIA DE UN APORTE A LA VAQUITA. Probándolo en el teléfono, un
+ * asiento en contrario para arreglar un error de tipeo se sintió como
+ * vueltas de más. Tocar una fila del historial abre un menú nativo
+ * (Editar / Borrar / Cancelar), mismo espíritu que el menú contextual de
+ * WhatsApp sobre un mensaje, pero disparado con un toque simple.
  *
  * Deliberadamente NO es una app de finanzas personales completa: no hay
  * cuentas por medio de pago, ni categorías de ingreso, ni gráficos. Eso
@@ -43,16 +52,18 @@ import { Cargando } from './_layout';
  *
  * Nunca ámbar: es exclusivo del gasto hormiga (`docs/diseno.md`). Tampoco
  * teal: esa familia de color ya significa "lo compartido", y esto es plata
- * individual. Positivo va `hoja` (buenas noticias); negativo,
- * `terracotaProfunda`, mismo tono que usa el resto de la app para "mirá
- * esto".
+ * individual. Positivo va `hoja` (buenas noticias); negativo, fondo
+ * `terracotaSuave` con texto `terracotaProfunda` (sección 2.3c: antes era
+ * solo texto en rojo, y probándolo no alcanzaba para que se note de un
+ * vistazo).
  */
 export default function MiPlata() {
-  const { balance, cargando, error, recargar, registrar } = useBalance();
+  const { balance, cargando, error, recargar, registrar, editar, borrar } = useBalance();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [monto, setMonto] = useState('');
+  const [editando, setEditando] = useState<IngresoRespuesta | null>(null);
   const [errorAlta, setErrorAlta] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -69,14 +80,73 @@ export default function MiPlata() {
   const nuncaCargoNada = balance ? balance.ingresos.length === 0 : true;
   const enRojo = balance ? balance.restante < 0 : false;
 
-  async function registrarIngreso(signo: 1 | -1) {
+  function empezarAEditar(ingreso: IngresoRespuesta) {
+    setErrorAlta(null);
+    setEditando(ingreso);
+    setMonto(String(ingreso.monto));
+  }
+
+  function cancelarEdicion() {
+    setErrorAlta(null);
+    setEditando(null);
+    setMonto('');
+  }
+
+  function tocarFila(ingreso: IngresoRespuesta) {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: `${formatearMonto(ingreso.monto)} · ${ingreso.fecha}`,
+        options: ['Editar', 'Borrar', 'Cancelar'],
+        destructiveButtonIndex: 1,
+        cancelButtonIndex: 2,
+      },
+      (indice) => {
+        if (indice === 0) empezarAEditar(ingreso);
+        else if (indice === 1) confirmarBorrado(ingreso);
+      },
+    );
+  }
+
+  function confirmarBorrado(ingreso: IngresoRespuesta) {
+    Alert.alert(
+      'Borrar este ingreso',
+      `Se va a sacar ${formatearMonto(ingreso.monto)} del historial. No se puede deshacer.`,
+      [
+        { text: 'Dejarlo', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setErrorAlta(null);
+              try {
+                await borrar(ingreso.id);
+                // Si justo se estaba editando ESTE ingreso, el formulario
+                // quedaria apuntando a un id que ya no existe.
+                if (editando?.id === ingreso.id) cancelarEdicion();
+              } catch (e) {
+                setErrorAlta(e instanceof ErrorDeApi ? e.message : 'No se pudo borrar el ingreso.');
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }
+
+  async function confirmarFormulario() {
     setErrorAlta(null);
     setEnviando(true);
     try {
-      await registrar(signo * montoNumero);
+      if (editando) {
+        await editar(editando.id, montoNumero);
+      } else {
+        await registrar(montoNumero);
+      }
       setMonto('');
+      setEditando(null);
     } catch (e) {
-      setErrorAlta(e instanceof ErrorDeApi ? e.message : 'No se pudo registrar el ingreso.');
+      setErrorAlta(e instanceof ErrorDeApi ? e.message : 'No se pudo guardar el ingreso.');
     } finally {
       setEnviando(false);
     }
@@ -110,7 +180,7 @@ export default function MiPlata() {
         {error ? <Text style={estilos.error}>{error}</Text> : null}
 
         {balance ? (
-          <View style={estilos.tarjeta}>
+          <View style={[estilos.tarjeta, enRojo && estilos.tarjetaEnRojo]}>
             {nuncaCargoNada ? (
               <>
                 <Text style={estilos.vacioTitulo}>Contale a la app cuánta plata tenés</Text>
@@ -121,7 +191,9 @@ export default function MiPlata() {
               </>
             ) : (
               <>
-                <Text style={estilos.rotulo}>{enRojo ? 'Te pasaste por' : 'Te queda'}</Text>
+                <Text style={[estilos.rotulo, enRojo && estilos.rotuloEnRojo]}>
+                  {enRojo ? 'Te falta' : 'Te queda'}
+                </Text>
                 <Text
                   style={[estilos.numeroGrande, enRojo && estilos.numeroEnRojo]}
                   numberOfLines={1}
@@ -129,17 +201,22 @@ export default function MiPlata() {
                 >
                   {formatearMonto(Math.abs(balance.restante))}
                 </Text>
-                <Text style={estilos.detalle}>
+                <Text style={[estilos.detalle, enRojo && estilos.detalleEnRojo]}>
                   Ingresaste {formatearMonto(balance.ingresado)} · gastaste{' '}
                   {formatearMonto(balance.gastado)}
                 </Text>
+                {enRojo ? (
+                  <Text style={estilos.aviso}>Cargá un ingreso para ponerte al día.</Text>
+                ) : null}
               </>
             )}
           </View>
         ) : null}
 
         <View style={estilos.bloque}>
-          <Text style={estilos.rotuloSeccion}>Agregar un ingreso</Text>
+          <Text style={estilos.rotuloSeccion}>
+            {editando ? 'Editar ingreso' : 'Agregar un ingreso'}
+          </Text>
           <TextInput
             value={monto}
             onChangeText={setMonto}
@@ -148,42 +225,39 @@ export default function MiPlata() {
             placeholderTextColor={colores.borde}
             style={[estilos.input, numerosTabulares]}
           />
-          <Text style={estilos.ayuda}>Cobraste, te pagaron, vendiste algo: sumalo acá.</Text>
+          {editando ? (
+            <Pressable onPress={cancelarEdicion} accessibilityRole="button" hitSlop={8}>
+              <Text style={estilos.cancelar}>Cancelar</Text>
+            </Pressable>
+          ) : (
+            <Text style={estilos.ayuda}>Cobraste, te pagaron, vendiste algo: sumalo acá.</Text>
+          )}
           <View style={estilos.accion}>
             <Boton
-              titulo="Agregar ingreso"
-              onPress={() => void registrarIngreso(1)}
+              titulo={editando ? 'Guardar cambios' : 'Agregar ingreso'}
+              onPress={() => void confirmarFormulario()}
               cargando={enviando}
               deshabilitado={!montoValido}
             />
           </View>
-          {/*
-            Mismo mecanismo que "sacar del pozo" en la vaquita: los ingresos
-            son inmutables a propósito, así que corregir uno mal cargado es
-            un asiento en contrario, no una edición.
-          */}
-          <Pressable
-            onPress={() => void registrarIngreso(-1)}
-            disabled={!montoValido || enviando}
-            accessibilityRole="button"
-            accessibilityLabel="Corregir un ingreso cargado de más"
-            hitSlop={8}
-          >
-            <Text style={[estilos.corregir, !montoValido && { opacity: 0.4 }]}>
-              Me equivoqué: cargué de más
-            </Text>
-          </Pressable>
           {errorAlta ? <Text style={estilos.error}>{errorAlta}</Text> : null}
         </View>
 
         {!nuncaCargoNada && balance ? (
           <View style={estilos.bloque}>
             <Text style={estilos.rotuloSeccion}>Historial</Text>
-            {[...balance.ingresos].reverse().map((ingreso, i) => (
-              <View key={`${ingreso.fecha}-${i}`} style={estilos.fila}>
+            <Text style={estilos.ayuda}>Tocá un ingreso para editarlo o borrarlo.</Text>
+            {[...balance.ingresos].reverse().map((ingreso) => (
+              <Pressable
+                key={ingreso.id}
+                onPress={() => tocarFila(ingreso)}
+                accessibilityRole="button"
+                accessibilityLabel={`Ingreso de ${formatearMonto(ingreso.monto)} del ${ingreso.fecha}, tocar para editar o borrar`}
+                style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+              >
                 <Text style={estilos.filaEtiqueta}>{ingreso.fecha}</Text>
                 <Text style={estilos.filaMonto}>{formatearMonto(ingreso.monto)}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         ) : null}
@@ -216,7 +290,11 @@ const estilos = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
   },
+  // Fondo tintado en vez de solo texto en rojo (seccion 2.3c): mas facil de
+  // notar de un vistazo, sin ser una alarma.
+  tarjetaEnRojo: { backgroundColor: colores.terracotaSuave, borderColor: colores.terracotaProfunda },
   rotulo: { fontFamily: fuentes.cuerpo, fontSize: 16, color: colores.textoSuave },
+  rotuloEnRojo: { color: colores.terracotaProfunda },
   numeroGrande: {
     fontFamily: fuentes.displayBold,
     fontSize: 40,
@@ -233,6 +311,16 @@ const estilos = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
     ...numerosTabulares,
+  },
+  detalleEnRojo: { color: colores.terracotaProfunda },
+  // El aviso accionable: reemplaza a "Te pasaste por" como unica senial,
+  // probando en el telefono no alcanzaba para invitar a hacer algo.
+  aviso: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 14,
+    color: colores.terracotaProfunda,
+    textAlign: 'center',
+    marginTop: 10,
   },
 
   vacioTitulo: {
@@ -270,12 +358,11 @@ const estilos = StyleSheet.create({
   },
   ayuda: { fontFamily: fuentes.cuerpo, fontSize: 13, color: colores.textoSuave },
   accion: { alignSelf: 'stretch' },
-  corregir: {
+  cancelar: {
     fontFamily: fuentes.cuerpoSemi,
     fontSize: 14,
-    color: colores.terracotaProfunda,
-    textAlign: 'center',
-    paddingVertical: 8,
+    color: colores.rioProfundo,
+    paddingVertical: 4,
   },
 
   fila: {
@@ -289,6 +376,7 @@ const estilos = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
+  filaPresionada: { backgroundColor: colores.arena },
   filaEtiqueta: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.texto },
   filaMonto: {
     fontFamily: fuentes.displaySemi,

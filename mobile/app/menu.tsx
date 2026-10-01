@@ -17,26 +17,28 @@ const POLITICA_DE_PRIVACIDAD =
   'https://app.notion.com/p/Pol-tica-de-privacidad-MiNutria-3e52ae33cd65802c9d72cc8b9725914f';
 
 /**
- * Ajustes: lo que es sobre la cuenta y no sobre los gastos.
+ * El menú único (sección 2.3c), a pedido de Franco mirando cómo Instagram
+ * junta todo bajo un solo ícono: reemplaza DOS cosas que antes eran
+ * separadas en `resumen.tsx` --- el `Modal` chico con las tres filas de
+ * navegación (sección 2.3b, pedido de Viole) y la pantalla `ajustes.tsx`
+ * completa (que nacía con el borrado de cuenta) --- con una sola pantalla de
+ * dos secciones, mismo molde que la captura de "Settings and activity".
  *
- * NACE CON EL BORRADO DE CUENTA, que la App Store exige que se pueda hacer desde
- * la app (guideline 5.1.1(v)) y que la politica de privacidad promete en
- * "Ajustes -> Borrar cuenta". Cerrar sesion se mudo aca desde el encabezado del
- * resumen: con dos acciones sobre la cuenta, una pastilla por cada una en la
- * pantalla principal era ruido, y la pantalla que se abre todos los dias tiene
- * que ser de los gastos.
- *
- * Sin boton terracota: esta pantalla no tiene una accion principal, y el
- * terracota es para la accion que la gente viene a hacer.
+ * "Navegación" son las mismas tres filas que ya existían. "Tu cuenta" es
+ * `ajustes.tsx` movida tal cual, con el mismo `useEffect` de `traerGrupo()`:
+ * las DOS secciones necesitan saber `tienePareja` (la de navegación para
+ * esconder "Gastos compartidos"/"La vaquita"; la de cuenta para elegir entre
+ * "Sumarse" y "Salir del grupo"), así que se pide una sola vez acá arriba en
+ * vez de dos veces en dos pantallas separadas.
  */
-export default function Ajustes() {
+export default function Menu() {
   const { usuario, salir } = useSesion();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   // null mientras carga o si el pedido falla: en los dos casos no se muestra
-  // ninguna fila de grupo, en vez de arriesgarse a mostrar la fila que no
-  // corresponde (p. ej. "Sumarse" a alguien que ya tiene pareja).
+  // ninguna fila que dependa del grupo, en vez de arriesgarse a mostrar la
+  // que no corresponde (p. ej. "Sumarse" a alguien que ya tiene pareja).
   const [otroNombre, setOtroNombre] = useState<string | null>(null);
   const [tienePareja, setTienePareja] = useState<boolean | null>(null);
 
@@ -53,6 +55,10 @@ export default function Ajustes() {
     })();
   }, [usuario?.id]);
 
+  function irA(ruta: '/gastos' | '/saldo' | '/vaquita' | '/grupo' | '/salir-del-grupo' | '/borrar-cuenta') {
+    router.push(ruta);
+  }
+
   return (
     <View style={estilos.pantalla}>
       <ScrollView
@@ -63,8 +69,8 @@ export default function Ajustes() {
       >
         <View style={estilos.encabezado}>
           <View style={estilos.encabezadoTexto}>
-            <Text style={estilos.seccion}>Tu cuenta</Text>
-            <Text style={estilos.titulo}>{usuario?.nombre ?? 'Ajustes'}</Text>
+            <Text style={estilos.seccion}>Menú</Text>
+            <Text style={estilos.titulo}>{usuario?.nombre ?? 'MiNutria'}</Text>
           </View>
           <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button">
             <Text style={estilos.volver}>Resumen</Text>
@@ -72,9 +78,51 @@ export default function Ajustes() {
         </View>
 
         <View style={estilos.grupo}>
+          <Text style={estilos.rotuloSeccion}>Navegación</Text>
+
+          <Pressable
+            onPress={() => irA('/gastos')}
+            accessibilityRole="button"
+            style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+          >
+            <Text style={estilos.filaTexto}>Ver los gastos del mes</Text>
+            <Text style={estilos.flecha}>›</Text>
+          </Pressable>
+
+          {/*
+            Mismo criterio que ya regia en el Modal viejo: sin pareja no hay
+            saldo con nadie ni pozo que armar, y el backend rechazaria las dos
+            cosas. `!== false` y no `=== true`: mientras `tienePareja` todavia
+            no cargo (null) no se esconde nada de mas.
+          */}
+          {tienePareja !== false ? (
+            <>
+              <Pressable
+                onPress={() => irA('/saldo')}
+                accessibilityRole="button"
+                style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+              >
+                <Text style={estilos.filaTexto}>Gastos compartidos</Text>
+                <Text style={estilos.flecha}>›</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => irA('/vaquita')}
+                accessibilityRole="button"
+                style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+              >
+                <Text style={estilos.filaTexto}>La vaquita del viaje</Text>
+                <Text style={estilos.flecha}>›</Text>
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+
+        <View style={estilos.grupo}>
+          <Text style={estilos.rotuloSeccion}>Tu cuenta</Text>
+
           <Pressable
             // `() => salir()` y no `salir` a secas: onPress le pasaria el evento
-            // del toque como motivo. Ver el mismo comentario en resumen.tsx.
+            // del toque como motivo.
             onPress={() => void salir('manual')}
             accessibilityRole="button"
             style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
@@ -93,7 +141,7 @@ export default function Ajustes() {
 
           {tienePareja === false ? (
             <Pressable
-              onPress={() => router.push('/grupo')}
+              onPress={() => irA('/grupo')}
               accessibilityRole="button"
               style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
             >
@@ -104,7 +152,7 @@ export default function Ajustes() {
 
           {tienePareja === true ? (
             <Pressable
-              onPress={() => router.push('/salir-del-grupo')}
+              onPress={() => irA('/salir-del-grupo')}
               accessibilityRole="button"
               style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
             >
@@ -124,7 +172,7 @@ export default function Ajustes() {
           que poder leer que pasa con cada cosa, y pedir la contrasena.
         */}
         <Pressable
-          onPress={() => router.push('/borrar-cuenta')}
+          onPress={() => irA('/borrar-cuenta')}
           accessibilityRole="button"
           style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
         >
@@ -138,7 +186,7 @@ export default function Ajustes() {
 
 const estilos = StyleSheet.create({
   pantalla: { flex: 1, backgroundColor: colores.fondo },
-  contenido: { paddingHorizontal: 20, gap: 20 },
+  contenido: { paddingHorizontal: 20, gap: 24 },
 
   encabezado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   encabezadoTexto: { flex: 1 },
@@ -153,6 +201,14 @@ const estilos = StyleSheet.create({
   volver: { fontFamily: fuentes.cuerpoSemi, fontSize: 15, color: colores.rioProfundo },
 
   grupo: { gap: 8 },
+  rotuloSeccion: {
+    fontFamily: fuentes.cuerpoSemi,
+    fontSize: 11,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+    color: colores.textoSuave,
+    marginBottom: 2,
+  },
   fila: {
     flexDirection: 'row',
     justifyContent: 'space-between',

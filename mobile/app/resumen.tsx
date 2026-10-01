@@ -1,8 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import MenuIcono from 'lucide-react-native/icons/menu';
-import Settings from 'lucide-react-native/icons/settings';
-import { useCallback, useState } from 'react';
-import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { AnimoNutria } from '../src/api/tipos';
@@ -90,11 +89,12 @@ function fraseDelAnimo(
  * de la pantalla -- ahora convive arriba con "Gastaste este mes" y "Mi
  * Plata" (`app/mi-plata.tsx`, sección 2.3b).
  *
- * Las tres filas de navegación (gastos del mes, gastos compartidos, la
- * vaquita) se movieron a un menú -- pedido explícito de Viole para ganar
- * espacio. Es un patrón nuevo en esta app (antes no había ningún
- * drawer/menu): un `Modal` nativo alcanza para tres filas de texto, sin
- * sumar ninguna librería de navegación.
+ * El menú único (sección 2.3c): un solo ícono hamburguesa abre `app/menu.tsx`,
+ * que junta las tres filas de navegación (pedido de Viole, sección 2.3b) Y
+ * lo que antes vivía en `app/ajustes.tsx` -- a pedido de Franco, mirando
+ * cómo Instagram junta todo bajo un solo ícono en vez de dos botones
+ * separados en el encabezado. Reemplaza al `Modal` chico que había antes:
+ * ahora es una pantalla propia, con sus propias secciones.
  */
 export default function Resumen() {
   const { usuario } = useSesion();
@@ -103,7 +103,6 @@ export default function Resumen() {
   const { esElMesActual } = useMes();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [menuAbierto, setMenuAbierto] = useState(false);
 
   // Vuelve a pedir el resumen cada vez que la pantalla toma foco. Es lo que hace
   // que al cerrar el modal de "nuevo gasto" el numero ya este actualizado, sin
@@ -119,10 +118,9 @@ export default function Resumen() {
 
   if (cargando && !resumen) return <Cargando />;
 
-  function irA(ruta: '/gastos' | '/saldo' | '/vaquita') {
-    setMenuAbierto(false);
-    router.push(ruta);
-  }
+  // Solo tinta el tile cuando hay un numero negativo real que mostrar -- igual
+  // que en mi-plata.tsx, para no confundir "cargando" con "en rojo".
+  const miPlataEnRojo = balance != null && balance.ingresos.length > 0 && balance.restante < 0;
 
   return (
     <View style={estilos.pantalla}>
@@ -145,39 +143,20 @@ export default function Resumen() {
             <Text style={estilos.saludo}>{usuario?.nombre ? `Hola, ${usuario.nombre}` : 'Hola'}</Text>
             <Text style={estilos.seccion}>Tus gastos del mes</Text>
           </View>
-          <View style={estilos.accionesEncabezado}>
-            {/*
-              El menu (seccion 2.3b): agrupa "ver los gastos del mes",
-              "gastos compartidos" y "la vaquita", que antes eran filas
-              sueltas mas abajo. Pedido explicito de Viole para ganar
-              espacio arriba, para los dos tiles nuevos.
-            */}
-            <Pressable
-              onPress={() => setMenuAbierto(true)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Más opciones"
-              style={({ pressed }) => [estilos.iconoMenu, pressed && estilos.pastillaPresionada]}
-            >
-              <MenuIcono size={18} color={colores.rioProfundo} strokeWidth={1.75} />
-            </Pressable>
-            {/*
-              Aca estaba "Cerrar sesion". Se mudo a Ajustes cuando llego el
-              borrado de cuenta: dos acciones sobre la cuenta no entran en el
-              encabezado de la pantalla de los gastos. La pastilla queda, con el
-              mismo formato, y ahora abre Ajustes.
-            */}
-            <Pressable
-              onPress={() => router.push('/ajustes')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Ajustes"
-              style={({ pressed }) => [estilos.pastilla, pressed && estilos.pastillaPresionada]}
-            >
-              <Settings size={16} color={colores.rioProfundo} strokeWidth={1.75} />
-              <Text style={estilos.pastillaTexto}>Ajustes</Text>
-            </Pressable>
-          </View>
+          {/*
+            Un solo icono (seccion 2.3c): antes eran dos botones (el menu de
+            navegacion y la pastilla de Ajustes). Instagram junta todo bajo
+            un unico icono, y es lo que pidio Franco -- ver `app/menu.tsx`.
+          */}
+          <Pressable
+            onPress={() => router.push('/menu')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Menú"
+            style={({ pressed }) => [estilos.iconoMenu, pressed && estilos.pastillaPresionada]}
+          >
+            <MenuIcono size={18} color={colores.rioProfundo} strokeWidth={1.75} />
+          </Pressable>
         </View>
 
         <SelectorDeMes />
@@ -204,14 +183,20 @@ export default function Resumen() {
               <Pressable
                 onPress={() => router.push('/mi-plata')}
                 accessibilityRole="button"
-                style={({ pressed }) => [estilos.tile, pressed && estilos.filaPresionada]}
+                style={({ pressed }) => [
+                  estilos.tile,
+                  miPlataEnRojo && estilos.tileEnRojo,
+                  pressed && estilos.filaPresionada,
+                ]}
               >
-                <Text style={estilos.tileEtiqueta}>Mi Plata</Text>
+                <Text style={[estilos.tileEtiqueta, miPlataEnRojo && estilos.tileEtiquetaEnRojo]}>
+                  Mi Plata
+                </Text>
                 {cargandoBalance && !balance ? (
                   <Text style={estilos.tileMonto}>···</Text>
                 ) : balance && balance.ingresos.length > 0 ? (
                   <Text
-                    style={[estilos.tileMonto, balance.restante < 0 && estilos.tileMontoNegativo]}
+                    style={[estilos.tileMonto, miPlataEnRojo && estilos.tileMontoNegativo]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
                   >
@@ -278,66 +263,6 @@ export default function Resumen() {
       <View style={[estilos.pie, { paddingBottom: insets.bottom + 12 }]}>
         <Boton titulo="Cargar un gasto" onPress={() => router.push('/gasto/nuevo')} />
       </View>
-
-      {/*
-        El menu (seccion 2.3b). Nunca existio un drawer/bottom-sheet en esta
-        app -- el `Modal` nativo de React Native alcanza para tres filas de
-        texto, sin sumar ninguna libreria de navegacion nueva. El fondo
-        semitransparente es un `Pressable` que cierra al tocar afuera; tocar
-        una fila cierra el menu Y navega en el mismo gesto.
-      */}
-      <Modal
-        visible={menuAbierto}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMenuAbierto(false)}
-      >
-        <Pressable
-          style={[estilos.fondoMenu, { paddingTop: insets.top + 56 }]}
-          onPress={() => setMenuAbierto(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Cerrar el menú"
-        >
-          <View style={estilos.menu}>
-            <Pressable
-              onPress={() => irA('/gastos')}
-              accessibilityRole="button"
-              style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-            >
-              <Text style={estilos.verGastos}>Ver los gastos del mes</Text>
-              <Text style={estilos.flecha}>›</Text>
-            </Pressable>
-
-            {/*
-              Mismo criterio que antes de moverlas aca: sin pareja no hay
-              saldo con nadie ni pozo que armar, y el backend rechazaria las
-              dos cosas. `!== false` y no `=== true`: un backend viejo que no
-              manda el campo no tiene que esconderle la seccion de pareja a
-              nadie.
-            */}
-            {resumen?.tienePareja !== false ? (
-              <>
-                <Pressable
-                  onPress={() => irA('/saldo')}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-                >
-                  <Text style={estilos.verGastos}>Gastos compartidos</Text>
-                  <Text style={estilos.flecha}>›</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => irA('/vaquita')}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-                >
-                  <Text style={estilos.verGastos}>La vaquita del viaje</Text>
-                  <Text style={estilos.flecha}>›</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </View>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -356,9 +281,8 @@ const estilos = StyleSheet.create({
     marginTop: 4,
   },
   encabezadoTexto: { flex: 1 },
-  accionesEncabezado: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // Mismo alto que la pastilla (36), pero cuadrado: es un icono solo, sin
-  // texto al lado.
+  // Un solo icono ahora (seccion 2.3c): mismo tamano circular que ya tenia,
+  // sin la pastilla de "Ajustes" al lado.
   iconoMenu: {
     width: 36,
     height: 36,
@@ -369,25 +293,7 @@ const estilos = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Pastilla con borde en vez de un texto suelto. Nacio para "Cerrar sesion",
-  // que como texto a secas se leia como un link mas de la pantalla; hoy abre
-  // Ajustes y conserva la forma, que la separa de las filas que navegan a los
-  // gastos.
-  pastilla: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colores.tarjeta,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    // 36 y no 44: es una accion secundaria y no queremos que le compita al
-    // saludo. El hitSlop le suma el area tactil que le falta.
-    minHeight: 36,
-  },
   pastillaPresionada: { backgroundColor: colores.arena },
-  pastillaTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 13, color: colores.rioProfundo },
 
   filaTiles: { flexDirection: 'row', gap: 12 },
   tile: {
@@ -416,27 +322,15 @@ const estilos = StyleSheet.create({
     ...numerosTabulares,
   },
   tileMontoNegativo: { color: colores.terracotaProfunda },
+  // Mismo tratamiento que la tarjeta de mi-plata.tsx cuando el restante es
+  // negativo (seccion 2.3c): fondo tintado, no solo texto en rojo.
+  tileEnRojo: { backgroundColor: colores.terracotaSuave, borderColor: colores.terracotaProfunda },
+  tileEtiquetaEnRojo: { color: colores.terracotaProfunda },
   tileAgregar: {
     fontFamily: fuentes.cuerpoSemi,
     fontSize: 15,
     color: colores.rioProfundo,
     marginTop: 6,
-  },
-
-  fondoMenu: {
-    flex: 1,
-    backgroundColor: 'rgba(79, 55, 36, 0.35)',
-    alignItems: 'flex-end',
-    paddingRight: 20,
-  },
-  menu: {
-    width: 240,
-    gap: 8,
-    backgroundColor: colores.fondo,
-    borderRadius: 16,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colores.borde,
   },
 
   tarjetaHormiga: {
@@ -478,21 +372,7 @@ const estilos = StyleSheet.create({
     marginTop: 4,
   },
 
-  fila: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colores.tarjeta,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  filaEtiqueta: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.textoSuave },
   filaPresionada: { backgroundColor: colores.arena },
-  verGastos: { fontFamily: fuentes.cuerpoSemi, fontSize: 15, color: colores.rioProfundo },
-  flecha: { fontFamily: fuentes.cuerpoSemi, fontSize: 20, color: colores.rioProfundo },
 
   categorias: { gap: 8 },
   rotuloSeccion: {
