@@ -39,16 +39,13 @@ export default function Menu() {
   // null mientras carga o si el pedido falla: en los dos casos no se muestra
   // ninguna fila que dependa del grupo, en vez de arriesgarse a mostrar la
   // que no corresponde (p. ej. "Sumarse" a alguien que ya tiene pareja).
-  const [otroNombre, setOtroNombre] = useState<string | null>(null);
   const [tienePareja, setTienePareja] = useState<boolean | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const grupo = await traerGrupo();
-        const otro = grupo.integrantes.find((i) => i.id !== usuario?.id);
         setTienePareja(grupo.integrantes.length >= 2);
-        setOtroNombre(otro?.nombre ?? null);
       } catch {
         setTienePareja(null);
       }
@@ -120,16 +117,12 @@ export default function Menu() {
         <View style={estilos.grupo}>
           <Text style={estilos.rotuloSeccion}>Tu cuenta</Text>
 
-          <Pressable
-            // `() => salir()` y no `salir` a secas: onPress le pasaria el evento
-            // del toque como motivo.
-            onPress={() => void salir('manual')}
-            accessibilityRole="button"
-            style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-          >
-            <Text style={estilos.filaTexto}>Cerrar sesión</Text>
-          </Pressable>
-
+          {/*
+            Orden pedido por Franco revisando el menu nuevo en el telefono:
+            lo informativo primero, la salida del grupo en el medio, "Cerrar
+            sesion" al final -- que es ademas la unica fila sin flecha, porque
+            no navega a ningun lado, solo actua.
+          */}
           <Pressable
             onPress={() => void Linking.openURL(POLITICA_DE_PRIVACIDAD)}
             accessibilityRole="link"
@@ -150,18 +143,31 @@ export default function Menu() {
             </Pressable>
           ) : null}
 
+          {/*
+            Texto plano "Salir del grupo", sin personalizar con el nombre de
+            la otra persona: Franco lo pidio mas directo, en linea con como
+            se lee "Sumarse a un grupo" arriba.
+          */}
           {tienePareja === true ? (
             <Pressable
               onPress={() => irA('/salir-del-grupo')}
               accessibilityRole="button"
               style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
             >
-              <Text style={estilos.filaTexto}>
-                {otroNombre ? `Compartís gastos con ${otroNombre}` : 'Salir del grupo compartido'}
-              </Text>
+              <Text style={estilos.filaTexto}>Salir del grupo</Text>
               <Text style={estilos.flecha}>›</Text>
             </Pressable>
           ) : null}
+
+          <Pressable
+            // `() => salir()` y no `salir` a secas: onPress le pasaria el evento
+            // del toque como motivo.
+            onPress={() => void salir('manual')}
+            accessibilityRole="button"
+            style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+          >
+            <Text style={estilos.filaTexto}>Cerrar sesión</Text>
+          </Pressable>
         </View>
 
         {/*

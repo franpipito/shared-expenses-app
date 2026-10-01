@@ -191,19 +191,29 @@ export default function MiPlata() {
               </>
             ) : (
               <>
-                <Text style={[estilos.rotulo, enRojo && estilos.rotuloEnRojo]}>
-                  {enRojo ? 'Te falta' : 'Te queda'}
-                </Text>
+                <Text style={[estilos.rotulo, enRojo && estilos.rotuloEnRojo]}>Te queda</Text>
+                {/*
+                  El signo negativo se muestra tal cual (sin Math.abs): probando
+                  en el telefono, "Te falta $X" en ambar... digo, en rojo, se leia
+                  menos claro que el numero con el signo puesto. Intl.NumberFormat
+                  ya sabe poner el "-" en el lugar correcto para es-AR.
+                */}
                 <Text
                   style={[estilos.numeroGrande, enRojo && estilos.numeroEnRojo]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 >
-                  {formatearMonto(Math.abs(balance.restante))}
+                  {formatearMonto(balance.restante)}
                 </Text>
+                {/*
+                  "en total": sin esto, "gastaste $23.000" al lado de "Gastaste
+                  este mes: $10.000" en Resumen se lee como un error. No lo es --
+                  Mi Plata no tiene corte de mes a proposito (es un balance que
+                  se arrastra) -- pero hay que decirlo, no solo documentarlo.
+                */}
                 <Text style={[estilos.detalle, enRojo && estilos.detalleEnRojo]}>
-                  Ingresaste {formatearMonto(balance.ingresado)} · gastaste{' '}
-                  {formatearMonto(balance.gastado)}
+                  Ingresaste {formatearMonto(balance.ingresado)} en total · gastaste{' '}
+                  {formatearMonto(balance.gastado)} en total
                 </Text>
                 {enRojo ? (
                   <Text style={estilos.aviso}>Cargá un ingreso para ponerte al día.</Text>
@@ -213,52 +223,89 @@ export default function MiPlata() {
           </View>
         ) : null}
 
-        <View style={estilos.bloque}>
-          <Text style={estilos.rotuloSeccion}>
-            {editando ? 'Editar ingreso' : 'Agregar un ingreso'}
-          </Text>
-          <TextInput
-            value={monto}
-            onChangeText={setMonto}
-            keyboardType="decimal-pad"
-            placeholder="0,00"
-            placeholderTextColor={colores.borde}
-            style={[estilos.input, numerosTabulares]}
-          />
-          {editando ? (
-            <Pressable onPress={cancelarEdicion} accessibilityRole="button" hitSlop={8}>
-              <Text style={estilos.cancelar}>Cancelar</Text>
-            </Pressable>
-          ) : (
-            <Text style={estilos.ayuda}>Cobraste, te pagaron, vendiste algo: sumalo acá.</Text>
-          )}
-          <View style={estilos.accion}>
-            <Boton
-              titulo={editando ? 'Guardar cambios' : 'Agregar ingreso'}
-              onPress={() => void confirmarFormulario()}
-              cargando={enviando}
-              deshabilitado={!montoValido}
+        {/*
+          Oculto mientras se edita una fila (ver mas abajo): el input de ahi
+          abajo y el de esta seccion comparten el estado `monto`, y mostrar los
+          dos a la vez se veria como si escribieran en espejo sin motivo.
+        */}
+        {!editando ? (
+          <View style={estilos.bloque}>
+            <Text style={estilos.rotuloSeccion}>Agregar un ingreso</Text>
+            <TextInput
+              value={monto}
+              onChangeText={setMonto}
+              keyboardType="decimal-pad"
+              placeholder="0,00"
+              placeholderTextColor={colores.borde}
+              style={[estilos.input, numerosTabulares]}
             />
+            <Text style={estilos.ayuda}>Cobraste, te pagaron, vendiste algo: sumalo acá.</Text>
+            <View style={estilos.accion}>
+              <Boton
+                titulo="Agregar ingreso"
+                onPress={() => void confirmarFormulario()}
+                cargando={enviando}
+                deshabilitado={!montoValido}
+              />
+            </View>
           </View>
-          {errorAlta ? <Text style={estilos.error}>{errorAlta}</Text> : null}
-        </View>
+        ) : null}
+
+        {errorAlta ? <Text style={estilos.error}>{errorAlta}</Text> : null}
 
         {!nuncaCargoNada && balance ? (
           <View style={estilos.bloque}>
             <Text style={estilos.rotuloSeccion}>Historial</Text>
             <Text style={estilos.ayuda}>Tocá un ingreso para editarlo o borrarlo.</Text>
-            {[...balance.ingresos].reverse().map((ingreso) => (
-              <Pressable
-                key={ingreso.id}
-                onPress={() => tocarFila(ingreso)}
-                accessibilityRole="button"
-                accessibilityLabel={`Ingreso de ${formatearMonto(ingreso.monto)} del ${ingreso.fecha}, tocar para editar o borrar`}
-                style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
-              >
-                <Text style={estilos.filaEtiqueta}>{ingreso.fecha}</Text>
-                <Text style={estilos.filaMonto}>{formatearMonto(ingreso.monto)}</Text>
-              </Pressable>
-            ))}
+            {[...balance.ingresos].reverse().map((ingreso) =>
+              editando?.id === ingreso.id ? (
+                // Editar de verdad EN LA FILA, sin ir al formulario de arriba
+                // (pedido de Franco probando en el telefono): el input queda
+                // justo donde estaba el numero que se esta corrigiendo.
+                <View key={ingreso.id} style={estilos.filaEditando}>
+                  <TextInput
+                    value={monto}
+                    onChangeText={setMonto}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                    placeholder="0,00"
+                    placeholderTextColor={colores.borde}
+                    style={[estilos.inputInline, numerosTabulares]}
+                  />
+                  <View style={estilos.accionesInline}>
+                    <Pressable onPress={cancelarEdicion} accessibilityRole="button" hitSlop={8}>
+                      <Text style={estilos.cancelarInline}>Cancelar</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void confirmarFormulario()}
+                      disabled={!montoValido || enviando}
+                      accessibilityRole="button"
+                      hitSlop={8}
+                    >
+                      <Text
+                        style={[
+                          estilos.guardarInline,
+                          (!montoValido || enviando) && { opacity: 0.4 },
+                        ]}
+                      >
+                        Guardar
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  key={ingreso.id}
+                  onPress={() => tocarFila(ingreso)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ingreso de ${formatearMonto(ingreso.monto)} del ${ingreso.fecha}, tocar para editar o borrar`}
+                  style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+                >
+                  <Text style={estilos.filaEtiqueta}>{ingreso.fecha}</Text>
+                  <Text style={estilos.filaMonto}>{formatearMonto(ingreso.monto)}</Text>
+                </Pressable>
+              ),
+            )}
           </View>
         ) : null}
       </ScrollView>
@@ -358,12 +405,33 @@ const estilos = StyleSheet.create({
   },
   ayuda: { fontFamily: fuentes.cuerpo, fontSize: 13, color: colores.textoSuave },
   accion: { alignSelf: 'stretch' },
-  cancelar: {
-    fontFamily: fuentes.cuerpoSemi,
-    fontSize: 14,
-    color: colores.rioProfundo,
-    paddingVertical: 4,
+
+  // La fila en modo edicion (seccion 2.3c, segunda vuelta): mismo tamano que
+  // una fila normal, con un borde mas marcado para que se note cual se esta
+  // corrigiendo.
+  filaEditando: {
+    backgroundColor: colores.tarjeta,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colores.rioProfundo,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
   },
+  inputInline: {
+    backgroundColor: colores.fondo,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    fontFamily: fuentes.displaySemi,
+    fontSize: 18,
+    color: colores.texto,
+  },
+  accionesInline: { flexDirection: 'row', justifyContent: 'flex-end', gap: 24 },
+  cancelarInline: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.textoSuave },
+  guardarInline: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.rioProfundo },
 
   fila: {
     flexDirection: 'row',

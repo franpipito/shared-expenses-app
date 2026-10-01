@@ -1036,6 +1036,61 @@ telefono: que el `ActionSheetIOS` se vea y se sienta como el menu de
 WhatsApp que pidio Franco, y que el `$pull`/`$set` posicional sean atomicos
 de verdad contra una base real.
 
+**Y probarlo en el teléfono (de verdad, esa misma noche) encontró tres cosas más.**
+
+**El `ActionSheetIOS` funcionaba, pero editar se sentía lejos del dato.** Elegir
+"Editar" abría el formulario de arriba, que para una lista larga puede quedar
+scrolleado fuera de vista. Ahora la fila misma se convierte en un input (con
+"Guardar"/"Cancelar" al lado) -- no hay que ir a ningún lado para corregir un
+número. El formulario de arriba se oculta mientras tanto: mostrar los dos a la
+vez, compartiendo el mismo estado `monto`, se vería como si escribieran en
+espejo sin motivo.
+
+**El número en rojo vuelve a mostrar el signo.** "Te falta $X" en rojo fue la
+primera corrección de esta sección; probándolo de nuevo, Franco prefirió el
+número con el signo puesto (`-$22.000,00`) en vez de la frase con el valor
+absoluto -- más parecido a una cuenta, menos a una frase armada. El fondo
+tintado y el aviso de "Cargá un ingreso para ponerte al día" se mantienen:
+eso sí funcionaba.
+
+**Un hallazgo real, no un bug: "gastaste" en Mi Plata no tiene corte de mes,
+y eso sin avisarlo se lee como un error.** Con $10.000 de gastos en octubre,
+Mi Plata decía "gastaste $23.000" -- numero correcto (suma TODOS los gastos
+PERSONAL desde siempre, a propósito: ver "El modelo" más arriba, `GastoConsultas.
+totalPersonalDe` es `saldoHistoricoDe` sin el recorte de fechas), pero sin
+contexto parece roto al lado de "Gastaste este mes" en Resumen, que sí es solo
+del mes. El arreglo no es de lógica -- la lógica ya hacía lo que Franco quería,
+que de hecho pidió de nuevo sin darse cuenta ("que no se borre cada cambio de
+mes") -- es de copy: ahora dice "Ingresaste $X en total · gastaste $Y en
+total". Vale como lección: una decisión correcta y ya implementada puede
+leerse como un bug si el número no dice de dónde sale.
+
+**El menú: "Tu cuenta" se reordenó** (Política de privacidad, Salir del
+grupo/Sumarse a un grupo, Cerrar sesión al final -- la única fila sin flecha,
+porque no navega, actúa) **y "Salir del grupo" dejó de personalizarse** con
+el nombre de la otra persona ("Compartís gastos con Violeta" → "Salir del
+grupo", en línea con "Sumarse a un grupo"). `otroNombre` quedó sin ningún
+uso y se borró del componente, junto con el `find` que lo calculaba.
+
+**Y un bug de datos de verdad, que vale como anécdota de "Schema: no hay. Es
+MongoDB."** `Ingreso` sumó el campo `id` esta sesión, pero los ingresos que
+Franco había cargado en sesiones anteriores (18, en su propia cuenta) seguían
+en Mongo sin ese campo -- Mongo no migra nada solo. React se quejó con
+"Encountered two children with the same key, `null`", en un mensaje de error
+que el log de Metro mostraba vacío (encontrado recién mirando la pantalla
+roja del teléfono directamente, no la terminal). Diagnosticado con una query
+de solo lectura en Atlas Data Explorer (`{ "ingresos.id": null }`), que
+confirmó que la cuenta de Viole no tenía ni un ingreso cargado -- el riesgo
+era enteramente de datos de prueba propios, nada de ella. Resuelto con un
+`$pull` sobre esa misma cuenta, aplicado a mano desde el Data Explorer (sin
+`mongosh`, que Franco nunca usó). Las filas viejas sin `id` no se podían ni
+editar ni borrar desde la app -- dependían del mismo dato que les faltaba --
+así que sacarlas no perdía ninguna funcionalidad, solo números de prueba.
+
+Verificado de nuevo: `tsc --noEmit --noUnusedLocals` y `expo export
+--platform ios` limpios. Sin cambios de backend en esta vuelta, así que no
+hizo falta volver a correr `mvnw test`.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

@@ -200,7 +200,7 @@ export default function Resumen() {
                     numberOfLines={1}
                     adjustsFontSizeToFit
                   >
-                    {formatearMonto(Math.abs(balance.restante))}
+                    {formatearMonto(balance.restante)}
                   </Text>
                 ) : (
                   <Text style={estilos.tileAgregar}>Agregar</Text>
