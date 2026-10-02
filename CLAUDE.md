@@ -1135,8 +1135,25 @@ Verificado: 162 tests en el backend (159 + 3 nuevos en `PozoServicioTest`,
 incluido uno que prueba explícitamente que `gastado` y `restante` no se
 mueven con esto), todos en verde salvo `contextLoads`; `tsc --noEmit
 --noUnusedLocals` y `expo export --platform ios` limpios; `scripts/smoke-test.ps1`
-con los chequeos nuevos de la sección 10, sin correr todavía contra Mongo
-real.
+con los chequeos nuevos de la sección 10.
+
+**Y esto SÍ se corrió contra Mongo real, desde la nube.** Corrección a una
+asunción repetida en sesiones anteriores ("esta sandbox no tiene Docker"):
+Docker está instalado, solo que el daemon no arranca solo. `sudo dockerd &`
+lo levanta, y de ahí `docker compose up -d` trae el Mongo del proyecto sin
+tocar nada más. Con eso, `contextLoads` corrió de verdad (antes el único
+test que lo necesita quedaba como el único error esperado, sesión tras
+sesión) y los 161 tests dieron verde. Lo que no hay en esta sandbox es
+PowerShell (`pwsh`), así que `smoke-test.ps1` tal cual no corre -- pero la
+consulta nueva se probó igual, a mano: levantando el backend contra ese
+Mongo y pegándole por `curl` (dos usuarios de prueba, un pozo, un aporte de
+cada uno, un gasto del pozo pagado por cada uno). `gastadoPorPersona` separó
+$50.000 de uno y $30.000 del otro correctamente, y `porPersona` (los
+aportes) no se movió -- confirma que el pipeline `$match`+`$group` de
+`gastadoPorPersonaDelPozo` agrupa por `pagadoPor.usuarioId` de verdad contra
+una base real, no solo en la forma que el mock le daba por programado.
+Vale la corrección para la próxima sesión en la nube: Docker SÍ está, y
+cambia bastante qué se puede probar sin la PC.
 
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
