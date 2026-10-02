@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorDeApi } from '../../../api/cliente';
 import type { LiquidacionRespuesta, SaldoTotalRespuesta } from '../../../api/tipos';
-import { registrarLiquidacion, traerLiquidaciones, traerSaldoTotal } from '../api';
+import { borrarLiquidacion, editarLiquidacion, registrarLiquidacion, traerLiquidaciones, traerSaldoTotal } from '../api';
 
 /**
  * El "controlador" de la pantalla de liquidaciones. Mismo molde que
@@ -11,6 +11,11 @@ import { registrarLiquidacion, traerLiquidaciones, traerSaldoTotal } from '../ap
  * liquidaciones no pasa por la cola offline, igual que editar y borrar un
  * gasto (es una correccion deliberada, no el alta rapida que la cola existe
  * para proteger).
+ *
+ * `editar`/`borrar`: cualquiera de los dos integrantes puede corregir
+ * CUALQUIER liquidacion del grupo, no solo las que registro -- a diferencia
+ * de `editar`/`borrar` en `useBalance` (un ingreso es personal). No hay
+ * "dueño" de un pago entre dos personas.
  */
 export function useSaldoTotal() {
   const [total, setTotal] = useState<SaldoTotalRespuesta | null>(null);
@@ -42,5 +47,17 @@ export function useSaldoTotal() {
     await recargar();
   }, [recargar]);
 
-  return { total, historial, cargando, error, recargar, registrar };
+  /** Corrige el monto de un pago ya registrado y refresca el total y el historial. */
+  const editar = useCallback(async (id: string, monto: number) => {
+    await editarLiquidacion(id, monto);
+    await recargar();
+  }, [recargar]);
+
+  /** Saca un pago del historial y refresca el total y el historial. */
+  const borrar = useCallback(async (id: string) => {
+    await borrarLiquidacion(id);
+    await recargar();
+  }, [recargar]);
+
+  return { total, historial, cargando, error, recargar, registrar, editar, borrar };
 }

@@ -1,6 +1,8 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorDeApi } from '../src/api/cliente';
+import type { LiquidacionRespuesta } from '../src/api/tipos';
 import { Boton } from '../src/componentes/Boton';
 import { formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
@@ -37,9 +40,17 @@ import { Cargando } from './_layout';
  * otra persona, el pago que anoto es el mio; si me deben a mi, el pago que
  * anoto es el de la otra persona. La direccion ya la dice quien debe hoy, y
  * preguntarla de nuevo seria el mismo campo dos veces.
+ *
+ * UNA LIQUIDACION SE EDITA Y SE BORRA DE VERDAD, tocando la fila -- mismo
+ * espiritu que ya tienen un ingreso de "Mi Plata" y un aporte de la vaquita
+ * (`ActionSheetIOS` con Editar/Borrar/Cancelar). La diferencia con esas dos:
+ * ACA CUALQUIERA DE LOS DOS puede tocar CUALQUIER fila, no solo la propia --
+ * una liquidacion es un hecho entre los dos, no la propiedad de quien la
+ * tipeo. Lo que no se edita es la DIRECCION: si se cargo al reves, hay que
+ * borrarla y registrarla de nuevo bien.
  */
 export default function Liquidaciones() {
-  const { total, historial, cargando, error, recargar, registrar } = useSaldoTotal();
+  const { total, historial, cargando, error, recargar, registrar, editar, borrar } = useSaldoTotal();
   const { usuario } = useSesion();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -52,6 +63,7 @@ export default function Liquidaciones() {
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [monto, setMonto] = useState('');
+  const [editando, setEditando] = useState<LiquidacionRespuesta | null>(null);
   const [errorPago, setErrorPago] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -73,15 +85,73 @@ export default function Liquidaciones() {
     setMostrarFormulario(true);
   }
 
-  async function confirmar() {
+  function empezarAEditar(liquidacion: LiquidacionRespuesta) {
+    setErrorPago(null);
+    setEditando(liquidacion);
+    setMonto(String(liquidacion.monto));
+  }
+
+  function cancelarEdicion() {
+    setErrorPago(null);
+    setEditando(null);
+    setMonto('');
+  }
+
+  /** Tocar una fila del historial. Cualquiera, no solo las propias: ver el comentario de arriba. */
+  function tocarFila(liquidacion: LiquidacionRespuesta) {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: `${formatearMonto(liquidacion.monto)} · ${liquidacion.fecha}`,
+        options: ['Editar', 'Borrar', 'Cancelar'],
+        destructiveButtonIndex: 1,
+        cancelButtonIndex: 2,
+      },
+      (indice) => {
+        if (indice === 0) empezarAEditar(liquidacion);
+        else if (indice === 1) confirmarBorrado(liquidacion);
+      },
+    );
+  }
+
+  function confirmarBorrado(liquidacion: LiquidacionRespuesta) {
+    Alert.alert(
+      'Borrar este pago',
+      `Se va a sacar ${formatearMonto(liquidacion.monto)} del historial. No se puede deshacer.`,
+      [
+        { text: 'Dejarlo', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setErrorPago(null);
+              try {
+                await borrar(liquidacion.id);
+                if (editando?.id === liquidacion.id) cancelarEdicion();
+              } catch (e) {
+                setErrorPago(e instanceof ErrorDeApi ? e.message : 'No se pudo borrar el pago.');
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }
+
+  async function confirmarFormulario() {
     setErrorPago(null);
     setEnviando(true);
     try {
-      await registrar(montoNumero, meLoPagaron);
+      if (editando) {
+        await editar(editando.id, montoNumero);
+      } else {
+        await registrar(montoNumero, meLoPagaron);
+      }
       setMostrarFormulario(false);
+      setEditando(null);
       setMonto('');
     } catch (e) {
-      setErrorPago(e instanceof ErrorDeApi ? e.message : 'No se pudo registrar el pago.');
+      setErrorPago(e instanceof ErrorDeApi ? e.message : 'No se pudo guardar el pago.');
     } finally {
       setEnviando(false);
     }
@@ -133,7 +203,12 @@ export default function Liquidaciones() {
           </View>
         ) : null}
 
-        {total && !aMano ? (
+        {/*
+          Oculto mientras se edita una fila del historial (mas abajo): el
+          input de ahi abajo y el de este bloque comparten el estado `monto`,
+          mismo criterio que ya usan "Mi Plata" y la vaquita.
+        */}
+        {total && !aMano && !editando ? (
           mostrarFormulario ? (
             <View style={estilos.bloque}>
               <Text style={estilos.rotuloSeccion}>
@@ -150,11 +225,10 @@ export default function Liquidaciones() {
                 style={[estilos.input, numerosTabulares]}
                 autoFocus
               />
-              {errorPago ? <Text style={estilos.error}>{errorPago}</Text> : null}
               <View style={estilos.accion}>
                 <Boton
                   titulo="Confirmar"
-                  onPress={() => void confirmar()}
+                  onPress={() => void confirmarFormulario()}
                   cargando={enviando}
                   deshabilitado={!montoValido}
                 />
@@ -167,20 +241,73 @@ export default function Liquidaciones() {
           )
         ) : null}
 
+        {/* Comun a las dos formas de guardar (registrar arriba, editar en la fila mas abajo). */}
+        {errorPago ? <Text style={estilos.error}>{errorPago}</Text> : null}
+
         <View style={estilos.bloque}>
           <Text style={estilos.rotuloSeccion}>
             {historial.length === 0 ? 'Todavía no registraron ningún pago' : 'Historial de pagos'}
           </Text>
+          {historial.length > 0 ? (
+            <Text style={estilos.ayuda}>Tocá un pago para editarlo o borrarlo.</Text>
+          ) : null}
           {historial.map((l) => {
             const yoPague = l.de.id === usuario?.id;
             const etiqueta = yoPague
               ? `Vos le pagaste a ${l.para.nombre}`
               : `${l.de.nombre} te pagó`;
+
+            if (editando?.id === l.id) {
+              // Editar de verdad EN LA FILA, mismo patron que "Mi Plata" y la
+              // vaquita: el input queda justo donde estaba el numero que se
+              // corrige, y la direccion (la etiqueta de arriba) no se toca.
+              return (
+                <View key={l.id} style={estilos.filaEditando}>
+                  <Text style={estilos.filaEtiqueta}>{etiqueta}</Text>
+                  <View style={estilos.filaEditandoAcciones}>
+                    <TextInput
+                      value={monto}
+                      onChangeText={setMonto}
+                      keyboardType="decimal-pad"
+                      autoFocus
+                      placeholder="0,00"
+                      placeholderTextColor={colores.borde}
+                      style={[estilos.inputInline, numerosTabulares]}
+                    />
+                    <Pressable onPress={cancelarEdicion} accessibilityRole="button" hitSlop={8}>
+                      <Text style={estilos.cancelarInline}>Cancelar</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void confirmarFormulario()}
+                      disabled={!montoValido || enviando}
+                      accessibilityRole="button"
+                      hitSlop={8}
+                    >
+                      <Text
+                        style={[
+                          estilos.guardarInline,
+                          (!montoValido || enviando) && { opacity: 0.4 },
+                        ]}
+                      >
+                        Guardar
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            }
+
             return (
-              <View key={l.id} style={estilos.fila}>
+              <Pressable
+                key={l.id}
+                onPress={() => tocarFila(l)}
+                accessibilityRole="button"
+                accessibilityLabel={`${etiqueta}, ${formatearMonto(l.monto)} del ${l.fecha}, tocar para editar o borrar`}
+                style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+              >
                 <Text style={estilos.filaEtiqueta}>{etiqueta}</Text>
                 <Text style={estilos.filaMonto}>{formatearMonto(l.monto)}</Text>
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -256,6 +383,7 @@ const estilos = StyleSheet.create({
     color: colores.texto,
   },
   accion: { alignSelf: 'stretch' },
+  ayuda: { fontFamily: fuentes.cuerpo, fontSize: 13, color: colores.textoSuave },
 
   fila: {
     flexDirection: 'row',
@@ -268,6 +396,7 @@ const estilos = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
+  filaPresionada: { backgroundColor: colores.arena },
   filaEtiqueta: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.texto },
   filaMonto: {
     fontFamily: fuentes.displaySemi,
@@ -275,6 +404,34 @@ const estilos = StyleSheet.create({
     color: colores.texto,
     ...numerosTabulares,
   },
+
+  // La fila en modo edicion, mismo molde que "Mi Plata" y la vaquita, con la
+  // etiqueta de direccion arriba: a diferencia de un ingreso o un aporte, acá
+  // SÍ hay algo que preservar a la vista mientras se corrige el monto.
+  filaEditando: {
+    backgroundColor: colores.tarjeta,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colores.rioProfundo,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  filaEditandoAcciones: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  inputInline: {
+    flex: 1,
+    backgroundColor: colores.fondo,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    fontFamily: fuentes.displaySemi,
+    fontSize: 18,
+    color: colores.texto,
+  },
+  cancelarInline: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.textoSuave },
+  guardarInline: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.rioProfundo },
 
   error: { fontFamily: fuentes.cuerpo, fontSize: 14, color: colores.terracotaProfunda },
 });

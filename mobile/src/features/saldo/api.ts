@@ -28,3 +28,21 @@ export function registrarLiquidacion(monto: number, meLoPagaron: boolean): Promi
     cuerpo: { monto, meLoPagaron },
   });
 }
+
+/**
+ * Corrige el monto de una liquidacion ya registrada. Devuelve el saldo total
+ * ya actualizado.
+ *
+ * Cualquiera de los dos integrantes puede editar CUALQUIER liquidacion del
+ * grupo, no solo las propias -- a diferencia de un aporte a la vaquita. No
+ * se puede tocar la direccion (quien le pago a quien): si se cargo al reves,
+ * hay que borrarla y volver a registrarla.
+ */
+export function editarLiquidacion(id: string, monto: number): Promise<SaldoTotalRespuesta> {
+  return pedir<SaldoTotalRespuesta>(`/saldo/liquidaciones/${id}`, { metodo: 'PUT', cuerpo: { monto } });
+}
+
+/** Saca una liquidacion del historial. Devuelve el saldo total ya actualizado. */
+export function borrarLiquidacion(id: string): Promise<SaldoTotalRespuesta> {
+  return pedir<SaldoTotalRespuesta>(`/saldo/liquidaciones/${id}`, { metodo: 'DELETE' });
+}

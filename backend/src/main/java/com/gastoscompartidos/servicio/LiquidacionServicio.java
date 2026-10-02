@@ -1,8 +1,10 @@
 package com.gastoscompartidos.servicio;
 
+import com.gastoscompartidos.dto.EditarLiquidacionRequest;
 import com.gastoscompartidos.dto.LiquidacionRespuesta;
 import com.gastoscompartidos.dto.RegistrarLiquidacionRequest;
 import com.gastoscompartidos.dto.SaldoTotalRespuesta;
+import com.gastoscompartidos.error.RecursoNoEncontradoException;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Liquidacion;
 import com.gastoscompartidos.modelo.ReferenciaUsuario;
@@ -117,6 +119,39 @@ public class LiquidacionServicio {
         return liquidaciones.findByGrupoIdOrderByFechaDescIdDesc(actual.getGrupoId()).stream()
                 .map(LiquidacionRespuesta::desde)
                 .toList();
+    }
+
+    /**
+     * Corrige el monto de una liquidacion ya registrada y devuelve el saldo
+     * total ya actualizado.
+     *
+     * OJO CON EL ALCANCE: a diferencia de un aporte a la vaquita, aca CUALQUIERA
+     * de los dos integrantes del grupo puede corregir CUALQUIER liquidacion, no
+     * solo las que registro -- ver el porque en el javadoc de
+     * {@code LiquidacionRepositorio.findByIdAndGrupoId}. No se distingue "no
+     * existe" de "es de otro grupo": los dos dan el mismo 404, mismo criterio
+     * que el resto de esta base.
+     */
+    public SaldoTotalRespuesta editar(String id, EditarLiquidacionRequest req) {
+        Usuario actual = usuarioActual.requerido();
+        Liquidacion liquidacion = liquidaciones.findByIdAndGrupoId(id, actual.getGrupoId())
+                .orElseThrow(() -> new RecursoNoEncontradoException("No existe la liquidación " + id));
+
+        liquidacion.setMonto(normalizar(req.monto()));
+        liquidaciones.save(liquidacion);
+
+        return saldoTotal();
+    }
+
+    /** Saca una liquidacion del historial y devuelve el saldo total ya actualizado. */
+    public SaldoTotalRespuesta borrar(String id) {
+        Usuario actual = usuarioActual.requerido();
+        long borradas = liquidaciones.deleteByIdAndGrupoId(id, actual.getGrupoId());
+        if (borradas == 0) {
+            throw new RecursoNoEncontradoException("No existe la liquidación " + id);
+        }
+
+        return saldoTotal();
     }
 
     // ---------------------------------------------------------------- helpers

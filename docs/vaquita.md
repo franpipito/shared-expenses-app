@@ -362,6 +362,13 @@ importa: **la marca ámbar de gasto hormiga se sigue viendo gasto por gasto**. U
 souvenir carísimo es hormiga aunque haya salido de la vaquita; lo que no hace es
 contar para el total del mes.
 
+**Un atajo mas, agregado despues: "+ Agregar gasto" arriba de `vaquita.tsx`.**
+El default por fecha (arriba) no cubre comprar algo del viaje antes de que
+arranque o despues de que termine. El boton no abre un formulario nuevo --
+navega al de siempre con el chip Vaquita como punto de partida
+(`FormularioDeGasto.destinoSugerido`). Detalle completo en CLAUDE.md, "Un
+atajo para cargar un gasto desde adentro de la vaquita".
+
 ## 9. Lo que queda afuera a propósito
 
 **El cierre del pozo con devolución del sobrante.** Es una liquidación de verdad,
@@ -547,9 +554,11 @@ corrección por signo.
 ### Rompe a propósito la consistencia con `Liquidacion`
 
 Con este cambio, `Aporte` deja el grupo de los ledgers inmutables y se suma
-al de `Ingreso`. **`Liquidacion` queda sola** como el único ledger sin
-ningún mecanismo de corrección: `liquidaciones.tsx` no tiene ni edición ni
-el asiento-en-contrario.
+al de `Ingreso`. En ese momento, **`Liquidacion` quedó sola** como el único
+ledger sin ningún mecanismo de corrección: `liquidaciones.tsx` no tenía ni
+edición ni el asiento-en-contrario. (Poco después ganó edición y borrado
+también, ver CLAUDE.md -- "Saldar deudas: editable" -- pero sin poder tocar
+la dirección, que sigue siendo la diferencia de fondo con `Aporte`/`Ingreso`.)
 
 La razón para no mover a los tres juntos es la misma que ya separaba a
 `Ingreso` de `Aporte`/`Liquidacion` en la sección 2.3c: importa el TRAZO

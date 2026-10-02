@@ -397,6 +397,26 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
             La meta era {formatearMonto(pozo.objetivo)}
           </Text>
         ) : null}
+
+        {/*
+          Atajo a la pantalla de siempre, con el chip Vaquita ya puesto -- NO
+          un formulario nuevo ni una segunda copia de FormularioDeGasto. El
+          default automatico por fecha (sacado en la auditoria de la 6.10) no
+          cubre comprar algo del viaje antes de que arranque o despues de que
+          termine; este boton es la salida a mano para ese caso, pidiendola la
+          persona en vez de que la pantalla la adivine.
+
+          Chico y con borde, no el `Boton` ancho de terracota: esta pantalla ya
+          tiene uno (Aportar), y docs/diseno.md es explicito -- un solo boton
+          terracota por pantalla, o ninguno es el principal.
+        */}
+        <Pressable
+          onPress={() => router.push({ pathname: '/gasto/nuevo', params: { destino: 'VAQUITA' } })}
+          accessibilityRole="button"
+          style={({ pressed }) => [estilos.agregarGasto, pressed && estilos.agregarGastoPresionado]}
+        >
+          <Text style={estilos.agregarGastoTexto}>+ Agregar gasto</Text>
+        </Pressable>
       </View>
 
       {/*
@@ -639,6 +659,21 @@ const estilos = StyleSheet.create({
     textAlign: 'center',
     ...numerosTabulares,
   },
+
+  // Chico y con borde a proposito: el `Boton` ancho de terracota ya lo usa
+  // "Aportar" mas abajo, y esta pantalla no puede tener dos.
+  agregarGasto: {
+    alignSelf: 'center',
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: colores.rio,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  agregarGastoPresionado: { backgroundColor: colores.rioSuave },
+  agregarGastoTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 15, color: colores.rioProfundo },
 
   vacioTitulo: {
     fontFamily: fuentes.displaySemi,

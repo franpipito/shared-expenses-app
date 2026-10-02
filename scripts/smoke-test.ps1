@@ -1163,6 +1163,40 @@ Chequear ($historial[0].de.nombre -eq "Deudor" -and $historial[0].para.nombre -e
 $saldoDelMes = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $deudor
 Chequear ($saldoDelMes.monto -eq 500) "GET /saldo del mes no se toco: sigue viendo la deuda sin descontar los pagos"
 
+# --- editar y borrar una liquidacion, tocando la fila ------------------------
+# A diferencia de un aporte a la vaquita, ACA CUALQUIERA de los dos puede
+# tocar CUALQUIER liquidacion del grupo, no solo la que registro. Se prueba
+# cruzado en los dos sentidos: Deudor edita la que registro Acreedor
+# (el pago de 300, via meLoPagaron), y Acreedor borra la que registro Deudor
+# (el pago de 200).
+$idPagoDe300 = $historial[0].id
+$idPagoDe200 = $historial[1].id
+
+EsperarValidacion { Invoke-RestMethod -Uri "$base/saldo/liquidaciones/$idPagoDe300" -Method Put -Headers $deudor `
+    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    "monto" "editar una liquidacion a cero se rechaza, mismo @Positive que crearla"
+
+# Deudor corrige el pago que registro ACREEDOR (de 300 a 250): la direccion
+# no se toca -- sigue siendo "Deudor le pago a Acreedor" -- solo el monto.
+# Como ahora pagaron 450 de los 500, a Deudor le queda debiendo 50.
+$despuesDeEditar = Invoke-RestMethod -Uri "$base/saldo/liquidaciones/$idPagoDe300" -Method Put -Headers $deudor `
+    -ContentType "application/json" -Body (@{ monto = 250 } | ConvertTo-Json)
+Chequear ($despuesDeEditar.monto -eq 50 -and $despuesDeEditar.aFavorMio -eq -50) `
+    "Deudor edita el pago que registro Acreedor, y el saldo se recalcula: quedan debiendo 50"
+
+# Acreedor borra el pago que registro DEUDOR (el de 200): solo queda el de
+# 250 editado arriba, asi que a Acreedor le vuelven a deber 250.
+$despuesDeBorrar = Invoke-RestMethod -Uri "$base/saldo/liquidaciones/$idPagoDe200" -Method Delete -Headers $acreedor
+Chequear ($despuesDeBorrar.monto -eq 250 -and $despuesDeBorrar.aFavorMio -eq 250) `
+    "Acreedor borra el pago que registro Deudor: vuelven a deberle 250"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/saldo/liquidaciones/$idPagoDe200" -Method Delete -Headers $acreedor } `
+    404 "borrar el mismo pago de nuevo da 404: ya no existe"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/saldo/liquidaciones/$idPagoDe200" -Method Put -Headers $deudor `
+    -ContentType "application/json" -Body (@{ monto = 1 } | ConvertTo-Json) } `
+    404 "editar un id de liquidacion inexistente da 404"
+
 foreach ($h in @($deudor, $acreedor)) {
     Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $h -UseBasicParsing `
         -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null

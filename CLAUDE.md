@@ -823,6 +823,55 @@ con el comentario de `Campo.tsx` en la seccion 2.1.
 Verificado con `tsc --noEmit --noUnusedLocals` y `expo export`. Falta
 volver a probar esta pantalla en el telefono con el fix.
 
+### Saldar deudas: editable, pero sin tocar la dirección
+
+Pedido de Franco, mas tarde en el proyecto: que una liquidación tambien se
+corrija tocando la fila, como ya pasó con `Ingreso` (sección 2.3c) y
+`Aporte` (ver más abajo, "La vaquita: el aporte se edita y se borra de
+verdad"). Antes de esto, `Liquidacion` no tenía NINGÚN mecanismo de
+corrección -- ni siquiera el asiento-en-contrario que `Aporte` tenía: el
+javadoc decía "se corrige con otra liquidación invertida", pero
+`liquidaciones.tsx` no exponía ningún botón para hacerlo.
+
+**Ganó un `setMonto()`, no un `id` nuevo**: a diferencia de `Ingreso` y
+`Aporte` (records embebidos sin identidad propia), `Liquidacion` siempre
+fue su propia colección top-level con `@Id`, así que editar/borrar es el
+mismo patrón de siempre (`findById` + mutar + `save()`, como `Gasto`) y no
+hizo falta ningún `$elemMatch` ni `$pull` -- los dos métodos nuevos del
+repositorio (`findByIdAndGrupoId`, `deleteByIdAndGrupoId`) son derivados de
+Spring Data, sin una línea de `MongoTemplate` a mano.
+
+**La diferencia de fondo que SÍ se mantuvo: `EditarLiquidacionRequest` solo
+tiene `monto`.** No hay forma de editar `de`/`para` por este endpoint -- ni
+siquiera por accidente, porque el campo no existe en el DTO. Si una
+liquidación se anotó al revés, la corrección sigue siendo borrarla y
+registrarla de nuevo bien.
+
+**Y el alcance es DISTINTO al de `Aporte`, a propósito.** Un aporte solo lo
+puede tocar quien lo hizo (`usuario.usuarioId` en el filtro). Una
+liquidación la puede editar o borrar CUALQUIERA de los dos integrantes del
+grupo, no solo quien la registró -- el filtro es `findByIdAndGrupoId`, sin
+usuario. La razón ya estaba en el diseño de `RegistrarLiquidacionRequest`:
+`meLoPagaron` existe justamente porque cualquiera de los dos puede ser
+quien abre la app para anotar un pago, inclusive quien lo recibió. No hay
+un campo "quién lo registró" distinto de `de`/`para`, así que restringir la
+corrección a una sola persona no tendría de qué agarrarse.
+
+Verificado con el caso cruzado en los dos sentidos contra Mongo real:
+Deudor y Acreedor registran un pago cada uno ($200 y $300). Deudor edita el
+pago que registró ACREEDOR (300 → 250): la dirección no se toca, y el
+saldo se recalcula solo (quedan debiendo $50). Acreedor borra el pago que
+registró DEUDOR (el de $200): vuelven a deberle $250. Los dos funcionaron
+con 200, y un id de otro grupo (probado con un segundo par de cuentas) dio
+404 en los dos verbos, sin tocar los datos de ese otro grupo.
+
+Verificado: 172 tests en el backend (167 + 5 nuevos en
+`LiquidacionServicioTest`, incluido el caso "la puede corregir CUALQUIERA
+de los dos"), todos en verde; `tsc --noEmit --noUnusedLocals` y `expo
+export --platform ios` en mobile, limpios. Sección nueva en
+`scripts/smoke-test.ps1` (15), con los números verificados a mano contra
+Mongo real antes de escribirla. Sin teléfono esta vuelta.
+
 ### "Mi Plata": el saldo personal, y el rediseno del resumen (v1.1, seccion 2.3b)
 
 Viole mando dos audios de WhatsApp usando la app de verdad, no en la
@@ -1215,11 +1264,14 @@ pozo ya CERRADO, dando el resultado esperado.
 Pedido de Franco: que un aporte se corrija tocando la fila, igual que ya
 funciona un ingreso de "Mi Plata" (sección 2.3c). Al agregarlo, se borró el
 botón "Me equivoqué: sacar esta plata del pozo", que era la corrección por
-signo. **Rompe a propósito la consistencia con `Liquidacion`**, que queda
-sola como el único ledger sin ningún mecanismo de corrección: la razón es
-la misma que ya separaba `Ingreso` de `Aporte`/`Liquidacion` en la 2.3c --
-a un `Aporte` corregirlo no pierde nada, a una `Liquidacion` la DIRECCIÓN
-("quién le pagó a quién") es el hecho que vale la pena preservar.
+signo. **Rompe a propósito la consistencia con `Liquidacion`**, que en su
+momento quedó como el único ledger sin ningún mecanismo de corrección: la
+razón es la misma que ya separaba `Ingreso` de `Aporte`/`Liquidacion` en la
+2.3c -- a un `Aporte` corregirlo no pierde nada, a una `Liquidacion` la
+DIRECCIÓN ("quién le pagó a quién") es el hecho que vale la pena preservar.
+(`Liquidacion` también terminó ganando edición y borrado poco después --
+ver más abajo -- pero sin poder tocar esa dirección, que sigue siendo lo
+que la distingue.)
 Detalle completo en `docs/vaquita.md`, sección 12.
 
 `Aporte` ganó un campo `id` (no lo tenía: nada permitía decir "este aporte,
@@ -1259,6 +1311,46 @@ Probado a mano con `curl` contra Mongo real -- de ahí salieron los dos
 bugs. Se sumó la sección correspondiente a `scripts/smoke-test.ps1`, sin
 correrla todavía (sin PowerShell en esta sandbox); sin teléfono esta
 vuelta tampoco.
+
+### Un atajo para cargar un gasto desde adentro de la vaquita
+
+Pregunta de Franco, pensando en developer senior: ¿convenía dejar cargar un
+gasto directamente desde `vaquita.tsx`, en vez de obligar a ir a la
+pantalla principal y elegir el chip Vaquita ahí? Sí, pero como ATAJO de
+navegación, no como un formulario nuevo -- `FormularioDeGasto` sigue
+siendo uno solo, por el mismo motivo de siempre (la inversión del
+porcentaje vive en un solo lugar a propósito, sección 6.9).
+
+**El hueco real que esto tapa**: el default automático a Vaquita se ata a
+`vigente` (hoy cae entre las fechas del viaje), a propósito -- ver "Tres
+huecos que encontraron las auditorías de la sesión 6.10". Pero eso deja
+afuera comprar algo DEL viaje antes de que arranque o después de que
+termine (pasajes, el hotel pagado por adelantado): justo cuando es más
+probable que alguien esté mirando la pantalla de la vaquita para planear,
+y el formulario principal no lo va a defaultear solo.
+
+**Cómo quedó**: un botón chico con borde ("+ Agregar gasto") arriba de
+todo en `vaquita.tsx`, que navega a `/gasto/nuevo?destino=VAQUITA`.
+`FormularioDeGasto` ganó una prop opcional `destinoSugerido` que solo
+cambia el PUNTO DE PARTIDA del chip -- la persona sigue pudiendo tocar
+cualquiera de los tres. **Chico y con borde, no el `Boton` ancho de
+terracota**: esta pantalla ya tiene uno ("Aportar"), y `Boton.tsx` es
+explícito -- un solo botón terracota por pantalla, o ninguno es el
+principal.
+
+**De paso, un ref que había quedado muerto.** `eligioAMano` (un
+`useRef` en `FormularioDeGasto`) existía solo para que el default
+automático a Vaquita -- el que la sesión 6.10 sacó por el bug del regalo
+sorpresa -- no pisara una elección ya hecha a mano. Al sacar ese default,
+nadie volvió a LEER el ref: quedó escribiéndose en cada tap sin que nada
+lo mirara. Se encontró tocando esta misma zona del código para
+`destinoSugerido`, y se borró -- no por prolijidad sola, sino porque
+dejarlo invitaba a alguien a asumir que todavía protegía algo.
+
+Verificado: `tsc --noEmit --noUnusedLocals` y `expo export --platform
+ios`, limpios (no hay cambios de backend: el shortcut es pura navegación).
+Falta probarlo en el teléfono: que el botón se vea bien arriba de la
+tarjeta, y que llegar por ahí deje el chip Vaquita puesto de una.
 
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.

@@ -1,7 +1,9 @@
 package com.gastoscompartidos.servicio;
 
+import com.gastoscompartidos.dto.EditarLiquidacionRequest;
 import com.gastoscompartidos.dto.RegistrarLiquidacionRequest;
 import com.gastoscompartidos.dto.SaldoTotalRespuesta;
+import com.gastoscompartidos.error.RecursoNoEncontradoException;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Liquidacion;
 import com.gastoscompartidos.modelo.ReferenciaUsuario;
@@ -12,6 +14,7 @@ import com.gastoscompartidos.repositorio.UsuarioRepositorio;
 import com.gastoscompartidos.seguridad.UsuarioActual;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -22,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -190,6 +194,90 @@ class LiquidacionServicioTest {
         List<?> respuesta = servicio.listar();
 
         assertThat(respuesta).hasSize(2);
+    }
+
+    @Nested
+    @DisplayName("Editar una liquidacion")
+    class Editar {
+
+        @Test
+        @DisplayName("corrige el monto de verdad, sin dejar un asiento nuevo, y releer el saldo total")
+        void corrigeYRelee() {
+            Liquidacion existente = new Liquidacion(GRUPO, franco.comoReferencia(), viole.comoReferencia(),
+                    new BigDecimal("300.00"), LocalDate.of(2026, 9, 15));
+            escribirCampo(existente, "id", "liq-1");
+            when(liquidaciones.findByIdAndGrupoId("liq-1", GRUPO)).thenReturn(Optional.of(existente));
+            when(gastos.saldoHistoricoDe(GRUPO, "u-franco")).thenReturn(BigDecimal.ZERO.setScale(2));
+            when(liquidaciones.findByGrupoIdOrderByFechaDescIdDesc(GRUPO)).thenReturn(List.of(existente));
+
+            servicio.editar("liq-1", new EditarLiquidacionRequest(new BigDecimal("450.00")));
+
+            assertThat(existente.getMonto()).isEqualByComparingTo("450.00");
+            verify(liquidaciones).save(existente);
+        }
+
+        @Test
+        @DisplayName("la puede corregir CUALQUIERA de los dos, no solo quien la registro")
+        void laOtraPersonaTambienPuede() {
+            // Esta liquidacion la registro Viole (de = Viole); quien pide el
+            // cambio es Franco, el usuario actual del mock. A diferencia de un
+            // aporte a la vaquita -- donde solo quien aporto puede tocar SU
+            // aporte -- esto tiene que andar: una liquidacion es un hecho entre
+            // los dos, no la propiedad de quien la tipeo.
+            Liquidacion existente = new Liquidacion(GRUPO, viole.comoReferencia(), franco.comoReferencia(),
+                    new BigDecimal("300.00"), LocalDate.of(2026, 9, 15));
+            escribirCampo(existente, "id", "liq-1");
+            when(liquidaciones.findByIdAndGrupoId("liq-1", GRUPO)).thenReturn(Optional.of(existente));
+            when(gastos.saldoHistoricoDe(GRUPO, "u-franco")).thenReturn(BigDecimal.ZERO.setScale(2));
+            when(liquidaciones.findByGrupoIdOrderByFechaDescIdDesc(GRUPO)).thenReturn(List.of(existente));
+
+            servicio.editar("liq-1", new EditarLiquidacionRequest(new BigDecimal("450.00")));
+
+            assertThat(existente.getMonto()).isEqualByComparingTo("450.00");
+            // La direccion no se tocó: sigue siendo Viole -> Franco.
+            assertThat(existente.getDe()).isEqualTo(viole.comoReferencia());
+            assertThat(existente.getPara()).isEqualTo(franco.comoReferencia());
+        }
+
+        @Test
+        @DisplayName("una liquidacion inexistente o de otro grupo da 404, sin distinguir cual")
+        void noSeDistingueElMotivo() {
+            // findByIdAndGrupoId ya exige las dos cosas en la misma consulta: no
+            // hay forma de llegar a editar una liquidacion de otro grupo ni de
+            // confirmar por el codigo de error si el id existe en otro lado.
+            when(liquidaciones.findByIdAndGrupoId("liq-ajena", GRUPO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> servicio.editar("liq-ajena", new EditarLiquidacionRequest(new BigDecimal("1.00"))))
+                    .isInstanceOf(RecursoNoEncontradoException.class);
+
+            verify(liquidaciones, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Borrar una liquidacion")
+    class Borrar {
+
+        @Test
+        @DisplayName("la borra y releer el saldo total")
+        void borraYRelee() {
+            when(liquidaciones.deleteByIdAndGrupoId("liq-1", GRUPO)).thenReturn(1L);
+            when(gastos.saldoHistoricoDe(GRUPO, "u-franco")).thenReturn(BigDecimal.ZERO.setScale(2));
+            when(liquidaciones.findByGrupoIdOrderByFechaDescIdDesc(GRUPO)).thenReturn(List.of());
+
+            servicio.borrar("liq-1");
+
+            verify(liquidaciones).deleteByIdAndGrupoId("liq-1", GRUPO);
+        }
+
+        @Test
+        @DisplayName("una liquidacion inexistente o de otro grupo da 404, sin distinguir cual")
+        void noSeDistingueElMotivo() {
+            when(liquidaciones.deleteByIdAndGrupoId("liq-ajena", GRUPO)).thenReturn(0L);
+
+            assertThatThrownBy(() -> servicio.borrar("liq-ajena"))
+                    .isInstanceOf(RecursoNoEncontradoException.class);
+        }
     }
 
     private static Usuario usuario(String id, String nombre) {

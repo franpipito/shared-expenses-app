@@ -1,7 +1,15 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
+import type { Destino } from '../../src/features/gastos/componentes/FormularioDeGasto';
 import { FormularioDeGasto } from '../../src/features/gastos/componentes/FormularioDeGasto';
 import { crearGasto } from '../../src/features/gastos/api';
+
+const DESTINOS_VALIDOS: readonly Destino[] = ['PERSONAL', 'COMPARTIDO', 'VAQUITA'];
+
+/** El atajo de la vaquita manda `?destino=VAQUITA`; cualquier otra cosa se ignora. */
+function destinoDesdeElParametro(valor: string | string[] | undefined): Destino | undefined {
+  return DESTINOS_VALIDOS.includes(valor as Destino) ? (valor as Destino) : undefined;
+}
 
 /**
  * Ruta de alta. El formulario vive en `features/gastos/componentes/` porque lo
@@ -18,14 +26,22 @@ import { crearGasto } from '../../src/features/gastos/api';
  *
  * Y lo que pasa al guardar es que **se encola**. `crearGasto` escribe en el
  * telefono y vuelve en el acto, sin esperar a la red.
+ *
+ * `destino`, por query param, es el atajo "+ Agregar gasto" de `vaquita.tsx`:
+ * preseleccionar Vaquita ahi ahorra el tap que el default automatico por
+ * fecha (sacado a proposito, ver `FormularioDeGasto`) no cubre antes o
+ * despues del viaje. Un valor que no sea uno de los tres destinos conocidos
+ * se ignora en silencio, no rompe el formulario.
  */
 export default function NuevoGasto() {
   const router = useRouter();
+  const { destino } = useLocalSearchParams<{ destino?: string }>();
 
   return (
     <FormularioDeGasto
       titulo="Nuevo gasto"
       textoDeAccion="Guardar"
+      destinoSugerido={destinoDesdeElParametro(destino)}
       onGuardar={async (datos) => {
         await crearGasto(datos);
         // `back` y no `replace`: esto es un modal que se cierra. El resumen que

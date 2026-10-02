@@ -23,11 +23,15 @@ import java.time.LocalDate;
  * borra la cuenta, esta liquidacion sigue leyendose con el nombre de quien
  * pago y quien recibio en ese momento.
  *
- * Inmutable por construccion, como {@link Aporte}: no se edita. Si se
- * registro mal, se corrige con otra liquidacion en el sentido contrario -- a
- * diferencia del aporte, donde la correccion es un monto negativo del MISMO
- * lado, aca cambia quien es `de` y quien es `para`, porque lo que importa
- * leer despues es quien le pago a quien, no un numero con signo.
+ * El monto se edita y se borra de verdad, tocando la fila -- mismo criterio
+ * que ya tienen {@code Ingreso} y {@code Aporte}. Lo que NO se edita es la
+ * DIRECCION: {@code de}/{@code para} no tienen setter, y la unica forma de
+ * cambiarlos es borrar y volver a registrar. Es la diferencia de fondo con
+ * esos otros dos ledgers: ahi un error de tipeo no tiene ningun valor
+ * historico, pero quien le pago a quien SI es un hecho que vale la pena
+ * preservar como tal -- editar el monto no lo toca, asi que no hacia falta
+ * sacrificar esa garantia para dejar de cargar con un asiento en contrario
+ * cuando el unico error real es un numero mal tipeado.
  */
 @Document(collection = "liquidacion")
 public class Liquidacion {
@@ -79,6 +83,10 @@ public class Liquidacion {
 
     public BigDecimal getMonto() {
         return monto;
+    }
+
+    public void setMonto(BigDecimal monto) {
+        this.monto = monto;
     }
 
     public LocalDate getFecha() {

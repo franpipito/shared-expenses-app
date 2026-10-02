@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -86,7 +86,7 @@ const REPARTO_POR_DEFECTO = 50;
  * COMPARTIDO y lo unico que lo distingue es tener `pozoId`. Este tipo existe
  * solo en la pantalla, que es donde la pregunta se hace una sola vez.
  */
-type Destino = 'PERSONAL' | 'COMPARTIDO' | 'VAQUITA';
+export type Destino = 'PERSONAL' | 'COMPARTIDO' | 'VAQUITA';
 
 /** De donde salio un gasto que ya existe, para preseleccionar el chip al editar. */
 function destinoDe(gasto: GastoRespuesta | undefined): Destino {
@@ -122,6 +122,17 @@ type Props = {
   onCancelar: () => void;
   /** Solo en edicion. Se dibuja abajo de todo, separado de la accion principal. */
   pieExtra?: React.ReactNode;
+  /**
+   * Preselecciona un destino al abrir, para el atajo "+ Agregar gasto" de la
+   * vaquita: llegar ahi ya con el chip Vaquita puesto ahorra el tap que el
+   * default automatico por fecha (sacado a proposito, ver mas abajo) no
+   * siempre cubre -- por ejemplo, comprar pasajes antes de que arranque el
+   * viaje. Es solo el PUNTO DE PARTIDA: la persona sigue pudiendo tocar otro
+   * chip, nada se fija.
+   *
+   * No aplica si se esta editando: `inicial` ya manda ahi.
+   */
+  destinoSugerido?: Destino;
 };
 
 export function FormularioDeGasto({
@@ -131,6 +142,7 @@ export function FormularioDeGasto({
   onGuardar,
   onCancelar,
   pieExtra,
+  destinoSugerido,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { usuario } = useSesion();
@@ -146,29 +158,12 @@ export function FormularioDeGasto({
   );
   const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? '');
   const [esHormiga, setEsHormiga] = useState(inicial?.esHormiga ?? false);
-  const [destino, setDestino] = useState<Destino>(destinoDe(inicial));
+  // `destinoSugerido` no aplica editando: `inicial` ya manda ahi (ver el
+  // javadoc de la prop).
+  const [destino, setDestino] = useState<Destino>(
+    inicial ? destinoDe(inicial) : (destinoSugerido ?? 'PERSONAL'),
+  );
   const [pozo, setPozo] = useState<PozoRespuesta | null>(null);
-  // Para que el default de la vaquita, que llega tarde porque es una request,
-  // no pise una eleccion que la persona ya hizo. Es el clasico de setear estado
-  // desde un efecto asincrono.
-  // Editando ya hay una eleccion hecha, asi que el default de la vaquita no
-  // tiene que pisarla: arranca en true.
-  /**
-   * Si la persona ya eligio el destino a mano.
-   *
-   * ES UN REF Y NO ESTADO, y el motivo es un bug real que tenia el codigo
-   * anterior: el efecto que trae la vaquita corre con `[]`, asi que capturaba
-   * el valor del PRIMER render y lo conservaba para siempre. Tocar el switch
-   * mientras la request estaba en vuelo no cambiaba lo que el efecto veia, y
-   * cuando contestaba pisaba la eleccion con VAQUITA.
-   *
-   * El comentario viejo decia que sacarlo de las dependencias evitaba pisar la
-   * eleccion. Hacia exactamente lo contrario.
-   *
-   * Un ref siempre lee el valor actual, sin re-ejecutar el efecto. Es
-   * justamente para lo que sirve.
-   */
-  const eligioAMano = useRef(inicial !== undefined);
   const [porcentaje, setPorcentaje] = useState(parteMia(inicial, usuario?.id));
   const [otro, setOtro] = useState<UsuarioRespuesta | null>(null);
   /**
@@ -257,19 +252,17 @@ export function FormularioDeGasto({
         // El default vuelve a ser PERSONAL, que es el seguro: lo compartido se
         // elige, nunca se asume. Cuesta un tap por gasto durante los cinco dias
         // del viaje. Si algun dia la vaquita pide fechas de verdad, se puede
-        // reconsiderar -- pero recien ahi.
-        void activo;
+        // reconsiderar -- pero recien ahi. (El atajo "+ Agregar gasto" de la
+        // vaquita, `destinoSugerido`, es la salida a mano para ese caso: lo pide
+        // la persona al navegar, en vez de que la pantalla lo adivine solo.)
       } catch {
         setPozo(null);
       }
     })();
-    // Corre una sola vez, al abrir. El ref de arriba es lo que hace que eso sea
-    // seguro: lee el valor actual sin necesidad de estar en las dependencias.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Corre una sola vez, al abrir: no hay nada reactivo que este efecto lea.
   }, []);
 
   function elegirDestino(elegido: Destino) {
-    eligioAMano.current = true;
     setDestino(elegido);
   }
 
