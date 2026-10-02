@@ -199,7 +199,15 @@ export type TotalPorPersona = {
   total: number;
 };
 
+/**
+ * Un aporte, tal como lo devuelve el backend.
+ *
+ * Trae `id`: el aporte se edita y se borra de verdad, tocando la fila --
+ * mismo criterio que ya tiene un ingreso de "Mi Plata" -- y hace falta algo
+ * para direccionar CUAL fila del historial se tocó.
+ */
 export type AporteRespuesta = {
+  id: string;
   usuario: UsuarioRespuesta;
   monto: number;
   /** yyyy-MM-dd */

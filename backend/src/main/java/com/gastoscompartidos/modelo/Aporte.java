@@ -20,8 +20,19 @@ import java.time.LocalDate;
  * ReferenciaUsuario: son pocos, estan acotados (dos personas, un punado de
  * aportes por viaje) y siempre se leen junto al pozo. Nunca se consultan solos.
  *
- * Es un record: inmutable, que es lo correcto para un asiento contable. Un
- * aporte no se edita; si estuvo mal, se compensa con otro.
+ * **Se edita y se borra de verdad** (al igual que {@link Ingreso}, y a
+ * diferencia de {@link Liquidacion}, que sigue siendo un ledger inmutable).
+ * Hasta ahora la correccion era un asiento en contrario -- "si estuvo mal, se
+ * compensa con otro" -- pero probarlo junto con el resto de los ledgers de la
+ * app dejo claro que el mismo argumento de Ingreso aplica igual de bien aca:
+ * un aporte tipeado mal es un dato a corregir, no un hecho contable que valga
+ * la pena enmendar con un segundo asiento. La diferencia con Liquidacion es
+ * que ahi la DIRECCION del pago (quien le pago a quien) es informacion en si
+ * misma que vale la pena conservar; en un aporte no hay direccion que
+ * preservar, solo un monto a nombre de quien lo puso.
+ *
+ * Por eso gano un {@code id}: sin el no habia forma de direccionar CUAL
+ * aporte tocar, mismo motivo por el que {@code Ingreso} lo gano antes.
  */
-public record Aporte(ReferenciaUsuario usuario, BigDecimal monto, LocalDate fecha) {
+public record Aporte(String id, ReferenciaUsuario usuario, BigDecimal monto, LocalDate fecha) {
 }

@@ -3,6 +3,7 @@ package com.gastoscompartidos.servicio;
 import com.gastoscompartidos.dto.AporteRequest;
 import com.gastoscompartidos.dto.AporteRespuesta;
 import com.gastoscompartidos.dto.CrearPozoRequest;
+import com.gastoscompartidos.dto.EditarAporteRequest;
 import com.gastoscompartidos.dto.GastoRespuesta;
 import com.gastoscompartidos.dto.PozoRespuesta;
 import com.gastoscompartidos.dto.TotalPorPersona;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -147,14 +149,14 @@ public class PozoServicio {
         // otra persona. Un aporte es la afirmacion "puse esta plata": solo la
         // puede emitir quien la puso. Por eso AporteRequest ni siquiera tiene
         // un campo para el usuario.
-        // Cero no es un aporte ni una correccion: es ruido en el historial. El
-        // negativo si vale, y es como se deshace un aporte equivocado.
+        //
+        // Sin chequeo manual de cero: @Positive en el DTO ya rechaza cero Y
+        // negativo antes de que este metodo se ejecute (mismo criterio que
+        // agregarIngreso desde que Ingreso dejo de admitir negativo).
         BigDecimal monto = normalizar(req.monto());
-        if (monto.signum() == 0) {
-            throw new ReglaDeNegocioException("El monto no puede ser cero");
-        }
 
         Aporte aporte = new Aporte(
+                UUID.randomUUID().toString(),
                 actual.comoReferencia(),
                 monto,
                 LocalDate.now(reloj));
@@ -166,6 +168,36 @@ public class PozoServicio {
             throw new RecursoNoEncontradoException("No existe una vaquita abierta con ese id");
         }
 
+        return respuesta(recargar(pozoId, actual.getGrupoId()));
+    }
+
+    /**
+     * Corrige el monto de un aporte ya cargado. A diferencia de
+     * {@code aportar}, NO exige que el pozo este ABIERTO: un aporte tipeado
+     * mal se puede encontrar recien al volver del viaje, mismo criterio que
+     * ya vale para corregir un gasto de una vaquita cerrada.
+     *
+     * Solo el dueño del aporte puede corregirlo -- la verificacion vive en el
+     * filtro de {@code PozoConsultas.editarAporte}, no aca, mismo criterio
+     * que la visibilidad de un gasto.
+     */
+    public PozoRespuesta editarAporte(String pozoId, String aporteId, EditarAporteRequest req) {
+        Usuario actual = usuarioActual.requerido();
+        boolean existia = pozos.editarAporte(
+                pozoId, actual.getGrupoId(), actual.getId(), aporteId, normalizar(req.monto()));
+        if (!existia) {
+            throw new RecursoNoEncontradoException("No existe el aporte " + aporteId);
+        }
+        return respuesta(recargar(pozoId, actual.getGrupoId()));
+    }
+
+    /** Saca un aporte del historial. Mismas reglas que editarAporte. */
+    public PozoRespuesta borrarAporte(String pozoId, String aporteId) {
+        Usuario actual = usuarioActual.requerido();
+        boolean existia = pozos.borrarAporte(pozoId, actual.getGrupoId(), actual.getId(), aporteId);
+        if (!existia) {
+            throw new RecursoNoEncontradoException("No existe el aporte " + aporteId);
+        }
         return respuesta(recargar(pozoId, actual.getGrupoId()));
     }
 

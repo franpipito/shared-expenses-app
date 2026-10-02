@@ -2,6 +2,8 @@ package com.gastoscompartidos.repositorio;
 
 import com.gastoscompartidos.modelo.Aporte;
 
+import java.math.BigDecimal;
+
 /**
  * Las escrituras del pozo que NO pueden hacerse con save().
  *
@@ -39,6 +41,36 @@ public interface PozoConsultas {
      *         existe.
      */
     boolean agregarAporte(String pozoId, String grupoId, Aporte aporte);
+
+    /**
+     * Corrige el monto de un aporte ya cargado, en una operacion atomica que
+     * ademas verifica que el aporte sea DE ESA PERSONA.
+     *
+     * A DIFERENCIA de agregarAporte, no exige que el pozo este ABIERTO: un
+     * error encontrado al volver del viaje tiene que poder corregirse igual,
+     * mismo criterio que ya vale para los gastos (seccion 6.9 de CLAUDE.md,
+     * "una vaquita cerrada ya no congela sus gastos").
+     *
+     * La verificacion de que el aporte sea de quien pide el cambio viaja dentro
+     * del filtro (aportes.usuario.usuarioId), no en un if del servicio -- mismo
+     * criterio que la visibilidad de un gasto: las reglas de acceso van lo mas
+     * abajo que se pueda. Nadie puede tocar un aporte ajeno, ni para corregirlo
+     * ni para borrarlo: un aporte es la afirmacion de una persona sobre SU
+     * plata, y alterarla por otra abriria la puerta a vaciar en silencio el
+     * aporte de alguien.
+     *
+     * @return true si se corrigio; false si el pozo no existe, no es del grupo,
+     *         el aporte no existe, o no es de esta persona. Los cuatro casos se
+     *         ven iguales desde afuera, a proposito: distinguirlos confirmaria
+     *         cosas que no son asunto de quien pregunta.
+     */
+    boolean editarAporte(String pozoId, String grupoId, String usuarioId, String aporteId, BigDecimal nuevoMonto);
+
+    /**
+     * Saca un aporte de la lista. Mismas reglas que editarAporte: no exige
+     * pozo ABIERTO, y solo el dueño del aporte puede borrarlo.
+     */
+    boolean borrarAporte(String pozoId, String grupoId, String usuarioId, String aporteId);
 
     /**
      * Cierra el pozo, tambien condicionalmente.

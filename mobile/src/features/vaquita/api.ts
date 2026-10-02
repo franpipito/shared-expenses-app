@@ -64,6 +64,19 @@ export function aportar(pozoId: string, aporte: AporteRequest): Promise<PozoResp
   return pedir<PozoRespuesta>(`/pozos/${pozoId}/aportes`, { metodo: 'POST', cuerpo: aporte });
 }
 
+/** Corrige el monto de un aporte ya cargado. Devuelve el pozo ya actualizado. */
+export function editarAporte(pozoId: string, aporteId: string, monto: number): Promise<PozoRespuesta> {
+  return pedir<PozoRespuesta>(`/pozos/${pozoId}/aportes/${aporteId}`, {
+    metodo: 'PUT',
+    cuerpo: { monto },
+  });
+}
+
+/** Saca un aporte del historial. Devuelve el pozo ya actualizado. */
+export function borrarAporte(pozoId: string, aporteId: string): Promise<PozoRespuesta> {
+  return pedir<PozoRespuesta>(`/pozos/${pozoId}/aportes/${aporteId}`, { metodo: 'DELETE' });
+}
+
 export function cerrarPozo(pozoId: string): Promise<PozoRespuesta> {
   return pedir<PozoRespuesta>(`/pozos/${pozoId}/cerrar`, { metodo: 'POST' });
 }

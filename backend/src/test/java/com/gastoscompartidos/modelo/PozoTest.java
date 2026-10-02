@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,7 +50,7 @@ class PozoTest {
     }
 
     private static Aporte aporte(String usuarioId, String nombre, String monto) {
-        return new Aporte(new ReferenciaUsuario(usuarioId, nombre),
+        return new Aporte(UUID.randomUUID().toString(), new ReferenciaUsuario(usuarioId, nombre),
                 new BigDecimal(monto), DESDE);
     }
 

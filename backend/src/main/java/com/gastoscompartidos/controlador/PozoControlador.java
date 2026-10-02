@@ -2,6 +2,7 @@ package com.gastoscompartidos.controlador;
 
 import com.gastoscompartidos.dto.AporteRequest;
 import com.gastoscompartidos.dto.CrearPozoRequest;
+import com.gastoscompartidos.dto.EditarAporteRequest;
 import com.gastoscompartidos.dto.GastoRespuesta;
 import com.gastoscompartidos.dto.PozoRespuesta;
 import com.gastoscompartidos.servicio.PozoServicio;
@@ -75,6 +76,22 @@ public class PozoControlador {
     @PostMapping("/{id}/aportes")
     public PozoRespuesta aportar(@PathVariable String id, @Valid @RequestBody AporteRequest req) {
         return servicio.aportar(id, req);
+    }
+
+    /**
+     * PUT /pozos/{id}/aportes/{aporteId} — corrige un aporte ya cargado.
+     * Solo el dueño del aporte puede corregirlo; un pozo cerrado igual deja.
+     */
+    @PutMapping("/{id}/aportes/{aporteId}")
+    public PozoRespuesta editarAporte(
+            @PathVariable String id, @PathVariable String aporteId, @Valid @RequestBody EditarAporteRequest req) {
+        return servicio.editarAporte(id, aporteId, req);
+    }
+
+    /** DELETE /pozos/{id}/aportes/{aporteId} — saca un aporte del historial. */
+    @DeleteMapping("/{id}/aportes/{aporteId}")
+    public PozoRespuesta borrarAporte(@PathVariable String id, @PathVariable String aporteId) {
+        return servicio.borrarAporte(id, aporteId);
     }
 
     /** POST /pozos/{id}/cerrar — terminó el viaje. No devuelve el sobrante: eso lo arreglan ellos. */

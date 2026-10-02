@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  ActionSheetIOS,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -15,13 +16,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorDeApi } from '../src/api/cliente';
-import type { GastoRespuesta, PozoRespuesta } from '../src/api/tipos';
+import type { AporteRespuesta, GastoRespuesta, PozoRespuesta } from '../src/api/tipos';
 import { Boton } from '../src/componentes/Boton';
 import { formatearMonto } from '../src/componentes/Monto';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { FilaGasto } from '../src/features/gastos/componentes/FilaGasto';
-import { aportar, cerrarPozo, crearPozo } from '../src/features/vaquita/api';
+import { aportar, borrarAporte, cerrarPozo, crearPozo, editarAporte } from '../src/features/vaquita/api';
 import { useVaquita } from '../src/features/vaquita/hooks/useVaquita';
 import { colores } from '../src/tema/colores';
 import { fuentes, numerosTabulares } from '../src/tema/tipografia';
@@ -249,6 +250,7 @@ type PropsPozo = {
 function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: PropsPozo) {
   const router = useRouter();
   const [monto, setMonto] = useState('');
+  const [editando, setEditando] = useState<AporteRespuesta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -256,12 +258,74 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
   const montoValido = monto.trim() !== '' && Number.isFinite(montoNumero) && montoNumero > 0;
   const enRojo = pozo.restante < 0;
 
-  async function registrarAporte(signo: 1 | -1) {
+  function empezarAEditar(aporte: AporteRespuesta) {
+    setError(null);
+    setEditando(aporte);
+    setMonto(String(aporte.monto));
+  }
+
+  function cancelarEdicion() {
+    setError(null);
+    setEditando(null);
+    setMonto('');
+  }
+
+  /**
+   * Tocar una fila DEL HISTORIAL (no la del otro integrante: esas no son
+   * tocables, ver mas abajo). Mismo menu nativo que Mi Plata -- Editar /
+   * Borrar / Cancelar -- disparado con un toque simple.
+   */
+  function tocarFila(aporte: AporteRespuesta) {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: `${formatearMonto(aporte.monto)} · ${aporte.fecha}`,
+        options: ['Editar', 'Borrar', 'Cancelar'],
+        destructiveButtonIndex: 1,
+        cancelButtonIndex: 2,
+      },
+      (indice) => {
+        if (indice === 0) empezarAEditar(aporte);
+        else if (indice === 1) confirmarBorrado(aporte);
+      },
+    );
+  }
+
+  function confirmarBorrado(aporte: AporteRespuesta) {
+    Alert.alert(
+      'Borrar este aporte',
+      `Se van a sacar ${formatearMonto(aporte.monto)} del pozo. No se puede deshacer.`,
+      [
+        { text: 'Dejarlo', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setError(null);
+              try {
+                onCambio(await borrarAporte(pozo.id, aporte.id));
+                if (editando?.id === aporte.id) cancelarEdicion();
+              } catch (e) {
+                setError(e instanceof ErrorDeApi ? e.message : 'No se pudo borrar el aporte.');
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }
+
+  async function confirmarFormulario() {
     setError(null);
     setEnviando(true);
     try {
-      onCambio(await aportar(pozo.id, { monto: signo * montoNumero }));
+      if (editando) {
+        onCambio(await editarAporte(pozo.id, editando.id, montoNumero));
+      } else {
+        onCambio(await aportar(pozo.id, { monto: montoNumero }));
+      }
       setMonto('');
+      setEditando(null);
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo registrar el aporte.');
     } finally {
@@ -370,58 +434,125 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
         ))}
       </View>
 
-      <View style={estilos.bloque}>
-        {/*
-          "Aportar" y no "poner": "ponerla" tiene doble sentido en Argentina, y
-          aportar es ademas la palabra del dominio (Aporte en el backend).
-        */}
-        <Text style={estilos.rotuloSeccion}>Tu aporte</Text>
-        <View style={estilos.filaAporte}>
-          <TextInput
-            value={monto}
-            onChangeText={setMonto}
-            keyboardType="decimal-pad"
-            placeholder="0,00"
-            placeholderTextColor={colores.borde}
-            style={[estilos.input, estilos.inputAporte, numerosTabulares]}
-          />
+      {/*
+        Oculto mientras se edita una fila del historial (mas abajo): el input
+        de aca y el de la fila comparten el estado `monto`, y mostrar los dos
+        a la vez se veria como si escribieran en espejo sin motivo -- mismo
+        criterio que "Mi Plata".
+      */}
+      {!editando ? (
+        <View style={estilos.bloque}>
+          {/*
+            "Aportar" y no "poner": "ponerla" tiene doble sentido en
+            Argentina, y aportar es ademas la palabra del dominio (Aporte en
+            el backend).
+          */}
+          <Text style={estilos.rotuloSeccion}>Tu aporte</Text>
+          <View style={estilos.filaAporte}>
+            <TextInput
+              value={monto}
+              onChangeText={setMonto}
+              keyboardType="decimal-pad"
+              placeholder="0,00"
+              placeholderTextColor={colores.borde}
+              style={[estilos.input, estilos.inputAporte, numerosTabulares]}
+            />
+          </View>
+          {/*
+            Queda a nombre tuyo y no hay forma de anotar plata a nombre del
+            otro: el backend lo saca del token. Decirlo evita que alguien
+            busque el selector que no existe.
+          */}
+          <Text style={estilos.ayuda}>Queda a tu nombre.</Text>
+          <View style={estilos.accion}>
+            <Boton
+              titulo="Aportar"
+              onPress={() => void confirmarFormulario()}
+              cargando={enviando}
+              deshabilitado={!montoValido}
+            />
+          </View>
         </View>
-        {/*
-          Queda a nombre tuyo y no hay forma de anotar plata a nombre del otro:
-          el backend lo saca del token. Decirlo evita que alguien busque el
-          selector que no existe.
-        */}
-        <Text style={estilos.ayuda}>Queda a tu nombre.</Text>
-        <View style={estilos.accion}>
-          <Boton
-            titulo="Aportar"
-            onPress={() => void registrarAporte(1)}
-            cargando={enviando}
-            deshabilitado={!montoValido}
-          />
-        </View>
-        {/*
-          SACAR PLATA ES COMO SE DESHACE UN APORTE EQUIVOCADO. Si tipeaste
-          4.000.000 en vez de 400.000 parado en el aeropuerto, antes el pozo
-          quedaba asi para siempre: los aportes son inmutables a proposito, no
-          hay endpoint para borrarlos, y el monto no admitia negativos.
-          Compensar con un asiento en contrario es la forma contable correcta, y
-          deja el rastro de los dos movimientos.
-        */}
-        <Pressable
-          onPress={() => void registrarAporte(-1)}
-          disabled={!montoValido || enviando}
-          accessibilityRole="button"
-          accessibilityLabel="Sacar del pozo, para corregir un aporte equivocado"
-          hitSlop={8}
-        >
-          <Text style={[estilos.sacar, !montoValido && { opacity: 0.4 }]}>
-            Me equivoqué: sacar esta plata del pozo
-          </Text>
-        </Pressable>
-      </View>
+      ) : null}
 
       {error ? <Text style={estilos.error}>{error}</Text> : null}
+
+      {/*
+        Cada aporte de la lista, tocable -- pero SOLO el tuyo. El del otro
+        integrante se ve pero no se toca: un aporte es la afirmacion de una
+        persona sobre SU plata ("puse esto"), y alterarlo por otra abriria
+        la puerta a vaciar en silencio lo que esa persona puso. El backend
+        rechaza igual un intento directo por la API (404, sin distinguir del
+        inexistente); esto es solo que la UI no invite a algo que va a fallar.
+      */}
+      {pozo.aportes.length > 0 ? (
+        <View style={estilos.bloque}>
+          <Text style={estilos.rotuloSeccion}>Historial de aportes</Text>
+          <Text style={estilos.ayuda}>Tocá uno de los tuyos para editarlo o borrarlo.</Text>
+          {[...pozo.aportes].reverse().map((aporte) => {
+            if (editando?.id === aporte.id) {
+              // Editar de verdad EN LA FILA, mismo patron que Mi Plata: el
+              // input queda justo donde estaba el numero que se corrige.
+              return (
+                <View key={aporte.id} style={estilos.filaEditando}>
+                  <TextInput
+                    value={monto}
+                    onChangeText={setMonto}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                    placeholder="0,00"
+                    placeholderTextColor={colores.borde}
+                    style={[estilos.inputInline, numerosTabulares]}
+                  />
+                  <View style={estilos.accionesInline}>
+                    <Pressable onPress={cancelarEdicion} accessibilityRole="button" hitSlop={8}>
+                      <Text style={estilos.cancelarInline}>Cancelar</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void confirmarFormulario()}
+                      disabled={!montoValido || enviando}
+                      accessibilityRole="button"
+                      hitSlop={8}
+                    >
+                      <Text
+                        style={[
+                          estilos.guardarInline,
+                          (!montoValido || enviando) && { opacity: 0.4 },
+                        ]}
+                      >
+                        Guardar
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            }
+
+            const esMio = aporte.usuario.id === idUsuarioActual;
+            if (!esMio) {
+              return (
+                <View key={aporte.id} style={estilos.fila}>
+                  <Text style={estilos.filaEtiqueta}>{aporte.usuario.nombre} · {aporte.fecha}</Text>
+                  <Text style={estilos.filaMonto}>{formatearMonto(aporte.monto)}</Text>
+                </View>
+              );
+            }
+
+            return (
+              <Pressable
+                key={aporte.id}
+                onPress={() => tocarFila(aporte)}
+                accessibilityRole="button"
+                accessibilityLabel={`Tu aporte de ${formatearMonto(aporte.monto)} del ${aporte.fecha}, tocar para editar o borrar`}
+                style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+              >
+                <Text style={estilos.filaEtiqueta}>{aporte.usuario.nombre} · {aporte.fecha}</Text>
+                <Text style={estilos.filaMonto}>{formatearMonto(aporte.monto)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       <View style={estilos.bloque}>
         <Text style={estilos.rotuloSeccion}>
@@ -572,6 +703,7 @@ const estilos = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
+  filaPresionada: { backgroundColor: colores.arena },
   filaEtiqueta: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.texto },
   filaMonto: {
     fontFamily: fuentes.displaySemi,
@@ -580,13 +712,32 @@ const estilos = StyleSheet.create({
     ...numerosTabulares,
   },
 
-  sacar: {
-    fontFamily: fuentes.cuerpoSemi,
-    fontSize: 14,
-    color: colores.terracotaProfunda,
-    textAlign: 'center',
+  // La fila en modo edicion, mismo molde que Mi Plata: mismo tamano que una
+  // fila normal, con un borde mas marcado para que se note cual se corrige.
+  filaEditando: {
+    backgroundColor: colores.tarjeta,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colores.rioProfundo,
+    paddingHorizontal: 14,
     paddingVertical: 12,
+    gap: 10,
   },
+  inputInline: {
+    backgroundColor: colores.fondo,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    fontFamily: fuentes.displaySemi,
+    fontSize: 18,
+    color: colores.texto,
+  },
+  accionesInline: { flexDirection: 'row', justifyContent: 'flex-end', gap: 24 },
+  cancelarInline: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.textoSuave },
+  guardarInline: { fontFamily: fuentes.cuerpoSemi, fontSize: 14, color: colores.rioProfundo },
+
   flecha: { fontFamily: fuentes.cuerpoSemi, fontSize: 20, color: colores.rioProfundo },
   cerrar: {
     fontFamily: fuentes.cuerpoSemi,

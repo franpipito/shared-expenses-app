@@ -1210,6 +1210,56 @@ Mongo real); `tsc --noEmit --noUnusedLocals` y `expo export --platform ios`
 limpios; y el mismo caso corrido a mano contra Mongo real con `curl`, con el
 pozo ya CERRADO, dando el resultado esperado.
 
+### La vaquita: el aporte se edita y se borra de verdad
+
+Pedido de Franco: que un aporte se corrija tocando la fila, igual que ya
+funciona un ingreso de "Mi Plata" (sección 2.3c). Al agregarlo, se borró el
+botón "Me equivoqué: sacar esta plata del pozo", que era la corrección por
+signo. **Rompe a propósito la consistencia con `Liquidacion`**, que queda
+sola como el único ledger sin ningún mecanismo de corrección: la razón es
+la misma que ya separaba `Ingreso` de `Aporte`/`Liquidacion` en la 2.3c --
+a un `Aporte` corregirlo no pierde nada, a una `Liquidacion` la DIRECCIÓN
+("quién le pagó a quién") es el hecho que vale la pena preservar.
+Detalle completo en `docs/vaquita.md`, sección 12.
+
+`Aporte` ganó un campo `id` (no lo tenía: nada permitía decir "este aporte,
+no el otro"). `AporteRequest.monto` pasó a `@Positive` -- ya no hay
+corrección por signo, así que un aporte siempre es "puse esta plata".
+
+**Dos bugs reales en `PozoConsultasImpl`, los dos encontrados contra Mongo
+real y ninguno con un mock:**
+
+1. `editarAporte`/`borrarAporte` filtraban con dos condiciones SUELTAS
+   sobre el array (`"aportes.id"` y `"aportes.usuario.usuarioId"`), que en
+   Mongo NO exigen que las cumpla el mismo elemento -- cada una matchea
+   contra CUALQUIER elemento por separado. Con las dos personas teniendo
+   aporte propio en el mismo pozo, pedir tocar el aporte de una pasando su
+   id pero el usuarioId de la OTRA podía matchear igual.
+2. El `$inc` de `version` no es condicional al `$pull`: con el chequeo de
+   dueño solo adentro del filtro del pull, borrar el aporte ajeno hacía
+   subir `version` igual (el documento matcheaba por `_id`+`grupo_id`) y
+   `modifiedCount` daba mayor a cero sin haber borrado nada -- HTTP 200 en
+   vez de 404. Este fue el que realmente se vio fallar en una prueba viva
+   antes de arreglarlo, no uno encontrado solo leyendo código.
+
+Los dos se resuelven igual: el filtro de ARRIBA pasa a usar `$elemMatch`
+(id + usuario.usuarioId del MISMO elemento), así que ni el pull ni el inc
+corren si el aporte no existe o no es de quien lo pide. Verificado con el
+caso que de verdad expone el bug 1: dos usuarios con aporte propio cada
+uno, cruzando los intentos de editar/borrar el aporte del otro (404 los
+cuatro) y el propio (200 los dos).
+
+En mobile, `app/vaquita.tsx` copia el patrón de `mi-plata.tsx`: tocar la
+fila abre un `ActionSheetIOS`, Editar convierte la fila en un input inline,
+y el formulario de arriba se oculta mientras tanto.
+
+Verificado: 167 tests en el backend, todos en verde; `tsc --noEmit
+--noUnusedLocals` y `expo export --platform ios` en mobile, limpios.
+Probado a mano con `curl` contra Mongo real -- de ahí salieron los dos
+bugs. Se sumó la sección correspondiente a `scripts/smoke-test.ps1`, sin
+correrla todavía (sin PowerShell en esta sandbox); sin teléfono esta
+vuelta tampoco.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

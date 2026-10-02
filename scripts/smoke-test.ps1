@@ -713,9 +713,44 @@ EsperarRegla { Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $ella 
     "Ya hay una vaquita abierta" "no se puede abrir una segunda vaquita en el grupo"
 
 # --- aportes ---------------------------------------------------------------
-$pozo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+
+# Un aporte mal cargado ya NO se corrige con un asiento en contra: se edita o
+# se borra tocando la fila, igual que un ingreso de "Mi Plata" (seccion 2.3c).
+# El monto tambien dejo de admitir negativo o cero -- @Positive, mismo
+# precedente que RegistrarIngresoRequest. Ver docs/vaquita.md, seccion 12.
+EsperarValidacion { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    "monto" "un aporte de cero se rechaza por Bean Validation"
+
+EsperarValidacion { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = -90000 } | ConvertTo-Json) } `
+    "monto" "un aporte negativo tambien se rechaza: ya no es la forma de corregir uno mal cargado"
+
+# Franco se equivoca de digitos: tipea 4.000.000 en vez de 400.000.
+$conTypo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = 4000000.00 } | ConvertTo-Json)
+$idAporteFranco = $conTypo.aportes[0].id
+Chequear ($null -ne $idAporteFranco) "el aporte que vuelve trae id: hace falta para poder editarlo o borrarlo"
+
+# El dueno es quien aporto, no quien pide: Ella no puede tocar el aporte de
+# Franco, ni para editarlo ni para borrarlo. Bug real encontrado contra Mongo
+# de verdad esta sesion (docs/vaquita.md, seccion 12): un filtro sin
+# $elemMatch podia dejar pasar justo esto.
+EsperarCodigo { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes/$idAporteFranco" -Method Put -Headers $ella `
+    -ContentType "application/json" -Body (@{ monto = 1.00 } | ConvertTo-Json) } 404 `
+    "editar el aporte de la otra persona da 404"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes/$idAporteFranco" -Method Delete -Headers $ella } 404 `
+    "borrar el aporte de la otra persona da 404"
+
+EsperarValidacion { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes/$idAporteFranco" -Method Put -Headers $franco `
+    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
+    "monto" "editar un aporte a cero se rechaza, mismo @Positive que crearlo"
+
+$pozo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes/$idAporteFranco" -Method Put -Headers $franco `
     -ContentType "application/json" -Body (@{ monto = 400000.00 } | ConvertTo-Json)
-Chequear ($pozo.aportado -eq 400000.00) "el aporte de Franco entra"
+Chequear ($pozo.aportado -eq 400000.00) "franco corrige el typo tocando la fila"
+Chequear (($pozo.aportes | Measure-Object).Count -eq 1) "editar no deja un asiento de mas, corrige el que estaba"
 
 $pozo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $ella `
     -ContentType "application/json" -Body (@{ monto = 400000.00 } | ConvertTo-Json)
@@ -727,28 +762,26 @@ Chequear ($pozo.restante -eq 800000.00) "sin gastos, el restante es todo lo apor
 $deElla = $pozo.porPersona | Where-Object { $_.usuarioId -eq $ELLA_ID }
 Chequear ($deElla.total -eq 400000.00) "cada aporte queda a nombre de quien lo hizo"
 
-# Un aporte equivocado se deshace compensandolo, no borrandolo: los aportes son
-# inmutables a proposito. Antes esto era imposible (el monto era @Positive y no
-# hay endpoint para borrar un aporte), asi que un 4.000.000 tipeado en vez de
-# 400.000 quedaba en el pozo para siempre.
-$conError = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
-    -ContentType "application/json" -Body (@{ monto = 90000.00 } | ConvertTo-Json)
-Chequear ($conError.aportado -eq 890000.00) "un aporte de mas entra"
+# Ella toca dos veces el boton de aportar sin querer y le queda un aporte
+# duplicado. A diferencia del typo de arriba (donde el aporte debia EXISTIR
+# con otro valor), este no debia existir: la correccion es borrarlo, no
+# editarlo.
+$conDuplicado = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $ella `
+    -ContentType "application/json" -Body (@{ monto = 50000.00 } | ConvertTo-Json)
+$idAporteDuplicado = ($conDuplicado.aportes | Where-Object { $_.usuario.id -eq $ELLA_ID } | Select-Object -Last 1).id
+Chequear ($conDuplicado.aportado -eq 850000.00) "el aporte duplicado entra igual, nada lo distingue de uno real"
 
-$corregido = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
-    -ContentType "application/json" -Body (@{ monto = -90000.00 } | ConvertTo-Json)
-Chequear ($corregido.aportado -eq 800000.00) "y se deshace con un aporte negativo"
-Chequear (($corregido.aportes | Measure-Object).Count -eq 4) `
-    "quedan los dos asientos, no se borra ninguno"
+# Chequeo de dueno en la otra direccion: ahora es Franco quien no puede borrar
+# un aporte de Ella.
+EsperarCodigo { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes/$idAporteDuplicado" -Method Delete -Headers $franco } 404 `
+    "borrar el aporte de la otra persona da 404, tambien en este sentido"
 
-# EsperarRegla y no EsperarValidacion: el cero lo rechaza PozoServicio, no una
-# anotacion. Es donde va -- Bean Validation no tiene un @NotZero, y escribir una
-# anotacion propia para un solo campo es mas maquinaria que regla.
-EsperarRegla { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes" -Method Post -Headers $franco `
-    -ContentType "application/json" -Body (@{ monto = 0 } | ConvertTo-Json) } `
-    "no puede ser cero" "un aporte de cero se rechaza: no es aporte ni correccion"
+$pozo = Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes/$idAporteDuplicado" -Method Delete -Headers $ella
+Chequear ($pozo.aportado -eq 800000.00) "ella borra su propio aporte duplicado"
+Chequear (($pozo.aportes | Measure-Object).Count -eq 2) "y quedan los dos aportes reales, ni uno de mas"
 
-$pozo = $corregido
+EsperarCodigo { Invoke-RestMethod -Uri "$base/pozos/$($pozo.id)/aportes/$idAporteDuplicado" -Method Delete -Headers $ella } 404 `
+    "borrar el mismo aporte de nuevo da 404: ya no existe"
 
 # --- el saldo y la nutria ANTES de tocar la vaquita -------------------------
 $saldoAntes   = Invoke-RestMethod -Uri "$base/saldo?mes=2026-09" -Headers $franco

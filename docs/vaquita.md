@@ -535,3 +535,113 @@ abierto, quién pagó qué todavía puede cambiar. El número se muestra con el
 signo puesto, sin `Math.abs()`, mismo criterio que ya se adoptó para "Mi
 Plata" en negativo: un número con el signo se lee más como una cuenta real,
 y no esconde que alguien tiene que devolver plata.
+
+## 12. El aporte se edita y se borra de verdad, tocando la fila
+
+Pedido de Franco: que un aporte a la vaquita se corrija igual que ya se
+corrige un ingreso de "Mi Plata" (CLAUDE.md, sección 2.3c) -- tocar la fila
+del historial, no cargar un asiento en contra. Al agregarlo, se borró el
+botón "Me equivoqué: sacar esta plata del pozo", que era la UI de esa
+corrección por signo.
+
+### Rompe a propósito la consistencia con `Liquidacion`
+
+Con este cambio, `Aporte` deja el grupo de los ledgers inmutables y se suma
+al de `Ingreso`. **`Liquidacion` queda sola** como el único ledger sin
+ningún mecanismo de corrección: `liquidaciones.tsx` no tiene ni edición ni
+el asiento-en-contrario.
+
+La razón para no mover a los tres juntos es la misma que ya separaba a
+`Ingreso` de `Aporte`/`Liquidacion` en la sección 2.3c: importa el TRAZO
+del hecho, no solo el valor final. Un aporte a la vaquita es "puse esta
+plata", un hecho de una sola persona -- si el monto se tipeó mal,
+corregirlo no pierde nada. Una `Liquidacion` registra DOS personas y una
+DIRECCIÓN ("Franco le pagó a Viole"), y esa dirección es information que
+vale la pena preservar como hecho inmutable, no solo un valor a corregir.
+
+### Lo que costó: `Aporte` no tenía identidad
+
+`Aporte` era un `record(ReferenciaUsuario usuario, BigDecimal monto, LocalDate fecha)`
+sin ninguna clave propia -- nada permitía decir "este aporte, no el otro".
+Ganó un campo `id` (`UUID.randomUUID().toString()`, generado en el servicio
+al aportar, igual que `Ingreso`).
+
+`AporteRequest.monto` pasó de aceptar cualquier signo a `@Positive`: ya no
+existe la corrección por signo, así que un aporte siempre es "puse esta
+plata", nunca "saqué esta plata". El chequeo manual de cero que vivía en el
+servicio se borró -- Bean Validation ya cubre cero y negativo en un solo
+lugar, mismo precedente que `RegistrarIngresoRequest` en la 2.3c.
+
+### Dos bugs reales, encontrados contra Mongo de verdad y no con mocks
+
+Los dos métodos nuevos de `PozoConsultasImpl` (`editarAporte`,
+`borrarAporte`) tocan un elemento DENTRO de un array embebido, filtrando
+además por DUEÑO (`usuario.usuarioId`) para que nadie edite o borre el
+aporte de otra persona. Escribir ese filtro mal es fácil, y un mock
+programado con `thenReturn(true)` nunca lo iba a notar -- los dos bugs de
+abajo solo aparecieron pegándole a un backend real con `curl` y dos
+usuarios distintos, el mismo motivo por el que este proyecto tiene un smoke
+test aparte de los tests con mocks.
+
+**Bug 1 -- dos condiciones sueltas sobre un array no exigen el mismo
+elemento.** La primera versión de `editarAporte` filtraba con
+`"aportes.id".is(aporteId).and("aportes.usuario.usuarioId").is(usuarioId)`,
+dos condiciones unidas con `.and()` pero SIN `$elemMatch`. En Mongo, dos
+condiciones así sobre un array se evalúan cada una por separado contra
+CUALQUIER elemento -- no exigen que las cumpla el mismo. Si Viole tiene su
+propio aporte en el mismo pozo, pedir editar el aporte de Franco (pasando
+el id del aporte de Franco pero el usuarioId de Viole) podía matchear el
+documento igual: el id lo satisface el aporte de Franco, el usuarioId lo
+satisface el de Viole, y el `$` posicional de la actualización queda
+apuntando a un elemento ambiguo. Se encontró leyendo el código después del
+bug 2 (abajo), antes de que un test lo expusiera -- la primera ronda de
+prueba usó un atacante sin aportes propios en el pozo, que es justo el caso
+que no alcanza para disparar este bug.
+
+**Bug 2 -- el `$inc` de `version` no es condicional al `$pull`, y esto SÍ
+se vio fallar en vivo.** `borrarAporte` encadenaba `.pull(...)` (con el
+chequeo de dueño solo adentro del propio filtro del pull) junto con
+`.inc("version", 1)` en el mismo `Update`. El `$inc` se aplica siempre que
+el filtro de ARRIBA matchee el documento, sin importar si el `$pull`
+efectivamente sacó algo del array. Con un filtro de arriba que solo pedía
+`_id` + `grupo_id` (sin dueño), pedir borrar el aporte de Franco siendo
+Viole devolvía **HTTP 200**: el documento matcheaba, `version` subía,
+`modifiedCount` daba mayor a cero, sin haber borrado nada. Confirmado en
+vivo: B borrando el aporte de A daba 200 en vez de 404, y una lectura
+posterior mostraba el aporte de A intacto.
+
+**La solución a los dos es la misma:** mover el chequeo de dueño al filtro
+de ARRIBA con `$elemMatch` (`"aportes"` con un `elemMatch` que exige `id` Y
+`usuario.usuarioId` del MISMO elemento). Así ni el `$pull` ni el `$inc` se
+ejecutan si el aporte no existe o no es de quien lo pide: el documento
+entero deja de matchear, y `modifiedCount` vuelve a significar lo que el
+servicio necesita que signifique.
+
+**Verificado con el caso que de verdad expone el bug 1**: dos usuarios A y
+B, cada uno con su propio aporte en el mismo pozo. B editando o borrando el
+aporte de A → 404 en los dos casos, nada cambia. A editando el propio →
+200, con `sobrantePorPersona` recalculado bien en la respuesta. B borrando
+el propio → 200. Mismo patrón que ya usa `agregarAporte` y el resto de este
+archivo: el filtro de Mongo es la única fuente de verdad sobre "a quién
+pertenece esto", y el servicio no necesita (ni puede) distinguir "no
+existe" de "no es tuyo" -- mismo criterio que `noSeDistingueElMotivo` ya
+prueba para `agregarAporte` y `cerrar`.
+
+### En mobile
+
+`app/vaquita.tsx`: la fila del historial de aportes se comporta igual que
+la de "Mi Plata" (`mi-plata.tsx`) -- tocarla abre un `ActionSheetIOS` con
+Editar/Borrar/Cancelar. Editar convierte la fila en un input inline con
+Guardar/Cancelar al lado, y el formulario de "Tu aporte" de arriba se
+oculta mientras tanto, mismo criterio que ya usa Mi Plata para no mostrar
+dos inputs de monto a la vez sin motivo.
+
+Verificado: 167 tests en el backend, todos en verde; `tsc --noEmit
+--noUnusedLocals` y `expo export --platform ios` en mobile, limpios. El
+flujo completo (typo corregido con edición, aporte duplicado borrado, y las
+cuatro combinaciones de dueño cruzado en 404) se probó a mano con `curl`
+contra Mongo real, y de ahí salieron los dos bugs de arriba. La misma
+sección se sumó a `scripts/smoke-test.ps1`, pero **sin correr el script
+todavía** -- esta sandbox no tiene PowerShell. No hubo teléfono esta
+vuelta tampoco, así que falta confirmar que el `ActionSheetIOS` se sienta
+igual de natural acá que en Mi Plata.

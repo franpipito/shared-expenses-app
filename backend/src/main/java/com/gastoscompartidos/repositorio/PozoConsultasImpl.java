@@ -9,6 +9,8 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 
+import java.math.BigDecimal;
+
 /**
  * Implementacion del fragmento {@link PozoConsultas}.
  *
@@ -54,6 +56,63 @@ public class PozoConsultasImpl implements PozoConsultas {
         // getMatchedCount y no getModifiedCount: un $push siempre modifica, pero
         // lo que queremos saber es si el FILTRO encontro el pozo.
         return resultado.getMatchedCount() > 0;
+    }
+
+    @Override
+    public boolean editarAporte(String pozoId, String grupoId, String usuarioId, String aporteId, BigDecimal nuevoMonto) {
+        // SIN exigir estado ABIERTO, a diferencia de agregarAporte: editar un
+        // aporte tiene que seguir andando despues de cerrar la vaquita, mismo
+        // criterio que ya vale para corregir un gasto del viaje (seccion 6.9).
+        //
+        // OJO CON ESTO, que es sutil y vale la pena recordar: "aportes.id" y
+        // "aportes.usuario.usuarioId" como DOS condiciones sueltas (unidas
+        // con .and() pero sin $elemMatch) NO exigen que las cumpla el MISMO
+        // elemento del array -- Mongo las evalua cada una por separado contra
+        // CUALQUIER elemento. Si Viole tiene su propio aporte en este mismo
+        // pozo, pedir editar el aporte de Franco pasando el id de Franco pero
+        // SU PROPIO usuarioId podria matchear el documento igual (el id lo
+        // satisface el aporte de Franco, el usuarioId lo satisface el de
+        // Viole) y el "$" terminar apuntando a un elemento ambiguo. Con
+        // $elemMatch las dos condiciones se exigen del MISMO elemento, que es
+        // lo que hace falta para que el "$" de mas abajo sea inequivoco.
+        Query query = Query.query(Criteria.where("_id").is(pozoId)
+                .and("grupo_id").is(grupoId)
+                .and("aportes").elemMatch(Criteria.where("id").is(aporteId).and("usuario.usuarioId").is(usuarioId)));
+        // "$" posicional a secas: alcanza porque el id ya es unico, mismo
+        // razonamiento que editarIngreso (a diferencia del arrayFilters que
+        // hace falta cuando una misma persona puede matchear mas de un
+        // elemento, como en anonimizarAportante de aca abajo).
+        Update update = new Update()
+                .set("aportes.$.monto", nuevoMonto)
+                .inc("version", 1);
+        return mongoTemplate.updateFirst(query, update, Pozo.class).getModifiedCount() > 0;
+    }
+
+    @Override
+    public boolean borrarAporte(String pozoId, String grupoId, String usuarioId, String aporteId) {
+        // OJO ACA, que costo encontrarlo probando contra Mongo real y no con
+        // mocks: el $inc de version NO es condicional al $pull. Si el chequeo
+        // de dueño viviera solo adentro del $pull (su propio filtro sobre el
+        // array), un intento de borrar el aporte AJENO matchearia igual el
+        // DOCUMENTO por _id+grupo_id, el $pull no sacaria nada, pero el $inc
+        // se aplicaria lo mismo -- modifiedCount > 0 por el solo hecho de
+        // incrementar version, y el servicio leeria eso como "se borro" y
+        // devolveria 200 sin haber borrado nada. Confirmado con dos usuarios
+        // reales: B borrando el aporte de A daba 200 en vez de 404.
+        //
+        // La solucion es que el filtro de ARRIBA tambien exija que exista un
+        // elemento que matchee -- $elemMatch -- para que ni el $pull ni el
+        // $inc se ejecuten si el aporte no es de esta persona. Mismo efecto
+        // que editarAporte ya tiene gratis porque su filtro de arriba usa
+        // "aportes.id"/"aportes.usuario.usuarioId" directo.
+        Query query = Query.query(Criteria.where("_id").is(pozoId)
+                .and("grupo_id").is(grupoId)
+                .and("aportes").elemMatch(Criteria.where("id").is(aporteId).and("usuario.usuarioId").is(usuarioId)));
+        Update update = new Update()
+                .pull("aportes", Query.query(
+                        Criteria.where("id").is(aporteId).and("usuario.usuarioId").is(usuarioId)).getQueryObject())
+                .inc("version", 1);
+        return mongoTemplate.updateFirst(query, update, Pozo.class).getModifiedCount() > 0;
     }
 
     @Override

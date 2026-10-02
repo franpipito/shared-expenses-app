@@ -2,6 +2,7 @@ package com.gastoscompartidos.servicio;
 
 import com.gastoscompartidos.dto.AporteRequest;
 import com.gastoscompartidos.dto.CrearPozoRequest;
+import com.gastoscompartidos.dto.EditarAporteRequest;
 import com.gastoscompartidos.dto.PozoRespuesta;
 import com.gastoscompartidos.dto.TotalPorPersona;
 import com.gastoscompartidos.error.RecursoNoEncontradoException;
@@ -184,9 +185,9 @@ class PozoServicioTest {
             Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
             var ex = new ReferenciaUsuario("u-ex", "Cuenta eliminada");
             escribirCampo(p, "aportes", new ArrayList<>(List.of(
-                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
-                    new Aporte(ex, new BigDecimal("300000.00"), LocalDate.of(2026, 9, 1)),
-                    new Aporte(ex, new BigDecimal("100000.00"), LocalDate.of(2026, 9, 2)))));
+                    new Aporte("a-1", franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte("a-2", ex, new BigDecimal("300000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte("a-3", ex, new BigDecimal("100000.00"), LocalDate.of(2026, 9, 2)))));
             when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
             when(gastos.sumarDelPozo(anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
 
@@ -248,8 +249,8 @@ class PozoServicioTest {
             // siendo aportado - gastado, sin importar quien pago que.
             Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
             escribirCampo(p, "aportes", new ArrayList<>(List.of(
-                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
-                    new Aporte(viole.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
+                    new Aporte("a-1", franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte("a-2", viole.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
             when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
             when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("300000.00"));
             when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
@@ -273,8 +274,8 @@ class PozoServicioTest {
             // ve recien al cerrar.
             Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
             escribirCampo(p, "aportes", new ArrayList<>(List.of(
-                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
-                    new Aporte(viole.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
+                    new Aporte("a-1", franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte("a-2", viole.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
             when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
             when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("700000.00"));
             when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
@@ -301,7 +302,7 @@ class PozoServicioTest {
             // tiene que unirlas sin perder a nadie.
             Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
             escribirCampo(p, "aportes", new ArrayList<>(List.of(
-                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
+                    new Aporte("a-1", franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
             when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
             when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("50000.00"));
             when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
@@ -340,34 +341,6 @@ class PozoServicioTest {
         }
 
         @Test
-        @DisplayName("un aporte negativo se permite: es como se deshace uno equivocado")
-        void negativoEsElAsientoEnContrario() {
-            // Los aportes son inmutables a proposito -- no se editan ni se
-            // borran -- asi que sin el negativo, tipear 4000000 en vez de 400000
-            // dejaba el pozo con esa plata para siempre.
-            when(pozos.agregarAporte(anyString(), anyString(), any())).thenReturn(true);
-            when(pozos.findByIdAndGrupoId("pozo-1", GRUPO))
-                    .thenReturn(Optional.of(pozo("pozo-1", EstadoPozo.ABIERTO)));
-            when(gastos.sumarDelPozo(anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
-
-            servicio.aportar("pozo-1", new AporteRequest(new BigDecimal("-3600000.00")));
-
-            ArgumentCaptor<Aporte> capturado = ArgumentCaptor.forClass(Aporte.class);
-            verify(pozos).agregarAporte(anyString(), anyString(), capturado.capture());
-            assertThat(capturado.getValue().monto()).isEqualByComparingTo("-3600000.00");
-        }
-
-        @Test
-        @DisplayName("cero se rechaza: no es aporte ni correccion")
-        void ceroNoEsNada() {
-            assertThatThrownBy(() -> servicio.aportar("pozo-1", new AporteRequest(BigDecimal.ZERO)))
-                    .isInstanceOf(ReglaDeNegocioException.class)
-                    .hasMessageContaining("no puede ser cero");
-
-            verify(pozos, never()).agregarAporte(anyString(), anyString(), any());
-        }
-
-        @Test
         @DisplayName("aportar a una vaquita cerrada o ajena da 404, sin distinguir cual")
         void noSeDistingueElMotivo() {
             // agregarAporte verifica id, grupo y estado en una sola operacion
@@ -376,6 +349,83 @@ class PozoServicioTest {
             when(pozos.agregarAporte(anyString(), anyString(), any())).thenReturn(false);
 
             assertThatThrownBy(() -> servicio.aportar("pozo-x", new AporteRequest(new BigDecimal("100"))))
+                    .isInstanceOf(RecursoNoEncontradoException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("Editar un aporte")
+    class EditarAporte {
+
+        @Test
+        @DisplayName("si el id existe y es de quien pide el cambio, corrige el monto y relee")
+        void corrigeYRelee() {
+            when(pozos.editarAporte("pozo-1", GRUPO, franco.getId(), "a-1", new BigDecimal("450000.00")))
+                    .thenReturn(true);
+            when(pozos.findByIdAndGrupoId("pozo-1", GRUPO))
+                    .thenReturn(Optional.of(pozo("pozo-1", EstadoPozo.ABIERTO)));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+
+            servicio.editarAporte("pozo-1", "a-1", new EditarAporteRequest(new BigDecimal("450000.00")));
+
+            verify(pozos).editarAporte("pozo-1", GRUPO, franco.getId(), "a-1", new BigDecimal("450000.00"));
+        }
+
+        @Test
+        @DisplayName("un aporte de la vaquita CERRADA igual se puede corregir")
+        void vaquitaCerradaIgualDeja() {
+            // Mismo criterio que ya vale para los gastos del viaje (seccion
+            // 6.9): un error encontrado al volver tiene que poder corregirse.
+            when(pozos.editarAporte(anyString(), anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
+            when(pozos.findByIdAndGrupoId("pozo-1", GRUPO))
+                    .thenReturn(Optional.of(pozo("pozo-1", EstadoPozo.CERRADO)));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+
+            PozoRespuesta r = servicio.editarAporte("pozo-1", "a-1", new EditarAporteRequest(new BigDecimal("1.00")));
+
+            assertThat(r.estado()).isEqualTo(EstadoPozo.CERRADO);
+        }
+
+        @Test
+        @DisplayName("el aporte ajeno, el inexistente y el de una vaquita ajena dan 404, sin distinguir cual")
+        void noSeDistingueElMotivo() {
+            // El filtro de editarAporte exige el id del aporte Y que sea de
+            // quien pide el cambio, en la MISMA query: no se puede tocar un
+            // aporte de la otra persona ni para "corregirlo". Devuelve false
+            // igual que si el id no existiera -- un error distinto confirmaria
+            // que el aporte existe y es ajeno, que no es asunto de quien pregunta.
+            when(pozos.editarAporte(anyString(), anyString(), anyString(), anyString(), any()))
+                    .thenReturn(false);
+
+            assertThatThrownBy(() -> servicio.editarAporte("pozo-1", "a-ajeno", new EditarAporteRequest(new BigDecimal("1.00"))))
+                    .isInstanceOf(RecursoNoEncontradoException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("Borrar un aporte")
+    class BorrarAporte {
+
+        @Test
+        @DisplayName("si el id existe y es de quien pide el borrado, lo saca y relee")
+        void borraYRelee() {
+            when(pozos.borrarAporte("pozo-1", GRUPO, franco.getId(), "a-1")).thenReturn(true);
+            when(pozos.findByIdAndGrupoId("pozo-1", GRUPO))
+                    .thenReturn(Optional.of(pozo("pozo-1", EstadoPozo.ABIERTO)));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+
+            servicio.borrarAporte("pozo-1", "a-1");
+
+            verify(pozos).borrarAporte("pozo-1", GRUPO, franco.getId(), "a-1");
+        }
+
+        @Test
+        @DisplayName("el aporte ajeno o inexistente dan 404, sin distinguir cual")
+        void noSeDistingueElMotivo() {
+            when(pozos.borrarAporte(anyString(), anyString(), anyString(), anyString())).thenReturn(false);
+
+            assertThatThrownBy(() -> servicio.borrarAporte("pozo-1", "a-ajeno"))
                     .isInstanceOf(RecursoNoEncontradoException.class);
         }
     }
