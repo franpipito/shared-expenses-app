@@ -261,6 +261,59 @@ class PozoServicioTest {
             assertThat(r.gastado()).isEqualByComparingTo("300000.00");
             assertThat(r.restante()).isEqualByComparingTo("500000.00");
         }
+
+        @Test
+        @DisplayName("sobrantePorPersona puede dar negativo: gasto mas de lo que aporto")
+        void sobranteNegativoSiGastoDeMas() {
+            // El ejemplo discutido con Franco antes de programar esto: los dos
+            // aportan lo mismo, pero Franco paga la mayoria de las cosas del
+            // viaje. Su sobrante da negativo -- significa que gasto plata que
+            // en rigor era de Viole, y se lo tiene que devolver al pozo antes
+            // de repartir lo que queda. No se bloquea nada al cargar: esto se
+            // ve recien al cerrar.
+            Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
+            escribirCampo(p, "aportes", new ArrayList<>(List.of(
+                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte(viole.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
+            when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("700000.00"));
+            when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
+                    new TotalPorPersona(franco.getId(), "Franco", new BigDecimal("600000.00")),
+                    new TotalPorPersona(viole.getId(), "Viole", new BigDecimal("100000.00"))));
+
+            var sobrante = servicio.listar().get(0).sobrantePorPersona();
+
+            var deFranco = sobrante.stream().filter(s -> s.usuarioId().equals(franco.getId())).findFirst().orElseThrow();
+            var deViole = sobrante.stream().filter(s -> s.usuarioId().equals(viole.getId())).findFirst().orElseThrow();
+            assertThat(deFranco.total()).isEqualByComparingTo("-200000.00");
+            assertThat(deViole.total()).isEqualByComparingTo("300000.00");
+            // La suma de los dos sobrantes siempre cierra contra el restante
+            // del pozo entero: es la misma plata mirada de dos formas.
+            assertThat(deFranco.total().add(deViole.total())).isEqualByComparingTo("100000.00");
+        }
+
+        @Test
+        @DisplayName("sobrantePorPersona no rompe si alguien aporto sin gastar, o gasto sin aportar")
+        void sobranteConIdsQueNoCoinciden() {
+            // Franco aporto pero nunca cargo un gasto del pozo; Viole gasto del
+            // pozo pero nunca aporto nada (paso por su bolsillo esa vez). Las
+            // dos listas de origen tienen ids distintos, y sobrantePorPersona
+            // tiene que unirlas sin perder a nadie.
+            Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
+            escribirCampo(p, "aportes", new ArrayList<>(List.of(
+                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
+            when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("50000.00"));
+            when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
+                    new TotalPorPersona(viole.getId(), "Viole", new BigDecimal("50000.00"))));
+
+            var sobrante = servicio.listar().get(0).sobrantePorPersona();
+
+            var deFranco = sobrante.stream().filter(s -> s.usuarioId().equals(franco.getId())).findFirst().orElseThrow();
+            var deViole = sobrante.stream().filter(s -> s.usuarioId().equals(viole.getId())).findFirst().orElseThrow();
+            assertThat(deFranco.total()).isEqualByComparingTo("400000.00");
+            assertThat(deViole.total()).isEqualByComparingTo("-50000.00");
+        }
     }
 
     @Nested

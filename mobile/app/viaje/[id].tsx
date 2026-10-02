@@ -116,6 +116,24 @@ export default function Viaje() {
         ))}
       </View>
 
+      {/*
+        A diferencia de los dos bloques de arriba, ESTE SI es plata real: lo
+        que hay que devolverle a cada uno del pozo (aporto - gasto). Con el
+        signo puesto, sin Math.abs -- si a alguien le da negativo, gasto mas
+        de lo que puso y le tiene que devolver esa diferencia al pozo antes
+        de repartir el resto. No se oculta: mismo criterio que ya se usa para
+        el restante del pozo entero, que tambien puede quedar en rojo.
+      */}
+      <View style={estilos.bloque}>
+        <Text style={estilos.rotuloSeccion}>Cuánto le queda a cada uno</Text>
+        {pozo.sobrantePorPersona.map((p) => (
+          <View key={p.usuarioId} style={estilos.fila}>
+            <Text style={estilos.filaEtiqueta}>{p.nombre}</Text>
+            <Text style={estilos.filaMonto}>{formatearMonto(p.total)}</Text>
+          </View>
+        ))}
+      </View>
+
       <View style={estilos.bloque}>
         <Text style={estilos.rotuloSeccion}>Los gastos del viaje</Text>
         {/*

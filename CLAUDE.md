@@ -1155,6 +1155,61 @@ una base real, no solo en la forma que el mock le daba por programado.
 Vale la corrección para la próxima sesión en la nube: Docker SÍ está, y
 cambia bastante qué se puede probar sin la PC.
 
+### La vaquita: cuánto le queda a cada uno, al cerrar
+
+Pedido de Franco, charlando sobre el cierre del viaje: quiere que al cerrar
+la vaquita aparezca cuánto le sobró a cada uno (aporte menos lo que gastó),
+para poder sacar del pozo lo que le corresponde a cada uno. A diferencia de
+`porPersona` y `gastadoPorPersona` (sección de arriba), que son puramente
+informativos, **este número decide plata real**.
+
+**Dos rondas de discusión antes de programar (regla 3), y las dos valieron
+la pena:**
+
+1. La fórmula (`aporte - gastado por esa persona`) puede dar **negativo**: si
+   alguien paga la mayoría de las cosas del viaje con la tarjeta del pozo, su
+   número queda negativo aunque la plata se haya gastado en los dos por
+   igual -- ata el sobrante a QUIÉN PAGÓ, no a quién se benefició. Un
+   negativo no se puede "sacar" literalmente del pozo: es una deuda.
+2. La primera idea de Franco para ese caso fue **bloquear la carga de un
+   gasto si a esa persona ya no le queda aporte**. Se descartó: choca directo
+   con el principio más fuerte de todo el proyecto, "bloquear una carga
+   parada en el mostrador es el pecado capital de esta app" (la razón por la
+   que existe: Viole abandonó un Excel anterior por exactamente esa
+   fricción). Y el pozo entero YA hace esto mismo a propósito -- `restante`
+   puede dar negativo y queda en rojo, probado en el smoke test -- así que
+   dejar que el número por persona también dé negativo no es una excepción
+   nueva, es la misma regla un nivel más abajo.
+
+**Se eligió: no bloquear nada, mostrar el sobrante tal cual, con signo.** Si
+a alguien le da negativo, le tiene que devolver esa diferencia al pozo (o a
+la otra persona) antes de repartir el resto -- arreglan la plata entre
+ustedes, fuera de la app, como ya estaba pensado para el sobrante total
+(`docs/vaquita.md`, sección 9: "vuelven, ven que sobraron $120.000 y se lo
+transfieren"). El número por persona solo les dice CÓMO dividir ese
+transfer, no lo ejecuta.
+
+**Cero consultas nuevas**: `PozoServicio.sobrantePorPersona` resta los dos
+desgloses que ya existían (`porPersona` - `gastadoPorPersona`), uniendo los
+dos conjuntos de ids por si alguien aportó sin gastar nunca del pozo, o gastó
+sin haber aportado nada. Nuevo campo `PozoRespuesta.sobrantePorPersona`.
+
+En mobile, un tercer bloque -- "Cuánto le queda a cada uno" -- pero **solo en
+`viaje/[id].tsx`** (el viaje cerrado, no `vaquita.tsx`): mientras el viaje
+sigue abierto, quién pagó qué todavía puede cambiar. Con el signo puesto, sin
+`Math.abs()` -- mismo criterio que "Mi Plata" en negativo.
+
+Detalle completo, con el ejemplo numérico trabajado paso a paso, en
+`docs/vaquita.md`, sección 11.
+
+Verificado: 163 tests en el backend (161 + 2 nuevos, incluido el caso
+negativo con el ejemplo exacto de la discusión: aportan $400.000 cada uno,
+uno paga $600.000 del pozo y el otro $100.000 → sobrante -$200.000 / 
+$300.000), todos en verde salvo `contextLoads` (que esta vez SÍ corrió, con
+Mongo real); `tsc --noEmit --noUnusedLocals` y `expo export --platform ios`
+limpios; y el mismo caso corrido a mano contra Mongo real con `curl`, con el
+pozo ya CERRADO, dando el resultado esperado.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

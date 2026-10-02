@@ -239,6 +239,7 @@ public class PozoServicio {
                 pozo.restante(gastado),
                 totalesPorPersona(pozo),
                 gastadoPorPersona(pozo),
+                sobrantePorPersona(pozo),
                 pozo.getAportes().stream().map(AporteRespuesta::desde).toList(),
                 pozo.getVersion());
     }
@@ -310,6 +311,46 @@ public class PozoServicio {
                 .filter(f -> !ids.contains(f.usuarioId()));
 
         return Stream.concat(actuales, quienesSeFueron).toList();
+    }
+
+    /**
+     * {@code porPersona - gastadoPorPersona}, persona por persona.
+     *
+     * A diferencia de los otros dos desgloses, ESTE SI decide plata real: al
+     * cerrar el viaje, es cuanto le corresponde devolver a cada uno del pozo.
+     * Puede dar negativo (gasto mas de lo que aporto) -- no se oculta ni se
+     * clampea en cero, mismo criterio que el pozo entero, que ya puede
+     * sobregirarse a proposito. Ver docs/vaquita.md, sección 11.
+     *
+     * Se arma combinando los dos desgloses que YA EXISTEN en vez de volver a
+     * consultar nada: son la misma plata, mirada de dos lados distintos. La
+     * union de ids no asume que las dos listas tengan a las mismas personas --
+     * alguien pudo haber aportado sin gastar nunca del pozo, o gastado del
+     * pozo sin haber aportado nada -- asi que cada lado que falta se toma
+     * como cero en vez de quedar afuera.
+     */
+    private List<TotalPorPersona> sobrantePorPersona(Pozo pozo) {
+        List<TotalPorPersona> aportes = totalesPorPersona(pozo);
+        List<TotalPorPersona> gastos = gastadoPorPersona(pozo);
+
+        Map<String, BigDecimal> aportadoPorId = aportes.stream()
+                .collect(Collectors.toMap(TotalPorPersona::usuarioId, TotalPorPersona::total));
+        Map<String, BigDecimal> gastadoPorId = gastos.stream()
+                .collect(Collectors.toMap(TotalPorPersona::usuarioId, TotalPorPersona::total));
+
+        // LinkedHashMap para no perder el orden: integrantes actuales primero
+        // (vienen primero en totalesPorPersona), despues quien ya no esta.
+        Map<String, String> nombrePorId = new LinkedHashMap<>();
+        Stream.concat(aportes.stream(), gastos.stream())
+                .forEach(f -> nombrePorId.putIfAbsent(f.usuarioId(), f.nombre()));
+
+        return nombrePorId.entrySet().stream()
+                .map(e -> new TotalPorPersona(
+                        e.getKey(),
+                        e.getValue(),
+                        aportadoPorId.getOrDefault(e.getKey(), BigDecimal.ZERO)
+                                .subtract(gastadoPorId.getOrDefault(e.getKey(), BigDecimal.ZERO))))
+                .toList();
     }
 
     /** El cliente podria mandar 3 decimales. Los llevamos a 2 en el borde. */

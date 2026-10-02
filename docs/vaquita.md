@@ -478,3 +478,60 @@ en los aportes.
 En mobile, un bloque "Quién gastó cuánto" al lado de "Quién aportó cuánto", en
 `vaquita.tsx` (la vaquita abierta) y `viaje/[id].tsx` (un viaje cerrado):
 mismo componente de fila, mismos datos ya resueltos por el backend.
+
+## 11. Cuánto le queda a cada uno, al cerrar el viaje
+
+Pedido de Franco, un rato después de la sección 10: *"quiero que a cuando se
+cierra la vaquita le aparezca cuánto le sobró a cada uno, en base a cuánto
+aportó menos lo que gastó, para poder sacar del pozo lo que le corresponde a
+cada uno."* A diferencia de `porPersona` y `gastadoPorPersona` (sección 10),
+que son puramente informativos, **este número SÍ decide plata real**: es la
+devolución al cerrar.
+
+**La primera versión de la pregunta tenía un problema, y se discutió antes de
+programar nada (regla 3).** La fórmula (`aporte - gastado por esa persona`)
+puede dar negativo: si Franco paga la mayoría de las cosas del viaje con la
+tarjeta del pozo, su número puede quedar negativo aunque la plata se haya
+gastado en los dos por igual -- la fórmula ata el sobrante a QUIÉN PAGÓ, no a
+quién se benefició del gasto. Un número negativo no se puede "sacar del pozo"
+literalmente: es una deuda, no un retiro.
+
+**La primera reacción de Franco fue bloquear**: que la app no deje cargar un
+gasto si a esa persona ya no le queda aporte disponible. Se descartó, y por
+un motivo que ya estaba escrito en este mismo documento antes de que la
+pregunta existiera: *"Bloquear una carga parada en el mostrador es el pecado
+capital de esta app."* Es la razón de ser del proyecto -- Viole abandonó un
+Excel anterior por exactamente este tipo de fricción -- y meter una
+validación de "no te alcanza, no podés cargarlo" la reintroduce en el peor
+momento posible: parada en el mostrador esperando pagar.
+
+Ayudó ver que **el pozo entero ya hace esto mismo, a propósito**: `restante`
+puede dar negativo (sección "sobregiro" más arriba, probada en el smoke
+test), y nadie lo lee como un bug. `sobrantePorPersona` es la misma idea un
+nivel más abajo: se permite el número negativo, se muestra tal cual, y las
+dos personas arreglan la diferencia fuera de la app -- la devolución del
+sobrante sigue siendo manual, como ya decía la sección 9 ("vuelven, ven que
+sobraron $120.000 y se lo transfieren"), solo que ahora el número por persona
+les dice CÓMO dividir ese transfer en vez de tener que adivinarlo.
+
+**La implementación no hizo ninguna consulta nueva**: `sobrantePorPersona` es
+`porPersona` menos `gastadoPorPersona`, los dos ya calculados. La única
+sutileza es que las dos listas no necesariamente tienen a las mismas
+personas -- alguien pudo haber aportado sin cargar nunca un gasto del pozo, o
+cargar un gasto del pozo sin haber aportado nada -- así que
+`PozoServicio.sobrantePorPersona` une los dos conjuntos de ids y toma cero
+del lado que falte, en vez de dejar a alguien afuera.
+
+Verificado con el ejemplo exacto de la discusión (los dos aportan $400.000,
+uno paga $600.000 del pozo y el otro $100.000): el test unitario prueba que
+da -$200.000 / $300.000, y que los dos suman el mismo restante que el pozo
+entero. Y se corrió además contra Mongo real, con el pozo ya CERRADO, dando
+el mismo resultado.
+
+En mobile, un tercer bloque -- "Cuánto le queda a cada uno" -- pero **solo en
+`viaje/[id].tsx`** (el viaje cerrado), no en `vaquita.tsx`: Franco lo pidió
+así ("a cuando se cierra"), y tiene sentido -- mientras el viaje sigue
+abierto, quién pagó qué todavía puede cambiar. El número se muestra con el
+signo puesto, sin `Math.abs()`, mismo criterio que ya se adoptó para "Mi
+Plata" en negativo: un número con el signo se lee más como una cuenta real,
+y no esconde que alguien tiene que devolver plata.

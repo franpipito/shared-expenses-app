@@ -28,6 +28,16 @@ import java.util.List;
  *                  para contestar "¿quién gastó más en el viaje?" sin tocar
  *                  el invariante de que gastar del pozo no mueve la cuenta
  *                  entre ellos. Ver docs/vaquita.md, sección 10.
+ * @param sobrantePorPersona {@code porPersona - gastadoPorPersona}, persona por
+ *                  persona. A diferencia de los dos anteriores, ESTE SI es el
+ *                  numero que decide la plata real: al cerrar el viaje, es
+ *                  cuanto le corresponde devolver a cada uno del pozo.
+ *                  **Puede dar negativo** -- significa que esa persona gasto
+ *                  del pozo mas de lo que aporto, y le tiene que devolver esa
+ *                  diferencia al pozo (o a la otra persona) antes de repartir
+ *                  el resto. No se oculta ni se clampea en cero: igual que el
+ *                  pozo entero ya puede sobregirarse a proposito, esto es lo
+ *                  mismo un nivel mas abajo. Ver docs/vaquita.md, sección 11.
  * @param vigente   si hoy cae dentro de las fechas del viaje. El cliente lo usa
  *                  para decidir si el alta de gasto abre con "Vaquita" puesto,
  *                  y viene resuelto del backend porque "hoy" depende de la zona
@@ -46,6 +56,7 @@ public record PozoRespuesta(
         BigDecimal restante,
         List<TotalPorPersona> porPersona,
         List<TotalPorPersona> gastadoPorPersona,
+        List<TotalPorPersona> sobrantePorPersona,
         List<AporteRespuesta> aportes,
         Long version
 ) {

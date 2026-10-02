@@ -168,6 +168,11 @@ export type ErrorRespuesta = {
  * @property gastadoPorPersona cuanto gasto cada uno DEL POZO (quien lo pago).
  *                     Puramente informativo: a diferencia de `porPersona`, una
  *                     diferencia aca no genera ninguna deuda entre ellos.
+ * @property sobrantePorPersona `porPersona - gastadoPorPersona`, persona por
+ *                     persona. A diferencia de los dos anteriores, ESTE SI
+ *                     decide plata real: al cerrar el viaje, es cuanto le
+ *                     corresponde devolver a cada uno del pozo. Puede dar
+ *                     negativo -- no se oculta ni se clampea en cero.
  */
 export type PozoRespuesta = {
   id: string;
@@ -183,6 +188,7 @@ export type PozoRespuesta = {
   restante: number;
   porPersona: TotalPorPersona[];
   gastadoPorPersona: TotalPorPersona[];
+  sobrantePorPersona: TotalPorPersona[];
   aportes: AporteRespuesta[];
   version: number;
 };
