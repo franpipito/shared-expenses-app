@@ -238,6 +238,7 @@ public class PozoServicio {
                 gastado,
                 pozo.restante(gastado),
                 totalesPorPersona(pozo),
+                gastadoPorPersona(pozo),
                 pozo.getAportes().stream().map(AporteRespuesta::desde).toList(),
                 pozo.getVersion());
     }
@@ -275,6 +276,38 @@ public class PozoServicio {
         Stream<TotalPorPersona> quienesSeFueron = exIntegrantes.values().stream()
                 .map(u -> new TotalPorPersona(
                         u.usuarioId(), u.nombre(), pozo.aportadoPor(u.usuarioId())));
+
+        return Stream.concat(actuales, quienesSeFueron).toList();
+    }
+
+    /**
+     * Cuanto gasto cada uno DEL POZO (quien lo pago, no quien lo disfruto).
+     * Mismo armado que {@link #totalesPorPersona}, pero del lado de los
+     * debitos: los integrantes actuales siempre, incluido el que gasto cero,
+     * mas quien gasto y ya no esta en el grupo.
+     *
+     * Puramente informativo -- a diferencia de los aportes, una diferencia
+     * ACA no genera ninguna deuda entre ellos. Ver docs/vaquita.md, sección 10.
+     *
+     * Diferencia con totalesPorPersona: ahi el "quien" sale de un campo
+     * embebido en Pozo (pozo.getAportes()). Los gastos no estan embebidos --
+     * viven en su propia coleccion -- asi que el "quien" sale de
+     * gastadoPorPersonaDelPozo, que ya llega agrupado por pagador desde Mongo.
+     */
+    private List<TotalPorPersona> gastadoPorPersona(Pozo pozo) {
+        List<Usuario> integrantes = usuarios.findByGrupoIdOrderByIdAsc(pozo.getGrupoId());
+        Set<String> ids = integrantes.stream().map(Usuario::getId).collect(Collectors.toSet());
+
+        List<TotalPorPersona> filas = gastos.gastadoPorPersonaDelPozo(pozo.getId());
+        Map<String, BigDecimal> totalPorId = filas.stream()
+                .collect(Collectors.toMap(TotalPorPersona::usuarioId, TotalPorPersona::total));
+
+        Stream<TotalPorPersona> actuales = integrantes.stream()
+                .map(u -> new TotalPorPersona(
+                        u.getId(), u.getNombre(), totalPorId.getOrDefault(u.getId(), BigDecimal.ZERO)));
+
+        Stream<TotalPorPersona> quienesSeFueron = filas.stream()
+                .filter(f -> !ids.contains(f.usuarioId()));
 
         return Stream.concat(actuales, quienesSeFueron).toList();
     }

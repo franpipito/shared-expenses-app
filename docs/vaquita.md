@@ -383,6 +383,11 @@ cuenta la hacen ellos. Exponerlo como número propio agrega un concepto nuevo a 
 UI ("la vaquita te debe") que todavía no se diseñó. Queda anotado para cuando la
 pantalla exista.
 
+**Esto sigue sin resolverse.** Lo que se agregó después (sección 10) es un
+desglose de GASTO -- quién pagó cada cosa que salió del pozo --, no de aporte:
+no hay que confundirlos. El de aporte es el único que mueve el invariante; el
+de gasto es pura información.
+
 ### Qué se tomó de BBVA y qué no
 
 El modelo de referencia fue la cuenta compartida de BBVA, que combina una capa
@@ -436,3 +441,40 @@ automáticamente en la vaquita compartida y ella lo vería. Respuesta 16, textua
 
 La alternativa que sí se adoptó, y que ataca el problema real (la velocidad de
 carga) sin ninguna de estas contras, está en **`docs/atajo-ios.md`**.
+
+## 10. Quién gastó cuánto, al lado de quién aportó cuánto
+
+Surgió de una pregunta de Franco pensando en el viaje, no de la entrevista:
+*"si aportan los dos lo mismo y uno gasta más que el otro, hoy no se sabe quién
+gastó más."* Tiene razón, y es una pregunta DISTINTA de la que ya contesta
+`porPersona` (sección 9): esa es sobre APORTES (cuánto puso cada uno), y sí
+afecta el invariante -- si aportaron distinto, hay una deuda. Esta es sobre
+GASTOS (quién pagó cada cosa que salió del pozo), y **no afecta nada**: la
+plata ya es de los dos desde que entró al pozo, así que no importa quién la
+gastó.
+
+**Decisión (discutida antes de programar, regla 3): puramente informativo,
+igual que `porPersona`.** Se evaluó que la diferencia de gasto generara una
+deuda nueva, y se descartó: rompería el invariante central de toda la vaquita
+(*"sacar plata del pozo no genera deuda entre ellos, porque la plata ya se
+repartió al aportar"*). Si Franco gasta $300.000 del pozo y Viole $0, eso NO
+significa que Viole le deba a Franco -- los dos ya pusieron lo mismo. Mezclar
+las dos preguntas (quién aportó / quién gastó) en un solo número de deuda
+confundiría una de HISTORIA ("¿en qué se fue la plata?") con una de
+CONTABILIDAD ("¿quién le debe a quién?"). Mismo criterio que `porPersona`: con
+dos personas mirando dos números, la cuenta la hacen ellos.
+
+**De dónde sale el dato**: cada `Gasto` de un pozo ya guarda `pagadoPor` --
+quien lo cargó, no quien "lo disfrutó" -- igual que cualquier otro gasto. No
+hizo falta ningún campo nuevo, solo agruparlo: `GastoConsultas.
+gastadoPorPersonaDelPozo(pozoId)` es un `$match` + `$group by pagadoPor.
+usuarioId` (mismo pipeline que `sumarDelPozo`, con una fila por persona en vez
+de una sola con el total de todos). `PozoServicio.gastadoPorPersona(pozo)` lo
+combina con los integrantes del grupo exactamente como `totalesPorPersona`
+combina los aportes: los dos SIEMPRE (incluido el que gastó cero), más quien
+gastó del pozo y ya no está en el grupo -- mismo caso que "Cuenta eliminada"
+en los aportes.
+
+En mobile, un bloque "Quién gastó cuánto" al lado de "Quién aportó cuánto", en
+`vaquita.tsx` (la vaquita abierta) y `viaje/[id].tsx` (un viaje cerrado):
+mismo componente de fila, mismos datos ya resueltos por el backend.

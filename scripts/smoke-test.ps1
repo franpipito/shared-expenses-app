@@ -767,6 +767,15 @@ $pozo = Invoke-RestMethod -Uri "$base/pozos/activo" -Headers $ella
 Chequear ($pozo.gastado -eq 120000.00)  "el gasto se descuenta de la vaquita"
 Chequear ($pozo.restante -eq 680000.00) "restante = aportado - gastado"
 
+# gastadoPorPersona: quien gasto cuanto DEL POZO, puramente informativo (no
+# genera ninguna deuda -- eso lo siguen probando los dos chequeos de abajo).
+$gastoDeFranco = $pozo.gastadoPorPersona | Where-Object { $_.usuarioId -eq $FRANCO_ID }
+$gastoDeElla   = $pozo.gastadoPorPersona | Where-Object { $_.usuarioId -eq $ELLA_ID }
+Chequear (($pozo.gastadoPorPersona | Measure-Object).Count -eq 2) `
+    "gastadoPorPersona lista a los dos integrantes, incluso al que no gasto nada del pozo"
+Chequear ($gastoDeFranco.total -eq 120000.00) "quien cargo el gasto del pozo aparece con lo que gasto"
+Chequear ($gastoDeElla.total -eq 0)           "y el otro integrante aparece con cero, no desaparece"
+
 # ESTOS DOS SON LOS CHEQUEOS QUE IMPORTAN DE TODA LA SECCION.
 #
 # Un viaje no ensucia el mes: no genera deuda entre ellos (la plata ya se

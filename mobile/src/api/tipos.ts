@@ -165,6 +165,9 @@ export type ErrorRespuesta = {
  * @property vigente   si hoy cae dentro de las fechas del viaje. Lo decide el
  *                     backend y no el telefono, porque "hoy" depende de la zona
  *                     horaria: es el mismo motivo que el bean `Clock`.
+ * @property gastadoPorPersona cuanto gasto cada uno DEL POZO (quien lo pago).
+ *                     Puramente informativo: a diferencia de `porPersona`, una
+ *                     diferencia aca no genera ninguna deuda entre ellos.
  */
 export type PozoRespuesta = {
   id: string;
@@ -179,6 +182,7 @@ export type PozoRespuesta = {
   gastado: number;
   restante: number;
   porPersona: TotalPorPersona[];
+  gastadoPorPersona: TotalPorPersona[];
   aportes: AporteRespuesta[];
   version: number;
 };

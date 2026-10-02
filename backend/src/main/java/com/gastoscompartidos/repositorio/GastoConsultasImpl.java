@@ -1,5 +1,6 @@
 package com.gastoscompartidos.repositorio;
 
+import com.gastoscompartidos.dto.TotalPorPersona;
 import com.gastoscompartidos.modelo.Gasto;
 import com.gastoscompartidos.modelo.TipoGasto;
 import org.bson.Document;
@@ -234,6 +235,27 @@ public class GastoConsultasImpl implements GastoConsultas {
         return sumar(Criteria.where("pozo_id").is(pozoId), "$monto");
     }
 
+    @Override
+    public List<TotalPorPersona> gastadoPorPersonaDelPozo(String pozoId) {
+        // Mismo $match + $group que sumar(), pero agrupando por quien pago en
+        // vez de por _id: null -- una fila por persona en vez de una sola con
+        // el total de todos. $first alcanza para el nombre porque todas las
+        // filas de un mismo pagador comparten el mismo snapshot.
+        AggregationOperation match = Aggregation.match(Criteria.where("pozo_id").is(pozoId));
+        AggregationOperation group = ctx -> new Document("$group",
+                new Document("_id", "$pagadoPor.usuarioId")
+                        .append("nombre", new Document("$first", "$pagadoPor.nombre"))
+                        .append("total", new Document("$sum", "$monto")));
+
+        AggregationResults<Document> resultado = mongoTemplate.aggregate(
+                Aggregation.newAggregation(Gasto.class, match, group), Gasto.class, Document.class);
+
+        return resultado.getMappedResults().stream()
+                .map(fila -> new TotalPorPersona(
+                        fila.getString("_id"), fila.getString("nombre"), aDecimal(fila.get("total"))))
+                .toList();
+    }
+
     /**
      * Arma un `$cond`: "si el pagador de este gasto es este usuario, entonces
      * `siPago`, si no `siPagoElOtro`".
@@ -308,13 +330,20 @@ public class GastoConsultasImpl implements GastoConsultas {
 
         Object total = fila.get("total");
         if (total == null) return BigDecimal.ZERO;
+        return aDecimal(total);
+    }
 
-        // Decimal128 porque los montos se guardan asi. Si algun documento viejo
-        // quedo con otro tipo numerico, esto lo delata en vez de redondear en
-        // silencio.
-        if (total instanceof Decimal128 decimal) return decimal.bigDecimalValue();
-        if (total instanceof Number numero) return new BigDecimal(numero.toString());
-        throw new IllegalStateException("El total no es un numero: " + total.getClass());
+    /**
+     * Decimal128 porque los montos se guardan asi. Si algun documento viejo
+     * quedo con otro tipo numerico, esto lo delata en vez de redondear en
+     * silencio. Factorizado de {@code sumar()} porque {@code
+     * gastadoPorPersonaDelPozo} necesita la misma conversion, una vez por fila
+     * en vez de una vez por resultado.
+     */
+    private static BigDecimal aDecimal(Object valor) {
+        if (valor instanceof Decimal128 decimal) return decimal.bigDecimalValue();
+        if (valor instanceof Number numero) return new BigDecimal(numero.toString());
+        throw new IllegalStateException("El total no es un numero: " + valor.getClass());
     }
 
     // ------------------------------------------------------ borrado de cuenta

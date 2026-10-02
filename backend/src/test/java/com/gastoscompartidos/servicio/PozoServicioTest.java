@@ -3,6 +3,7 @@ package com.gastoscompartidos.servicio;
 import com.gastoscompartidos.dto.AporteRequest;
 import com.gastoscompartidos.dto.CrearPozoRequest;
 import com.gastoscompartidos.dto.PozoRespuesta;
+import com.gastoscompartidos.dto.TotalPorPersona;
 import com.gastoscompartidos.error.RecursoNoEncontradoException;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Aporte;
@@ -195,6 +196,70 @@ class PozoServicioTest {
                     .containsExactly("Franco", "Viole", "Cuenta eliminada");
             // Una sola fila por persona aunque haya aportado dos veces.
             assertThat(porPersona.get(2).total()).isEqualByComparingTo("400000.00");
+        }
+    }
+
+    @Nested
+    @DisplayName("Quien gasto cuanto")
+    class QuienGastoCuanto {
+
+        @Test
+        @DisplayName("se listan los dos integrantes, incluido el que gasto cero")
+        void losDosSiempre() {
+            Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
+            when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("150000.00"));
+            when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
+                    new TotalPorPersona(franco.getId(), "Franco", new BigDecimal("150000.00"))));
+
+            var gastadoPorPersona = servicio.listar().get(0).gastadoPorPersona();
+
+            assertThat(gastadoPorPersona).extracting("nombre").containsExactly("Franco", "Viole");
+            // Viole no gasto nada del pozo: aparece con cero, no desaparece.
+            assertThat(gastadoPorPersona.get(1).total()).isEqualByComparingTo("0.00");
+        }
+
+        @Test
+        @DisplayName("quien gasto del pozo y ya no esta en el grupo sigue en el desglose")
+        void deQuienSeFue() {
+            // Mismo caso que aportesDeQuienSeFue, pero del lado de los
+            // debitos: alguien gasto del pozo y despues borro su cuenta o
+            // salio del grupo. Sin esto su gasto seguiria sumando en
+            // "gastado" pero no aparecería en ninguna fila.
+            Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
+            when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("300000.00"));
+            when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
+                    new TotalPorPersona(franco.getId(), "Franco", new BigDecimal("100000.00")),
+                    new TotalPorPersona("u-ex", "Cuenta eliminada", new BigDecimal("200000.00"))));
+
+            var gastadoPorPersona = servicio.listar().get(0).gastadoPorPersona();
+
+            assertThat(gastadoPorPersona).extracting("nombre")
+                    .containsExactly("Franco", "Viole", "Cuenta eliminada");
+            assertThat(gastadoPorPersona.get(2).total()).isEqualByComparingTo("200000.00");
+        }
+
+        @Test
+        @DisplayName("es puramente informativo: no cambia gastado ni restante")
+        void noGeneraDeudaNueva() {
+            // Franco gasto TODO el pozo y Viole nada -- esa diferencia no
+            // tiene que generar ninguna deuda nueva. El invariante sigue
+            // siendo aportado - gastado, sin importar quien pago que.
+            Pozo p = pozo("pozo-1", EstadoPozo.ABIERTO);
+            escribirCampo(p, "aportes", new ArrayList<>(List.of(
+                    new Aporte(franco.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)),
+                    new Aporte(viole.comoReferencia(), new BigDecimal("400000.00"), LocalDate.of(2026, 9, 1)))));
+            when(pozos.findByGrupoIdOrderByCreadoEnDesc(GRUPO)).thenReturn(List.of(p));
+            when(gastos.sumarDelPozo(anyString())).thenReturn(new BigDecimal("300000.00"));
+            when(gastos.gastadoPorPersonaDelPozo(anyString())).thenReturn(List.of(
+                    new TotalPorPersona(franco.getId(), "Franco", new BigDecimal("300000.00")),
+                    new TotalPorPersona(viole.getId(), "Viole", BigDecimal.ZERO)));
+
+            PozoRespuesta r = servicio.listar().get(0);
+
+            assertThat(r.gastado()).isEqualByComparingTo("300000.00");
+            assertThat(r.restante()).isEqualByComparingTo("500000.00");
         }
     }
 

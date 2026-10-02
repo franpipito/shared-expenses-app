@@ -354,6 +354,22 @@ function PozoAbierto({ pozo, gastos, idUsuarioActual, onCambio, onRecargar }: Pr
         ))}
       </View>
 
+      {/*
+        Puramente informativo, igual que el bloque de arriba: a diferencia de
+        "quién aportó cuánto", una diferencia ACA no genera ninguna deuda --
+        la plata ya se repartió al aportar. Contesta una pregunta distinta
+        ("¿quién gastó más del viaje?"), no "¿quién le debe a quién?".
+      */}
+      <View style={estilos.bloque}>
+        <Text style={estilos.rotuloSeccion}>Quién gastó cuánto</Text>
+        {pozo.gastadoPorPersona.map((p) => (
+          <View key={p.usuarioId} style={estilos.fila}>
+            <Text style={estilos.filaEtiqueta}>{p.nombre}</Text>
+            <Text style={estilos.filaMonto}>{formatearMonto(p.total)}</Text>
+          </View>
+        ))}
+      </View>
+
       <View style={estilos.bloque}>
         {/*
           "Aportar" y no "poner": "ponerla" tiene doble sentido en Argentina, y

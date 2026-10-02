@@ -22,6 +22,12 @@ import java.util.List;
  * @param porPersona cuanto puso cada uno. De aca sale la unica deuda que un
  *                  pozo puede generar: si aportaron distinto, la mitad de esa
  *                  diferencia.
+ * @param gastadoPorPersona cuanto gasto cada uno DEL POZO (quien lo pago, no
+ *                  quien lo disfruto). A diferencia de {@code porPersona},
+ *                  esto NO genera ninguna deuda -- es puramente informativo,
+ *                  para contestar "¿quién gastó más en el viaje?" sin tocar
+ *                  el invariante de que gastar del pozo no mueve la cuenta
+ *                  entre ellos. Ver docs/vaquita.md, sección 10.
  * @param vigente   si hoy cae dentro de las fechas del viaje. El cliente lo usa
  *                  para decidir si el alta de gasto abre con "Vaquita" puesto,
  *                  y viene resuelto del backend porque "hoy" depende de la zona
@@ -39,6 +45,7 @@ public record PozoRespuesta(
         BigDecimal gastado,
         BigDecimal restante,
         List<TotalPorPersona> porPersona,
+        List<TotalPorPersona> gastadoPorPersona,
         List<AporteRespuesta> aportes,
         Long version
 ) {

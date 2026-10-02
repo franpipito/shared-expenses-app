@@ -1,5 +1,6 @@
 package com.gastoscompartidos.repositorio;
 
+import com.gastoscompartidos.dto.TotalPorPersona;
 import com.gastoscompartidos.modelo.Gasto;
 
 import java.math.BigDecimal;
@@ -103,6 +104,17 @@ public interface GastoConsultas {
 
     /** Cuanto se gasto del pozo. Es el lado de los debitos del invariante. */
     BigDecimal sumarDelPozo(String pozoId);
+
+    /**
+     * Cuanto gasto del pozo cada uno, agrupado por quien lo pago
+     * ({@code pagadoPor}). Puramente informativo -- a diferencia de
+     * {@code saldoDe}, esto NO genera deuda entre ellos: el invariante de la
+     * vaquita (docs/vaquita.md) es que la plata ya se repartio al aportar, y
+     * gastar del pozo no mueve esa cuenta. Es la misma idea que
+     * {@code totalesPorPersona} en PozoServicio, pero del lado de los
+     * debitos en vez de los creditos.
+     */
+    List<TotalPorPersona> gastadoPorPersonaDelPozo(String pozoId);
 
     /** Borrado de cuenta: los PERSONAL de esa persona. Devuelve cuantos borro. */
     long borrarPersonalesDe(String grupoId, String usuarioId);

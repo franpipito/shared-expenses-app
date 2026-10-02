@@ -1091,6 +1091,53 @@ Verificado de nuevo: `tsc --noEmit --noUnusedLocals` y `expo export
 --platform ios` limpios. Sin cambios de backend en esta vuelta, así que no
 hizo falta volver a correr `mvnw test`.
 
+### La vaquita: quién gastó cuánto, informativo
+
+Pregunta de Franco pensando en el viaje, no de la entrevista: *"si aportan los
+dos lo mismo y uno gasta más que el otro, hoy no se sabe quién gastó más."*
+Es una pregunta DISTINTA de la que `docs/vaquita.md` ya dejaba anotada como
+pendiente ("el número del desbalance tampoco se calcula"): esa es sobre
+APORTES y sí mueve el invariante (aportar distinto genera deuda); esta es
+sobre GASTOS, y **no mueve nada** -- la plata del pozo ya es de los dos desde
+que entró, así que no importa quién pagó cada cosa.
+
+**Discutido antes de programar (regla 3) con una pregunta concreta: informativo
+como `porPersona`, o una deuda nueva.** Ganó lo informativo: una deuda por
+diferencia de GASTO rompería el invariante central de la vaquita ("sacar
+plata del pozo no genera deuda entre ellos, porque la plata ya se repartió al
+aportar"). Si Franco gasta $300.000 del pozo y Viole $0, eso no significa que
+Viole le deba nada -- los dos ya pusieron lo mismo al aportar. Detalle
+completo, con el ejemplo numérico, en `docs/vaquita.md`, sección 10.
+
+**La implementación no agregó ningún campo nuevo**, porque el dato ya
+estaba: todo `Gasto` -- del pozo o no -- guarda `pagadoPor`. Solo hacía falta
+agruparlo. `GastoConsultas.gastadoPorPersonaDelPozo(pozoId)` es el mismo
+pipeline `$match` + `$group` que ya usaba `sumarDelPozo`, agrupando por
+`pagadoPor.usuarioId` en vez de por `_id: null` -- una fila por persona en
+vez de una sola con el total de todos. Se factorizó `aDecimal()` de `sumar()`
+en `GastoConsultasImpl` porque las dos consultas necesitan la misma
+conversión de `Decimal128`.
+
+`PozoServicio.gastadoPorPersona(pozo)` combina esas filas con los integrantes
+del grupo con el mismo armado que `totalesPorPersona` ya usa para los aportes:
+los dos SIEMPRE (incluido el que gastó cero), más quien gastó del pozo y ya
+no está en el grupo (mismo caso "Cuenta eliminada"). La diferencia con
+`totalesPorPersona` es de dónde sale el "quién": ahí es un campo embebido en
+`Pozo` (`pozo.getAportes()`); acá los gastos viven en su propia colección, así
+que el "quién" sale directo de la consulta ya agrupada.
+
+Nuevo campo `PozoRespuesta.gastadoPorPersona`, y en mobile un bloque "Quién
+gastó cuánto" al lado de "Quién aportó cuánto" en `vaquita.tsx` y en
+`viaje/[id].tsx` (el viaje cerrado) -- mismo componente de fila, datos ya
+resueltos por el backend.
+
+Verificado: 162 tests en el backend (159 + 3 nuevos en `PozoServicioTest`,
+incluido uno que prueba explícitamente que `gastado` y `restante` no se
+mueven con esto), todos en verde salvo `contextLoads`; `tsc --noEmit
+--noUnusedLocals` y `expo export --platform ios` limpios; `scripts/smoke-test.ps1`
+con los chequeos nuevos de la sección 10, sin correr todavía contra Mongo
+real.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

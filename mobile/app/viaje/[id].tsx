@@ -105,6 +105,17 @@ export default function Viaje() {
         ))}
       </View>
 
+      {/* Puramente informativo: ver vaquita.tsx para el porque. */}
+      <View style={estilos.bloque}>
+        <Text style={estilos.rotuloSeccion}>Quién gastó cuánto</Text>
+        {pozo.gastadoPorPersona.map((p) => (
+          <View key={p.usuarioId} style={estilos.fila}>
+            <Text style={estilos.filaEtiqueta}>{p.nombre}</Text>
+            <Text style={estilos.filaMonto}>{formatearMonto(p.total)}</Text>
+          </View>
+        ))}
+      </View>
+
       <View style={estilos.bloque}>
         <Text style={estilos.rotuloSeccion}>Los gastos del viaje</Text>
         {/*
