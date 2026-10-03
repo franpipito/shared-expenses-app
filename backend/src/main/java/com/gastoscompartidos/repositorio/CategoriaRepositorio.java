@@ -9,18 +9,44 @@ import java.util.Optional;
 /**
  * Repositorio de categorias.
  *
- * Sigue siendo una INTERFAZ sin implementacion: Spring Data genera la clase al
- * arrancar y registra el bean. Lo unico que cambio respecto de JPA es de que
- * interfaz se hereda —- MongoRepository en vez de JpaRepository —- y el tipo de
- * la clave, que ahora es String porque el _id de Mongo es un ObjectId.
- *
- * Las consultas derivadas del nombre del metodo funcionan igual, y siguen
- * fallando al arrancar si el nombre no se puede parsear.
+ * Todo quedo escopeado por grupo (seccion 2.5): ya no hay un "listar todas".
+ * El chequeo de nombre repetido es case-insensitive (ver `CategoriaServicio.
+ * crear`), asi que no hay un `findByGrupoIdAndNombre` -- una consulta derivada
+ * de Spring Data ahi seria exacta, no alcanzaria.
  */
 public interface CategoriaRepositorio extends MongoRepository<Categoria, String> {
 
-    List<Categoria> findAllByOrderByNombreAsc();
+    List<Categoria> findByGrupoIdOrderByNombreAsc(String grupoId);
 
-    /** Lo usa el sembrador para no duplicar categorias en cada arranque. */
-    Optional<Categoria> findByNombre(String nombre);
+    /**
+     * Usado por `GastoServicio` al cargar o editar un gasto: con categorias
+     * por grupo, ya NO alcanza un `findById` a secas -- sin este filtro,
+     * cualquiera podria cargar un gasto propio referenciando el id de una
+     * categoria de OTRO grupo (algo que esta sesion encontro revisando el
+     * smoke test, no una duda teorica), y el snapshot embebido terminaria
+     * mostrando el nombre e icono de una categoria ajena.
+     */
+    Optional<Categoria> findByIdAndGrupoId(String id, String grupoId);
+
+    /** El sembrador lo usa para saber si un grupo ya tiene las suyas (no pisa). */
+    boolean existsByGrupoId(String grupoId);
+
+    /** Para no dejar un grupo sin ninguna categoria al borrar la ultima. */
+    long countByGrupoId(String grupoId);
+
+    /**
+     * Borra solo si es DE ESE GRUPO. El filtro por grupo en la misma operacion
+     * es lo que hace que tocar el id de otro grupo de 404 y no 204 -- mismo
+     * patron que `LiquidacionRepositorio.deleteByIdAndGrupoId`.
+     */
+    long deleteByIdAndGrupoId(String id, String grupoId);
+
+    /**
+     * Usado por `CuentaServicio` cuando se va el ULTIMO integrante de un grupo:
+     * si el grupo entero se borra, sus categorias quedan sin duenio -- mismo
+     * motivo por el que ese mismo caso ya borraba `gastos` y `pozos` del grupo.
+     * Antes de la seccion 2.5 esto no hacia falta porque las categorias eran
+     * globales, nadie era su "dueno".
+     */
+    long deleteByGrupoId(String grupoId);
 }

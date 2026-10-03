@@ -1,9 +1,17 @@
 package com.gastoscompartidos.controlador;
 
 import com.gastoscompartidos.dto.CategoriaRespuesta;
+import com.gastoscompartidos.dto.CrearCategoriaRequest;
 import com.gastoscompartidos.servicio.CategoriaServicio;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -30,9 +38,23 @@ public class CategoriaControlador {
         this.servicio = servicio;
     }
 
-    /** GET /categorias */
+    /** GET /categorias: las del grupo de quien pregunta, no todas. */
     @GetMapping
     public List<CategoriaRespuesta> listar() {
         return servicio.listar();
+    }
+
+    /** POST /categorias */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public CategoriaRespuesta crear(@Valid @RequestBody CrearCategoriaRequest req) {
+        return servicio.crear(req);
+    }
+
+    /** DELETE /categorias/{id} */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void borrar(@PathVariable String id) {
+        servicio.borrar(id);
     }
 }

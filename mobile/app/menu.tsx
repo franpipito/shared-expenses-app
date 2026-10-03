@@ -52,7 +52,9 @@ export default function Menu() {
     })();
   }, [usuario?.id]);
 
-  function irA(ruta: '/gastos' | '/saldo' | '/vaquita' | '/grupo' | '/salir-del-grupo' | '/borrar-cuenta') {
+  function irA(
+    ruta: '/gastos' | '/saldo' | '/vaquita' | '/categorias' | '/grupo' | '/salir-del-grupo' | '/borrar-cuenta',
+  ) {
     router.push(ruta);
   }
 
@@ -112,6 +114,20 @@ export default function Menu() {
               </Pressable>
             </>
           ) : null}
+
+          {/*
+            Sin el gate de `tienePareja`: las categorias se usan en un gasto
+            PERSONAL igual que en uno compartido, asi que tiene que verse
+            tambien para quien todavia esta sola en su grupo.
+          */}
+          <Pressable
+            onPress={() => irA('/categorias')}
+            accessibilityRole="button"
+            style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+          >
+            <Text style={estilos.filaTexto}>Categorías</Text>
+            <Text style={estilos.flecha}>›</Text>
+          </Pressable>
         </View>
 
         <View style={estilos.grupo}>

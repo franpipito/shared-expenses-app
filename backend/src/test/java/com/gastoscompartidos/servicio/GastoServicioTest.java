@@ -94,7 +94,7 @@ class GastoServicioTest {
         viole = usuario("u-viole", "Viole", GRUPO);
 
         when(usuarioActual.requerido()).thenReturn(franco);
-        when(categorias.findById(CAT)).thenReturn(Optional.of(categoria(CAT, "Cafe", "coffee")));
+        when(categorias.findByIdAndGrupoId(CAT, GRUPO)).thenReturn(Optional.of(categoria(CAT, "Cafe", "coffee")));
         // save() devuelve lo que le pasaron, que es lo que hace Mongo salvo por
         // el id. Asi el test puede mirar el gasto que el servicio construyo.
         when(gastos.save(any(Gasto.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -201,6 +201,30 @@ class GastoServicioTest {
                     pedido("100.00", TipoGasto.COMPARTIDO, 50, ajeno.getId(), null)))
                     .isInstanceOf(ReglaDeNegocioException.class)
                     .hasMessageContaining("no es de tu grupo");
+        }
+    }
+
+    @Nested
+    @DisplayName("La categoria tiene que ser del grupo (seccion 2.5)")
+    class CategoriaDelGrupo {
+
+        /**
+         * El mismo riesgo que ya cubre "pagadorDeOtroGrupo", pero del lado de
+         * la categoria: desde que son por grupo, un `categoriaId` de otro
+         * grupo tiene que rechazarse igual que un id que no existe -- sin
+         * esto, el snapshot embebido terminaria mostrando el nombre y el
+         * icono de una categoria ajena.
+         */
+        @Test
+        @DisplayName("un categoriaId de otro grupo da el mismo error que uno inexistente")
+        void categoriaDeOtroGrupoSeRechaza() {
+            GuardarGastoRequest conCategoriaAjena = new GuardarGastoRequest(
+                    new BigDecimal("100.00"), "cat-de-otro-grupo", LocalDate.of(2026, 9, 6),
+                    "algo", TipoGasto.PERSONAL, null, null, false, null, null, null);
+
+            assertThatThrownBy(() -> servicio.crear(conCategoriaAjena))
+                    .isInstanceOf(ReglaDeNegocioException.class)
+                    .hasMessageContaining("No existe la categoría");
         }
     }
 
@@ -562,7 +586,10 @@ class GastoServicioTest {
     }
 
     private Categoria categoria(String id, String nombre, String icono) {
-        Categoria c = new Categoria(nombre, icono);
+        // El grupoId de la categoria no importa para estos tests: lo que se
+        // ejercita es Gasto, y lo unico que usa de aca es el snapshot
+        // (id/nombre/icono) que queda embebido en ReferenciaCategoria.
+        Categoria c = new Categoria(GRUPO, nombre, icono);
         fijarId(c, id);
         return c;
     }

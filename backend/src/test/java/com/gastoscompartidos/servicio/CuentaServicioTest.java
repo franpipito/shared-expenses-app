@@ -3,6 +3,7 @@ package com.gastoscompartidos.servicio;
 import com.gastoscompartidos.dto.BorrarCuentaRequest;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Usuario;
+import com.gastoscompartidos.repositorio.CategoriaRepositorio;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
 import com.gastoscompartidos.repositorio.GrupoRepositorio;
 import com.gastoscompartidos.repositorio.PozoRepositorio;
@@ -51,6 +52,7 @@ class CuentaServicioTest {
     private GrupoRepositorio grupos;
     private GastoRepositorio gastos;
     private PozoRepositorio pozos;
+    private CategoriaRepositorio categorias;
     private CuentaServicio servicio;
     private Usuario franco;
 
@@ -60,12 +62,13 @@ class CuentaServicioTest {
         grupos = mock(GrupoRepositorio.class);
         gastos = mock(GastoRepositorio.class);
         pozos = mock(PozoRepositorio.class);
+        categorias = mock(CategoriaRepositorio.class);
         UsuarioActual usuarioActual = mock(UsuarioActual.class);
 
         Clock reloj = Clock.fixed(Instant.parse("2026-09-28T12:00:00Z"),
                 ZoneId.of("America/Argentina/Buenos_Aires"));
 
-        servicio = new CuentaServicio(usuarios, grupos, gastos, pozos,
+        servicio = new CuentaServicio(usuarios, grupos, gastos, pozos, categorias,
                 new BCryptPasswordEncoder(), new LimitadorDeIntentos(reloj), usuarioActual);
 
         franco = new Usuario("Franco", "franco@local", HASH, GRUPO);
@@ -88,11 +91,12 @@ class CuentaServicioTest {
         // Lo que NO puede pasar: llevarse el historial de la otra persona.
         verify(gastos, never()).deleteByGrupoId(anyString());
         verify(pozos, never()).deleteByGrupoId(anyString());
+        verify(categorias, never()).deleteByGrupoId(anyString());
         verify(grupos, never()).deleteById(anyString());
     }
 
     @Test
-    @DisplayName("el ultimo integrante se lleva todo: gastos, vaquitas y grupo")
+    @DisplayName("el ultimo integrante se lleva todo: gastos, vaquitas, categorias y grupo")
     void ultimoIntegrante() {
         when(usuarios.countByGrupoId(GRUPO)).thenReturn(1L);
 
@@ -100,6 +104,7 @@ class CuentaServicioTest {
 
         verify(gastos).deleteByGrupoId(GRUPO);
         verify(pozos).deleteByGrupoId(GRUPO);
+        verify(categorias).deleteByGrupoId(GRUPO);
         verify(grupos).deleteById(GRUPO);
         verify(usuarios).delete(franco);
         // No queda nadie para quien anonimizar.

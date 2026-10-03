@@ -47,6 +47,17 @@ function Crear($headers, $hash) {
         -ContentType "application/json" -Body $json
 }
 
+# Las categorias son POR GRUPO desde la seccion 2.5 (antes eran globales, y
+# cualquier id de categoria servia para cualquier usuario). Las cuentas
+# descartables de mas abajo (Sola, Borra/Queda, Suma, Deudor/Acreedor,
+# Ahorrista) NO estan en el grupo de Franco, asi que no pueden usar $CAFE /
+# $UBER / $COMIDA: tienen que resolver sus PROPIAS categorias con esto.
+function IdDeCategoriaPara($headers, $nombre) {
+    $c = (Invoke-RestMethod -Uri "$base/categorias" -Headers $headers) | Where-Object { $_.nombre -eq $nombre }
+    if (-not $c) { throw "No aparecio la categoria '$nombre' para este usuario" }
+    return $c.id
+}
+
 function EsperarCodigo($bloque, $esperado, $texto) {
     try {
         & $bloque | Out-Null
@@ -385,6 +396,8 @@ Titulo "0.2 Una cuenta nueva, sola en su grupo"
 # Queda creada entre corridas, igual que Franco y Ella.
 $sesionSola = RegistrarOEntrar "Sola" "sola@local" $PASSWORD
 $sola = @{ Authorization = "Bearer $($sesionSola.token)" }
+# Su propio grupo, no el de Franco: ver IdDeCategoriaPara mas arriba.
+$CAFE_SOLA = IdDeCategoriaPara $sola "cafe"
 
 $grupoSola = Invoke-RestMethod -Uri "$base/grupo" -Headers $sola
 Chequear (($grupoSola.integrantes | Measure-Object).Count -eq 1) `
@@ -398,7 +411,7 @@ $resumenConPareja = Invoke-RestMethod -Uri "$base/gastos/resumen?mes=2026-09" -H
 Chequear ($resumenConPareja.tienePareja -eq $true) "el de Franco dice tienePareja = true"
 
 EsperarRegla { Crear $sola @{
-    monto = 1000; categoriaId = $CAFE; fecha = "2026-09-06"
+    monto = 1000; categoriaId = $CAFE_SOLA; fecha = "2026-09-06"
     descripcion = "cafe"; tipo = "COMPARTIDO" } } `
     "la otra persona tiene que estar en tu grupo" "sin pareja, un COMPARTIDO se rechaza"
 
@@ -408,7 +421,7 @@ EsperarRegla { Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $sola 
 
 # Un PERSONAL entra igual: sola, la app es un registro personal completo.
 $personalDeSola = Crear $sola @{
-    monto = 1000; categoriaId = $CAFE; fecha = "2026-09-06"
+    monto = 1000; categoriaId = $CAFE_SOLA; fecha = "2026-09-06"
     descripcion = "cafe de la esquina"; tipo = "PERSONAL"; esHormiga = $true
 }
 Chequear ($personalDeSola.tipo -eq "PERSONAL") "sin pareja, un PERSONAL entra normal"
@@ -933,10 +946,13 @@ $borra = @{ Authorization = "Bearer $($sesionBorra.token)" }
 $queda = @{ Authorization = "Bearer $($sesionQueda.token)" }
 $BORRA_ID = $sesionBorra.usuario.id
 $GRUPO_BQ = (Invoke-RestMethod -Uri "$base/grupo" -Headers $borra).id
+# El grupo de Borra/Queda, no el de Franco: ver IdDeCategoriaPara mas arriba.
+$CAFE_BQ   = IdDeCategoriaPara $borra "cafe"
+$COMIDA_BQ = IdDeCategoriaPara $borra "comida"
 
-$personalDeBorra = Crear $borra @{ monto = 5000; categoriaId = $CAFE; fecha = "2026-09-06"
+$personalDeBorra = Crear $borra @{ monto = 5000; categoriaId = $CAFE_BQ; fecha = "2026-09-06"
     descripcion = "regalo sorpresa"; tipo = "PERSONAL" }
-$compartidoDeBorra = Crear $borra @{ monto = 8000; categoriaId = $COMIDA; fecha = "2026-09-06"
+$compartidoDeBorra = Crear $borra @{ monto = 8000; categoriaId = $COMIDA_BQ; fecha = "2026-09-06"
     descripcion = "cena del sabado"; tipo = "COMPARTIDO"; porcentajePagador = 50 }
 $pozoBQ = Invoke-RestMethod -Uri "$base/pozos" -Method Post -Headers $queda `
     -ContentType "application/json" -Body (@{ nombre = "Escapada" } | ConvertTo-Json)
@@ -976,7 +992,7 @@ Chequear ((Mongo "print(db.pozo.countDocuments({ 'aportes.usuario.nombre': 'Borr
     "no quedo ningun aporte con su nombre (arrayFilters toco todos)"
 
 $corregido = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeBorra.id)" -Method Put -Headers $queda `
-    -ContentType "application/json" -Body (@{ monto = 7000; categoriaId = $COMIDA; fecha = "2026-09-06"
+    -ContentType "application/json" -Body (@{ monto = 7000; categoriaId = $COMIDA_BQ; fecha = "2026-09-06"
         descripcion = "cena del sabado"; tipo = "COMPARTIDO"; porcentajePagador = 50
         version = $compartidoVisto.version } | ConvertTo-Json)
 Chequear ($corregido.monto -eq 7000) "Queda puede corregir un compartido que pago la cuenta borrada"
@@ -1036,10 +1052,14 @@ $sesionTercero = RegistrarOEntrar "Tercero" "tercero@local" $PASSWORD
 $invita  = @{ Authorization = "Bearer $($sesionInvita.token)" }
 $suma    = @{ Authorization = "Bearer $($sesionSuma.token)" }
 $tercero = @{ Authorization = "Bearer $($sesionTercero.token)" }
+# Suma arranca SOLA en su propio grupo: sus categorias de este momento no son
+# las de Franco, ni todavia las de Invita (eso cambia recien al sumarse, mas
+# abajo). Ver IdDeCategoriaPara mas arriba.
+$CAFE_SUMA_SOLA = IdDeCategoriaPara $suma "cafe"
 
 # Un PERSONAL de Suma, ANTES de sumarse: tiene que seguir siendo suyo (y solo
 # suyo) despues de mudarse de grupo.
-$personalDeSumaAntes = Crear $suma @{ monto = 1500; categoriaId = $CAFE; fecha = "2026-09-06"
+$personalDeSumaAntes = Crear $suma @{ monto = 1500; categoriaId = $CAFE_SUMA_SOLA; fecha = "2026-09-06"
     descripcion = "antes de sumarme"; tipo = "PERSONAL" }
 
 EsperarRegla { Invoke-RestMethod -Uri "$base/grupo/sumarse" -Method Post -Headers $suma `
@@ -1069,9 +1089,12 @@ Chequear ((Invoke-RestMethod -Uri "$base/gastos/$($personalDeSumaAntes.id)" -Hea
 EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($personalDeSumaAntes.id)" -Headers $invita } `
     404 "pero Invita NO lo ve: mudarse de grupo no vuelve publico un PERSONAL"
 
+# Ya junta con Invita: el grupo (y sus categorias) paso a ser el de Invita.
+$CAFE_JUNTO = IdDeCategoriaPara $invita "cafe"
+
 # Un COMPARTIDO que paga Suma mientras estan juntas, para probar que salir NO
 # anonimiza: a diferencia de borrar-cuenta, la cuenta de Suma sigue existiendo.
-$compartidoDeSuma = Crear $suma @{ monto = 3000; categoriaId = $CAFE; fecha = "2026-09-06"
+$compartidoDeSuma = Crear $suma @{ monto = 3000; categoriaId = $CAFE_JUNTO; fecha = "2026-09-06"
     descripcion = "un cafe de las dos"; tipo = "COMPARTIDO"; porcentajePagador = 100 }
 
 EsperarRegla { Invoke-RestMethod -Uri "$base/grupo/salir" -Method Post -Headers $suma `
@@ -1117,9 +1140,11 @@ $sesionAcreedor = RegistrarOEntrar "Acreedor" "acreedor@local" $PASSWORD
 JuntarEnGrupo "deudor@local" "acreedor@local"
 $deudor   = @{ Authorization = "Bearer $($sesionDeudor.token)" }
 $acreedor = @{ Authorization = "Bearer $($sesionAcreedor.token)" }
+# El grupo de Deudor/Acreedor, no el de Franco: ver IdDeCategoriaPara mas arriba.
+$CAFE_DA = IdDeCategoriaPara $deudor "cafe"
 
 # Acreedor paga $1000 al 50/50: Deudor le queda debiendo 500.
-Crear $acreedor @{ monto = 1000; categoriaId = $CAFE; fecha = "2026-09-06"
+Crear $acreedor @{ monto = 1000; categoriaId = $CAFE_DA; fecha = "2026-09-06"
     descripcion = "compartido para el saldo total"; tipo = "COMPARTIDO"; porcentajePagador = 50 } | Out-Null
 
 $totalDeudor = Invoke-RestMethod -Uri "$base/saldo/total" -Headers $deudor
@@ -1207,6 +1232,8 @@ Titulo "16. Mi Plata: el balance personal"
 
 $sesionAhorrista = RegistrarOEntrar "Ahorrista" "ahorrista@local" $PASSWORD
 $ahorrista = @{ Authorization = "Bearer $($sesionAhorrista.token)" }
+# Su propio grupo, no el de Franco: ver IdDeCategoriaPara mas arriba.
+$CAFE_AHORRISTA = IdDeCategoriaPara $ahorrista "cafe"
 
 $vacio = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ahorrista
 Chequear ($vacio.ingresado -eq 0 -and $vacio.gastado -eq 0 -and $vacio.restante -eq 0) `
@@ -1234,7 +1261,7 @@ Chequear ($null -ne $idIngreso) `
 
 # Un gasto PERSONAL descuenta solo del restante, sin ningun paso extra.
 $gastoPersonal = Crear $ahorrista @{
-    monto = 25000; categoriaId = $CAFE; fecha = "2026-09-06"
+    monto = 25000; categoriaId = $CAFE_AHORRISTA; fecha = "2026-09-06"
     descripcion = "compras de la semana"; tipo = "PERSONAL"
 }
 $despuesDelGasto = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ahorrista
@@ -1266,6 +1293,94 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/balance-personal/ingresos/$idIngre
 
 Invoke-RestMethod -Uri "$base/gastos/$($gastoPersonal.id)" -Method Delete -Headers $ahorrista | Out-Null
 Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $ahorrista -UseBasicParsing `
+    -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
+
+# ---------------------------------------------------------------------------
+Titulo "17. Categorias personalizadas (seccion 2.5)"
+
+# Hasta esta seccion las categorias eran GLOBALES: una sola lista de seis,
+# compartida por cualquiera que se registrara. Pasan a ser POR GRUPO, asi que
+# se reusa a Sola (su propio grupo, de la seccion 0.2) para probar aislamiento
+# sin tocarle nada a Franco y Ella.
+
+$categoriasSolaAntes = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
+Chequear (($categoriasSolaAntes | Measure-Object).Count -eq 6) `
+    "Sola arranca con 6 categorias, igual que Franco"
+
+# --- crear ------------------------------------------------------------------
+$nueva = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
+    -ContentType "application/json" -Body (@{ nombre = "Netflix"; icono = "smartphone" } | ConvertTo-Json)
+Chequear ($nueva.nombre -eq "Netflix" -and $nueva.icono -eq "smartphone") `
+    "se puede crear una categoria personalizada"
+Chequear ($nueva.id -is [string] -and $nueva.id.Length -eq 24) "y tiene un id de ObjectId como las demas"
+
+$categoriasSolaConNueva = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
+Chequear (($categoriasSolaConNueva | Measure-Object).Count -eq 7) "ahora Sola tiene 7"
+
+$categoriasFrancoSinTocar = Invoke-RestMethod -Uri "$base/categorias" -Headers $franco
+Chequear (($categoriasFrancoSinTocar | Measure-Object).Count -eq 6) `
+    "y las de Franco no se movieron: son POR GRUPO, no globales"
+
+# --- duplicado, sin importar mayusculas/minusculas --------------------------
+EsperarRegla { Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
+    -ContentType "application/json" -Body (@{ nombre = "NETFLIX"; icono = "wallet" } | ConvertTo-Json) } `
+    "con ese nombre" "el nombre repetido se rechaza sin importar mayusculas/minusculas"
+
+# --- el mismo nombre en OTRO grupo no choca: el indice unico es (grupo, nombre) --
+$netflixDeFranco = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ nombre = "Netflix"; icono = "smartphone" } | ConvertTo-Json)
+Chequear ($netflixDeFranco.nombre -eq "Netflix") "el mismo nombre no choca en el grupo de otra persona"
+Invoke-RestMethod -Uri "$base/categorias/$($netflixDeFranco.id)" -Method Delete -Headers $franco | Out-Null
+
+# --- una categoria ajena no se puede borrar ni referenciar -------------------
+EsperarCodigo { Invoke-RestMethod -Uri "$base/categorias/$($nueva.id)" -Method Delete -Headers $franco } `
+    404 "Franco no puede borrar la categoria de Sola"
+
+EsperarRegla { Crear $franco @{
+    monto = 500; categoriaId = $nueva.id; fecha = "2026-09-06"
+    descripcion = "intento cruzado"; tipo = "PERSONAL" } } `
+    "No existe la categor" "un gasto no puede referenciar la categoria de otro grupo"
+
+# --- borrar funciona, y no es exclusivo de la que se acaba de crear ---------
+Invoke-RestMethod -Uri "$base/categorias/$($nueva.id)" -Method Delete -Headers $sola | Out-Null
+$categoriasSolaFinal = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
+Chequear (($categoriasSolaFinal | Measure-Object).Count -eq 6) "borrar la categoria la sacó de la lista"
+
+# --- 100% personalizable de verdad: tambien se puede borrar una de las seis
+# originales. Ninguna esta protegida en si misma -- lo unico que se protege es
+# no dejar el grupo sin NINGUNA (ver mas abajo).
+$cafeDeSola = ($categoriasSolaFinal | Where-Object { $_.nombre -eq "cafe" }).id
+Invoke-RestMethod -Uri "$base/categorias/$cafeDeSola" -Method Delete -Headers $sola | Out-Null
+$sinCafe = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
+Chequear (-not ($sinCafe | Where-Object { $_.nombre -eq "cafe" })) `
+    "se puede borrar incluso una de las seis originales"
+
+# La repone: la seccion "0.2" de la PROXIMA corrida vuelve a crear un gasto de
+# Sola con su propio "cafe" (via IdDeCategoriaPara), y el conteo de 6 de arriba
+# tiene que seguir siendo cierto la proxima vez que este script arranque.
+Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
+    -ContentType "application/json" -Body (@{ nombre = "cafe"; icono = "coffee" } | ConvertTo-Json) | Out-Null
+Chequear ((Invoke-RestMethod -Uri "$base/categorias" -Headers $sola | Measure-Object).Count -eq 6) `
+    "se repuso el cafe de Sola, para que la proxima corrida arranque igual"
+
+# --- lo unico protegido: no dejar un grupo sin ninguna categoria -----------
+# Una cuenta nueva y descartable, para no tener que dejar a SOLA en una sola
+# categoria: esta se borra entera al final (y con ella su grupo y sus
+# categorias -- ver el fix de CuentaServicio en CLAUDE.md), asi que no hace
+# falta reponer nada despues.
+$sesionUnica = RegistrarOEntrar "Unica" "unica@local" $PASSWORD
+$unica = @{ Authorization = "Bearer $($sesionUnica.token)" }
+$categoriasUnica = Invoke-RestMethod -Uri "$base/categorias" -Headers $unica
+($categoriasUnica | Select-Object -Skip 1) | ForEach-Object {
+    Invoke-RestMethod -Uri "$base/categorias/$($_.id)" -Method Delete -Headers $unica | Out-Null
+}
+$leQueda = Invoke-RestMethod -Uri "$base/categorias" -Headers $unica
+Chequear (($leQueda | Measure-Object).Count -eq 1) "a Unica le queda una sola categoria"
+
+EsperarRegla { Invoke-RestMethod -Uri "$base/categorias/$($leQueda[0].id)" -Method Delete -Headers $unica } `
+    "borrar tu" "no se puede borrar la ultima categoria que le queda a un grupo"
+
+Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $unica -UseBasicParsing `
     -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
 
 # ---------------------------------------------------------------------------

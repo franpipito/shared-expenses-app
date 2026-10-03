@@ -3,6 +3,7 @@ package com.gastoscompartidos.servicio;
 import com.gastoscompartidos.dto.BorrarCuentaRequest;
 import com.gastoscompartidos.error.ReglaDeNegocioException;
 import com.gastoscompartidos.modelo.Usuario;
+import com.gastoscompartidos.repositorio.CategoriaRepositorio;
 import com.gastoscompartidos.repositorio.GastoRepositorio;
 import com.gastoscompartidos.repositorio.GrupoRepositorio;
 import com.gastoscompartidos.repositorio.PozoRepositorio;
@@ -26,7 +27,7 @@ import org.springframework.stereotype.Service;
  *  - Sus aportes a una vaquita, igual: quedan, con el nombre reemplazado. Si se
  *    borraran, el pozo dejaria de cerrar.
  *  - Si era el ULTIMO integrante del grupo, no queda nadie cuyo historial
- *    cuidar: se va todo (gastos, vaquitas y el grupo).
+ *    cuidar: se va todo (gastos, vaquitas, categorias y el grupo).
  *
  * EL ORDEN IMPORTA, porque son varias escrituras sin transaccion: primero los
  * datos, el usuario al final. Si algo falla en el medio, la cuenta sigue
@@ -48,6 +49,7 @@ public class CuentaServicio {
     private final GrupoRepositorio grupos;
     private final GastoRepositorio gastos;
     private final PozoRepositorio pozos;
+    private final CategoriaRepositorio categorias;
     private final PasswordEncoder codificador;
     private final LimitadorDeIntentos limitador;
     private final UsuarioActual usuarioActual;
@@ -56,6 +58,7 @@ public class CuentaServicio {
                           GrupoRepositorio grupos,
                           GastoRepositorio gastos,
                           PozoRepositorio pozos,
+                          CategoriaRepositorio categorias,
                           PasswordEncoder codificador,
                           LimitadorDeIntentos limitador,
                           UsuarioActual usuarioActual) {
@@ -63,6 +66,7 @@ public class CuentaServicio {
         this.grupos = grupos;
         this.gastos = gastos;
         this.pozos = pozos;
+        this.categorias = categorias;
         this.codificador = codificador;
         this.limitador = limitador;
         this.usuarioActual = usuarioActual;
@@ -90,6 +94,7 @@ public class CuentaServicio {
         if (usuarios.countByGrupoId(grupoId) <= 1) {
             gastos.deleteByGrupoId(grupoId);
             pozos.deleteByGrupoId(grupoId);
+            categorias.deleteByGrupoId(grupoId);
             grupos.deleteById(grupoId);
         } else {
             gastos.borrarPersonalesDe(grupoId, yo);

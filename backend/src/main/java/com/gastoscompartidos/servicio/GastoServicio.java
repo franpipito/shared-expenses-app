@@ -81,7 +81,7 @@ public class GastoServicio {
         if (req.tipo() == TipoGasto.COMPARTIDO) {
             exigirPareja(actual);
         }
-        Categoria categoria = buscarCategoria(req.categoriaId());
+        Categoria categoria = buscarCategoria(req.categoriaId(), actual.getGrupoId());
         Usuario pagador = resolverPagador(req, actual);
 
         BigDecimal monto = normalizar(req.monto());
@@ -164,7 +164,7 @@ public class GastoServicio {
 
         BigDecimal monto = normalizar(req.monto());
 
-        gasto.setCategoria(referencia(buscarCategoria(req.categoriaId())));
+        gasto.setCategoria(referencia(buscarCategoria(req.categoriaId(), actual.getGrupoId())));
         gasto.setPagadoPor(resolverPagadorAlEditar(req, actual, gasto));
         gasto.setMonto(monto);
         gasto.setMontoPagador(montoPagadorDe(req, monto));
@@ -226,8 +226,16 @@ public class GastoServicio {
         }
     }
 
-    private Categoria buscarCategoria(String id) {
-        return categorias.findById(id)
+    /**
+     * Desde la seccion 2.5 las categorias son por grupo, asi que esto NO
+     * puede ser un `findById` a secas: sin el filtro por grupo, cualquiera
+     * podria cargar un gasto propio referenciando el id de la categoria de
+     * OTRO grupo, y el snapshot que queda embebido mostraria un nombre e
+     * icono que nunca le pertenecieron. Mismo motivo por el que
+     * `GastoConsultas.buscarVisible` filtra por grupo antes que por id.
+     */
+    private Categoria buscarCategoria(String id, String grupoId) {
+        return categorias.findByIdAndGrupoId(id, grupoId)
                 .orElseThrow(() -> new ReglaDeNegocioException("No existe la categoría " + id));
     }
 

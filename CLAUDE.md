@@ -1352,6 +1352,232 @@ ios`, limpios (no hay cambios de backend: el shortcut es pura navegación).
 Falta probarlo en el teléfono: que el botón se vea bien arriba de la
 tarjeta, y que llegar por ahí deje el chip Vaquita puesto de una.
 
+### Categorias 100% personalizables, por grupo (v1.1, seccion 2.5)
+
+Pedido de Franco, ultima feature antes de TestFlight: poder agregar y borrar
+categorias propias.
+
+**El pedido obligo a un cambio de modelo, no solo a un CRUD.** Hasta esta
+sesion `Categoria` era una coleccion GLOBAL: seis documentos, sembrados una
+sola vez al arrancar (`SembradorDeCategorias`), compartidos por TODA la base.
+Con el registro cerrado eso no importaba (un unico grupo, Franco y Viole). Con
+el registro abierto de la v1.0 ya era raro -- cualquiera que se registrara
+heredaba las mismas seis categorias que Franco y Viole, sin pedirlo -- pero
+agregar personalizacion lo vuelve un bug de verdad: si Franco agrega
+"Netflix", no tiene sentido que le aparezca a un desconocido que se registro
+ayer, y viceversa. **Cada grupo pasa a tener su PROPIA copia.**
+
+**Tres decisiones, discutidas antes de programar (regla 3):**
+
+1. **Reasignar las seis categorias globales existentes al grupo real de
+   Franco y Viole**, en vez de dejarlas huerfanas y sembrarles un juego nuevo.
+   Conserva los ids que los `Gasto` viejos puedan tener embebidos en algun
+   lado (no los tienen -- `Gasto.categoria` es un snapshot, ver mas abajo --
+   pero conservar el id es mas prolijo que crear seis documentos nuevos
+   iguales). **Esto es una migracion sobre la base REAL y todavia no se
+   corrio**: ver "La migracion pendiente" mas abajo.
+2. **Cualquier categoria se puede borrar, inclusive las seis originales.**
+   Franco pidio "100% personalizadas", no "seis fijas mas lo que agregues".
+   Lo unico que se protege es no dejar un grupo sin NINGUNA categoria: sin
+   eso el formulario de alta se queda sin un chip para elegir, y no se puede
+   cargar un gasto -- el pecado capital de esta app.
+3. **Se agregan ~12 iconos curados de Lucide** (ver mas abajo) para el
+   selector visual de la pantalla nueva, ademas de los seis que ya tenian
+   uso.
+
+**El modelo**: `Categoria` gana `grupoId` (`@Field("grupo_id")`). El indice
+unico pasa de `nombre` solo a un `@CompoundIndex` sobre `{grupo_id, nombre}`
+-- el mismo nombre ya no puede chocar DENTRO de un grupo, pero "Netflix" en
+el grupo de Franco y "Netflix" en el de un desconocido conviven sin problema.
+El chequeo de nombre repetido es **case-insensitive** ("Netflix" y "NETFLIX"
+son la misma categoria para quien elige de una lista), y se hace en JAVA
+(traer todas las del grupo y comparar con `equalsIgnoreCase`) y no con una
+consulta derivada de Spring Data, que seria exacta y no alcanzaria -- mismo
+criterio que ya usa `Liquidacion` para sumar su historial en memoria en vez
+de un pipeline, porque son pocas filas por grupo.
+
+**Sembrado: al registrarse, y un sweep al arrancar.** Un grupo NUEVO recibe
+sus seis categorias de una, dentro de `AutenticacionServicio.grupoPropio()`
+-- el registro pasa a escribir TRES documentos (usuario, grupo, categorias)
+en vez de dos, todos sin transaccion por el mismo motivo de siempre: si
+falla a mitad de camino, el proximo intento no reusa el grupo a medio crear
+(desde la v1.0), y un grupo sin categorias propias queda atrapado por el
+sweep de abajo. Los grupos que YA EXISTIAN antes de esta sesion (Franco,
+Viole, y cada cuenta de prueba de sesiones anteriores) no tienen ninguna
+categoria propia todavia -- hasta ahora usaban las globales sin saberlo --
+asi que `SembradorDeCategorias` (repensado: ya no siembra UNA vez al
+arrancar, sino que correo un `ApplicationRunner` que recorre TODOS los
+grupos y le siembra las seis a cualquiera que todavia no tenga, idempotente
+via `existsByGrupoId`) los atrapa en el primer arranque despues del deploy.
+Las seis globales viejas quedan atras como documentos huerfanos sin
+`grupo_id`: inofensivos (nada los consulta nunca, igual que el grupo huerfano
+de un registro que falla a medias), y es a proposito que este sweep NO los
+reutilice ni los borre -- ver la migracion explicita mas abajo.
+
+**Un bug real de indices, encontrado contra Mongo de verdad.** La primera
+version del codigo que dropea el indice viejo (`nombre`, que dejo de ser
+unico por si solo) asumia que su nombre en Mongo era `"nombre_1"`, la
+convencion del SHELL cuando uno mismo crea un indice a mano. Spring Data
+NO sigue esa convencion: un `@Indexed` sin `name` explicito se llama IGUAL
+que el campo, sin el sufijo `_1`. El chequeo contra `"nombre_1"` nunca
+matcheaba nada, el indice viejo seguia vivo, y el primer grupo preexistente
+que el sweep intentaba sembrar con una categoria "ropa" (por ejemplo)
+chocaba contra el indice viejo con un `E11000 duplicate key error` apenas
+el SEGUNDO grupo intentaba sembrar la misma palabra. Se encontro corriendo
+`contextLoads` de verdad contra la Mongo local (no con un mock, que nunca
+podria haber visto esto) y se confirmo mirando `db.categoria.getIndexes()`
+a mano: el nombre real era `"nombre"`. Vale como leccion aparte de la de
+`findByIdAndGrupoId` mas abajo: **no asumir que un indice de Spring Data
+sigue la convencion del shell de Mongo sin mirarlo.**
+
+**Dos bugs de seguridad/integridad, encontrados revisando el codigo propio
+despues del cambio de modelo, no por un test que fallara ni porque Franco
+los pidiera.** Grupo-escopar `Categoria` tiene consecuencias en CUALQUIER
+lugar que antes confiaba en que un `categoriaId` servia para cualquiera:
+
+1. **`GastoServicio.buscarCategoria` hacia un `findById` a secas.** Sin el
+   filtro por grupo, cualquiera podia cargar (o editar) un gasto propio
+   pasando el `categoriaId` de OTRO grupo, y el snapshot embebido
+   (`ReferenciaCategoria`) terminaria mostrando el nombre y el icono de una
+   categoria ajena -- una fuga de datos cross-tenant real, que yo mismo
+   introduje con el cambio de modelo y encontre antes de commitear, releyendo
+   el servicio con la pregunta "que asumia este codigo que ya no es cierto".
+   Se arreglo agregando `CategoriaRepositorio.findByIdAndGrupoId` (mismo
+   patron que `LiquidacionRepositorio`/`PozoRepositorio`) y pasandole el
+   `grupoId` del usuario actual en los dos call sites (`crear` y
+   `actualizar`). Probado con un test nuevo
+   (`GastoServicioTest.CategoriaDelGrupo`) y confirmado con `curl` contra
+   Mongo real: un `categoriaId` de otro grupo da 400 ("No existe la
+   categoría ...") en vez de aceptarse.
+2. **`CuentaServicio.borrar()` no borraba las categorias del grupo cuando se
+   iba su ULTIMO integrante.** Ese caso ya borraba `gastos` y `pozos` del
+   grupo entero (porque sin nadie adentro no queda historial de quien
+   cuidar), pero antes de esta sesion `Categoria` no tenia dueño -- agregar
+   `grupoId` significa que ahora SI lo tiene, y el borrado de cuenta tenia
+   que aprender a llevarselas tambien. Sin el fix, cada cuenta de prueba
+   borrada (o cualquier usuaria real que se de de baja sola) deja atras
+   seis-o-mas documentos de categoria huerfanos para siempre. Se agrego
+   `CategoriaRepositorio.deleteByGrupoId` y se lo llama junto a los otros dos
+   `deleteByGrupoId` en el mismo `if`. Probado con `CuentaServicioTest` (mock)
+   y confirmado con `curl` contra Mongo real: una cuenta sola que se borra
+   deja el conteo de `categoria` para ese `grupo_id` en cero.
+
+**La API**: `GET /categorias` (ya existia, ahora escopeada), `POST
+/categorias` (crea, 201, rechaza el nombre repetido case-insensitive con
+400), `DELETE /categorias/{id}` (borra, 204; 404 si no existe o es de otro
+grupo -- mismo criterio de siempre: no distinguir "no existe" de "no es
+tuya"; 400 "No podés borrar tu última categoría" si es la unica que le
+queda al grupo).
+
+**Por que `Gasto.categoria` (el snapshot embebido) no se rompe con nada de
+esto.** `ResumenServicio.agruparPorCategoria` y el resto de los agregados
+leen el nombre y el icono DEL GASTO, nunca vuelven a consultar la coleccion
+`Categoria` en vivo. Borrar una categoria en uso (inclusive una de las
+originales) no cambia ni un gasto viejo: sigue mostrando el nombre y el
+icono que tenia al cargarse, exactamente como ya pasaba con el renombre de
+categoria que la seccion de modelado documenta mas arriba ("si se renombra
+una categoria, los gastos viejos conservan el nombre viejo"). Personalizar
+categorias es la MISMA propiedad, aplicada a crear y borrar ademas de
+renombrar.
+
+**Mobile**: `app/categorias.tsx` (nueva), con un formulario para crear
+(nombre + grilla de iconos para elegir) y la lista de categorias del grupo,
+cada fila con un toque que abre un `Alert.alert` de confirmacion antes de
+borrar (sin `ActionSheetIOS`: a diferencia de Ingreso/Aporte/Liquidacion,
+una categoria solo tiene UNA accion ademas de crear, asi que un menu seria
+mas pasos que botones). `IconoCategoria.tsx` suma doce iconos nuevos
+(`house`, `paw-print`, `music`, `graduation-cap`, `plane`, `bus`,
+`dumbbell`, `stethoscope`, `smartphone`, `fuel`, `wallet`, `party-popper`),
+importados por subpath como todos los demas (ver "Los iconos: Metro no hace
+tree-shaking de un barrel" mas abajo), y expone `ICONOS_PARA_ELEGIR` -- la
+lista canonica que la pantalla nueva recorre para pintar la grilla, para que
+sea imposible que el selector ofrezca un nombre que `IconoCategoria` no sepa
+dibujar. La entrada "Categorías" en `menu.tsx` vive a proposito FUERA del
+`if (tienePareja !== false)` de la seccion "Navegación": los gastos
+PERSONAL necesitan categorias sin importar si hay pareja o no.
+
+`features/categorias/api.ts` usa el `pedir<T>` liso, SIN el respaldo de
+cache que tiene `traerCategorias()` en `features/gastos/api.ts` -- crear y
+borrar son acciones deliberadas que necesitan la red de verdad, no una
+lectura que pueda contestar con datos viejos. El comentario de
+`catalogo.ts` que decia *"si algun dia se pueden crear categorias desde la
+app, este es el primer lugar que va a mentir"* se actualizo: ese dia llego,
+y el riesgo que describe (el cache de un telefono puede ofrecer por un rato
+una categoria que el otro ya borro desde el suyo) queda aceptado explicito,
+mismo criterio que ya se acepta para `vigente` de la vaquita.
+
+**La migracion pendiente, sobre la base REAL.** Las seis categorias
+globales que usaban Franco y Viole hasta esta sesion quedan como documentos
+huerfanos (`categoria` sin `grupo_id`) tanto en la base local de Franco como
+en Atlas (produccion) -- esta sesion corrio en la nube, sin acceso a
+ninguna de las dos, asi que **nada de esto se ejecuto todavia**. Antes de
+correrlo, confirmar que el conteo da justo 6:
+
+```javascript
+db.categoria.countDocuments({ grupo_id: { $exists: false } })
+```
+
+Conseguir el `grupo_id` real (es un STRING, no `ObjectId` -- asi se guarda
+en toda la base, igual que en `Usuario` y `Gasto`):
+
+```javascript
+db.usuario.findOne({ email: "<el email real de Franco>" }, { grupo_id: 1 })
+```
+
+Y reasignar las seis, pegando ese valor tal cual (como string, sin
+`ObjectId(...)` alrededor):
+
+```javascript
+db.categoria.updateMany(
+  { grupo_id: { $exists: false } },
+  { $set: { grupo_id: "PEGAR_AQUI_EL_GRUPO_ID" } }
+)
+```
+
+Verificar que quedaron 6 en el grupo y 0 huerfanas:
+
+```javascript
+db.categoria.countDocuments({ grupo_id: "PEGAR_AQUI_EL_GRUPO_ID" })  // 6
+db.categoria.countDocuments({ grupo_id: { $exists: false } })        // 0
+```
+
+**Esto todavia no se corrio en ningun lado** (regla de la base: proponer el
+Mongo y esperar el si). Sin correrlo, Franco y Viole simplemente reciben un
+juego nuevo de seis categorias (via el sweep de arranque, la primera vez que
+el backend deployado corra con este codigo) en vez de conservar las que ya
+tenian -- funciona igual, pero las seis globales viejas quedan huerfanas
+para siempre en vez de reclamadas. Correr la migracion es cosmetico, no
+bloqueante.
+
+**Un efecto secundario de esta sesion que vale nombrar**: grupo-escopar
+`Categoria` dejo en evidencia que CASI TODAS las cuentas descartables de
+`scripts/smoke-test.ps1` (Sola, Borra/Queda, Suma, Deudor/Acreedor,
+Ahorrista) usaban `$CAFE`/`$UBER`/`$COMIDA` -- los ids de categoria DE
+FRANCO -- para cargar sus propios gastos, porque hasta ahora cualquier id
+servía para cualquiera. Con el cambio, cada una de esas llamadas habria
+fallado con "No existe la categoría" (o, en los casos COMPARTIDO con pareja
+propia, habria fallado por el motivo EQUIVOCADO: pasaba el chequeo de
+pareja y recien ahi explotaba en la categoria). Se agrego
+`IdDeCategoriaPara($headers, $nombre)` -- la misma idea que ya usaba
+`IdDeCategoria` para Franco, generalizada -- y cada cuenta descartable
+resuelve ahora SU PROPIA categoria antes de cargar un gasto. El caso mas
+sutil es Suma (seccion 14): antes de `sumarse` tiene que usar la categoria
+de SU grupo de uno; despues, la del grupo de Invita (confirmado leyendo
+`GrupoServicio.sumarse`: `actual.setGrupoId(destino.getId())` -- quien se
+suma hereda el grupo de quien invito, no al reves). Sin este arreglo, la
+seccion 2.5 hubiera arreglado el bug de produccion y roto el smoke test
+entero en el proceso.
+
+Verificado: 182 tests en el backend (los 167 que ya habia + 9 nuevos de
+`CategoriaServicioTest` + 1 de `GastoServicioTest.CategoriaDelGrupo` + 1 de
+`AutenticacionServicioTest` + 2 de `CuentaServicioTest`, mas los ajustes a
+tests existentes), todos en verde incluido `contextLoads` (con Mongo real);
+`tsc --noEmit --noUnusedLocals` y `expo export --platform ios` en mobile,
+limpios; una seccion nueva en `scripts/smoke-test.ps1` (17), mas los
+arreglos a las nueve secciones que usaban categorias de Franco desde otro
+grupo, corridas a mano por curl contra Mongo real antes de confiar en el
+script. Sin telefono esta vuelta.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 
@@ -1897,6 +2123,24 @@ con el lenguaje del producto.
       Verificado: 121 tests, el smoke test (145 chequeos) contra Mongo local, y
       el CI en verde. Lo que falta es de un telefono y de App
       Store Connect: ver los pasos de `docs/app-store.md`.
+- [~] **6.12 — Categorias 100% personalizables, por grupo.** Ultimo pedido de
+      Franco antes de subir a TestFlight: poder agregar y borrar categorias
+      propias. Obligo a pasar `Categoria` de global a por-grupo (ver la
+      seccion de arriba, "Categorias 100% personalizables, por grupo"), y de
+      ahi salieron dos bugs reales (uno de seguridad: `GastoServicio.
+      buscarCategoria` sin filtrar por grupo; uno de limpieza:
+      `CuentaServicio` no borraba las categorias del grupo al irse su ultimo
+      integrante) y un regresion grande en `scripts/smoke-test.ps1` (casi
+      todas las cuentas descartables asumian categorias globales).
+
+      Verificado: 182 tests en el backend, todos en verde incluido
+      `contextLoads` (Mongo real); `tsc --noEmit --noUnusedLocals` y
+      `expo export --platform ios` en mobile, limpios; `scripts/smoke-test.ps1`
+      con una seccion nueva (17) y los arreglos a las nueve secciones que
+      quedaron rotas, las dos cosas probadas a mano por `curl` contra Mongo
+      real. **Falta la migracion de las seis categorias globales viejas al
+      grupo real de Franco y Viole** (SQL propuesto, sin correr -- ver la
+      seccion de arriba) y probarlo en el telefono.
 - [ ] **7 — Build EAS y TestFlight.** Los dos tienen iPhone 13 Pro y la cuenta
       de Apple Developer ya existe. Va **TestFlight interno** (Viole como
       usuaria en App Store Connect), que no pasa por Beta App Review; subirla a

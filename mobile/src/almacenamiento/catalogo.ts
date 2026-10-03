@@ -23,10 +23,18 @@ import type { CategoriaRespuesta, GrupoRespuesta, PozoRespuesta } from '../api/t
  * clave de idempotencia porque perderlos si importa. Si este archivo se corrompe
  * o se borra, el peor caso es que haya que abrir la app con senial una vez.
  *
- * Se pisa entero en cada lectura exitosa, sin TTL: las seis categorias las
- * siembra el backend al arrancar y no cambian, asi que un caché viejo no es un
- * riesgo real. Si algun dia se pueden crear categorias desde la app, este es el
- * primer lugar que va a mentir.
+ * Se pisa entero en cada lectura exitosa, sin TTL.
+ *
+ * ESE "ALGUN DIA" DE ARRIBA YA LLEGO (seccion 2.5): las categorias se pueden
+ * agregar y borrar desde `app/categorias.tsx`, asi que ya no son fijas. El
+ * riesgo que eso abre es ACOTADO y ya aceptado en otro lado de este mismo
+ * archivo: si Viole borra una categoria desde su telefono justo cuando
+ * Franco esta sin señal, el cache de Franco puede ofrecerle esa categoria un
+ * rato mas al cargar un gasto offline. No rompe nada -- el gasto se encola
+ * igual, con el snapshot que tenia -- es la misma clase de desactualizacion
+ * entre dispositivos que ya tolera `vigente` de la vaquita (ver mas abajo).
+ * Arreglarlo de raiz pediria invalidar el cache de un telefono desde el
+ * otro, que es mas maquinaria de la que esto necesita para dos personas.
  */
 const ARCHIVO = 'catalogo.json';
 
