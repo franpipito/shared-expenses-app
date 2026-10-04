@@ -1,3 +1,4 @@
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -45,10 +46,16 @@ import { fuentes, numerosTabulares } from '../../../tema/tipografia';
  * Este formulario es donde se juega el proyecto entero. La usuaria abandono un
  * intento anterior porque anotar era incomodo, y dijo que prefiere olvidarse un
  * gasto antes que anotar lento. Por eso: **categoria, monto, descripcion, y el
- * toggle de hormiga.** Nada mas.
+ * toggle de hormiga.** Cada campo que se le agregue se paga en abandono.
  *
- * Cada campo que se le agregue se paga en abandono. La fecha no se pregunta:
- * es hoy.
+ * LA FECHA ES LA EXCEPCION, pedida por Franco (no por la usuaria en la
+ * entrevista): sin ella, un gasto cargado tarde -- el ticket que quedo en el
+ * bolsillo hasta la noche, o el que se anota al otro dia -- quedaba fechado
+ * "hoy" sin forma de corregirlo despues, ni siquiera editando. Se agrega como
+ * un control compacto (`display="compact"` de DateTimePicker, un boton chico
+ * que abre el calendario nativo de iOS) y no un campo de texto: arranca en
+ * HOY sola, sin ningun tap, asi que el camino rapido de siempre no se mueve
+ * un pixel. Tocarla es la excepcion, no el paso de todos los gastos.
  *
  * Lo de compartido -- el reparto y quien pago -- existe pero **arranca cerrado**
  * y aparece recien al prender el switch. Es revelacion progresiva: el camino
@@ -113,6 +120,22 @@ function parteMia(gasto: GastoRespuesta | undefined, miId: string | undefined): 
     : 100 - gasto.porcentajePagador;
 }
 
+/**
+ * `"2026-09-07"` -> `Date` de medianoche LOCAL, para el `value` de
+ * DateTimePicker. Mismo motivo que `formatearDia` en `FilaGasto.tsx`: el
+ * constructor de un solo string parsea como UTC, y en Buenos Aires eso
+ * corre la fecha un dia para atras.
+ */
+function comoFechaLocal(fecha: string): Date {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  return new Date(anio, mes - 1, dia);
+}
+
+/** El inverso de `comoFechaLocal`: lo que elige el picker, de vuelta a texto ISO. */
+function comoTextoIso(fecha: Date): string {
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+}
+
 type Props = {
   /** El gasto que se esta editando. Ausente = se esta cargando uno nuevo. */
   inicial?: GastoRespuesta;
@@ -157,6 +180,7 @@ export function FormularioDeGasto({
     inicial ? String(inicial.monto).replace('.', ',') : '',
   );
   const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? '');
+  const [fecha, setFecha] = useState(inicial?.fecha ?? hoyLocal());
   const [esHormiga, setEsHormiga] = useState(inicial?.esHormiga ?? false);
   // `destinoSugerido` no aplica editando: `inicial` ya manda ahi (ver el
   // javadoc de la prop).
@@ -318,9 +342,9 @@ export function FormularioDeGasto({
       await onGuardar({
         monto: montoNumero,
         categoriaId: categoriaId!,
-        // Editando se conserva la fecha original: corregir un monto no deberia
-        // mover el gasto de dia, y menos de mes.
-        fecha: inicial?.fecha ?? hoyLocal(),
+        // Elegida con el picker de arriba. Arranca en la fecha original al
+        // editar, o en hoy al cargar, pero las dos se pueden corregir ahora.
+        fecha,
         // Opcional. Vacia viaja ausente y el backend guarda null: editando, es
         // tambien como se borra una descripcion que ya estaba.
         descripcion: descripcion.trim() || undefined,
@@ -440,6 +464,34 @@ export function FormularioDeGasto({
               );
             })}
           </View>
+        </View>
+
+        <View style={estilos.bloque}>
+          <Text style={estilos.etiqueta}>Fecha</Text>
+          {/*
+            `display="compact"` en vez de "default": en iOS 14+ es un boton
+            chico que ya muestra la fecha elegida y abre el calendario nativo
+            solo al tocarlo -- no hay modal ni estado de abierto/cerrado que
+            armar a mano, y el camino rapido no pierde ni un pixel: arranca en
+            HOY sin que nadie haya tocado nada. `maximumDate` espeja el
+            `@PastOrPresent` del backend, para que ni se pueda ELEGIR una
+            fecha futura, no solo que se rechace despues. `locale="es-AR"`
+            para que muestre el mismo formato sin importar el idioma del
+            telefono, igual que `Intl.DateTimeFormat('es-AR', ...)` en
+            `FilaGasto.tsx` y `periodo.ts`.
+          */}
+          <DateTimePicker
+            value={comoFechaLocal(fecha)}
+            mode="date"
+            display="compact"
+            locale="es-AR"
+            accentColor={colores.rio}
+            maximumDate={new Date()}
+            style={estilos.fecha}
+            onChange={(_evento: DateTimePickerEvent, elegida?: Date) => {
+              if (elegida) setFecha(comoTextoIso(elegida));
+            }}
+          />
         </View>
 
         <View style={estilos.bloque}>
@@ -683,6 +735,10 @@ const estilos = StyleSheet.create({
     color: colores.texto,
     ...numerosTabulares,
   },
+  // flex-start: es un control chico (el boton nativo compacto), no un campo de
+  // texto -- estirarlo a lo ancho del formulario se veria como un error de
+  // layout, no como una fila mas.
+  fecha: { alignSelf: 'flex-start' },
   input: {
     backgroundColor: colores.tarjeta,
     borderWidth: 1,

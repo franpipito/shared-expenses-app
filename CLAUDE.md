@@ -1578,6 +1578,86 @@ arreglos a las nueve secciones que usaban categorias de Franco desde otro
 grupo, corridas a mano por curl contra Mongo real antes de confiar en el
 script. Sin telefono esta vuelta.
 
+### Elegir la fecha del gasto (v1.1, seccion 2.6)
+
+Pedido de Franco, disparado por un caso real: Viole cargo un gasto y la
+fecha quedo mal, sin ninguna forma de corregirla -- ni al cargar ni editando
+despues. Hasta esta sesion la fecha NUNCA se preguntaba: `GastoServicio`
+siempre la recibia en el `GuardarGastoRequest` (el campo es obligatorio
+desde el dia 1), pero `FormularioDeGasto` la completaba sola, sin mostrar
+ningun control: `hoyLocal()` al cargar, y la fecha original sin tocar al
+editar (`fecha: inicial?.fecha ?? hoyLocal()`). Era una decision deliberada
+-- "la fecha no se pregunta: es hoy", literal en el javadoc del componente --
+y el pedido de Franco la revierte a proposito.
+
+**Cero cambios de backend.** `GuardarGastoRequest.fecha` ya era obligatoria
+y ya validaba `@PastOrPresent`; lo unico que faltaba era que el cliente
+mandara un valor distinto de "hoy". Esto es enteramente un cambio de mobile.
+
+**El control es `@react-native-community/datetimepicker` en modo
+`display="compact"`**, no un campo de texto ni una fila de chips como el
+reparto. Tres motivos:
+- Un campo de texto libre ("07/09/2026") invita a errores de formato que
+  el backend rechazaria con un 400 recien al guardar -- mal momento para
+  enterarse.
+- Chips no sirven aca: el reparto tiene 5 valores razonables, una fecha
+  tiene miles. No hay forma de precomputar las opciones.
+- `display="compact"` es el boton nativo chico de iOS 14+: muestra la
+  fecha elegida y abre el calendario del sistema solo al tocarlo, sin
+  modal ni estado de "abierto/cerrado" que armar a mano. Arranca en HOY sin
+  que nadie haya tocado nada, asi que **el camino rapido de siempre sigue
+  intacto**: agregar el control no le cuesta ni un tap a quien no lo
+  necesita, que sigue siendo el caso comun.
+
+**Dos chequeos que espejan al backend en vez de solo confiar en el, para no
+dejar elegir algo que despues se va a rechazar:** `maximumDate={new
+Date()}` en el picker (el mismo limite que el `@PastOrPresent` del
+servidor, pero ANTES de que la persona pueda tocar "Guardar") y
+`locale="es-AR"` (para que la fecha salga en el mismo formato sin importar
+el idioma del telefono, igual que ya hace `Intl.DateTimeFormat('es-AR', ...)`
+en `FilaGasto.tsx` y `periodo.ts` -- sin esto, el boton mostraria la fecha
+en ingles en un telefono configurado en otro idioma).
+
+**El mismo bug de zona horaria de siempre, resuelto con el mismo patron de
+siempre.** El picker trabaja con objetos `Date`, pero el backend guarda
+`fecha` como texto ISO (`"2026-09-07"`, ver "Fechas como texto ISO" mas
+arriba). Convertir con `new Date("2026-09-07")` a secas parsea como
+medianoche UTC, que en Buenos Aires (UTC-3) ya es el dia anterior a las
+21:00 -- el mismo bug que ya motivo el bean `Clock` del backend y
+`formatearDia` en `FilaGasto.tsx`. La solucion es la misma: separar el
+string y construir la fecha con el constructor de tres argumentos
+(`comoFechaLocal`), que arma la fecha en hora LOCAL. El camino inverso
+(`comoTextoIso`) usa los mismos getters locales que ya usaba `hoyLocal()`,
+nunca `.toISOString()`.
+
+**Al editar, ahora SI se puede cambiar la fecha** -- se sacó la restriccion
+vieja ("editando se conserva la fecha original: corregir un monto no
+deberia mover el gasto de dia"). Dejar esa asimetria (se puede elegir mal
+al cargar, pero no corregir despues) hubiera sido peor que no tener el
+picker: exactamente el caso que disparo el pedido.
+
+**La dependencia nueva, instalada desde la nube con el mismo rodeo que
+`expo-clipboard` en la sesion 2.1**: `npx expo install` volvio a fallar por
+el mismo bloqueo de red del sandbox ("HTTP Proxy Network Error: Forbidden"
+al pedirle a React Native Directory el chequeo de compatibilidad). Se
+instalo con `npm install @react-native-community/datetimepicker@9.1.0`
+apuntando a la version pineada para Expo SDK 57 en
+`node_modules/expo/bundledNativeModules.json`, y se verifico el
+`package-lock.json` con `npm ci` (local y con `npx npm@10.9 ci`, la version
+que corren CI y EAS) en una carpeta aparte -- el mismo chequeo que ya
+delato el problema de `react-native-worklets` en la 6.11, para no
+repetirlo. **No necesita plugin en `app.json`**: el plugin que trae el
+paquete es solo para personalizar el estilo del dialogo en ANDROID, y esta
+app es iOS-only.
+
+Verificado: `tsc --noEmit --noUnusedLocals` y `expo export --platform ios`
+limpios (bundle en 2.9MB, el mismo orden de magnitud que antes: el picker
+no agrega peso de JS, el codigo nativo se linkea en el build de EAS, no en
+el bundle de Metro). **Sin telefono esta vuelta, y es la verificacion que
+mas importa para un picker nativo**: que el calendario de iOS se abra y
+cierre bien, y que la fecha elegida sea la que despues se ve en la lista,
+son cosas que ni `tsc` ni `expo export` pueden probar.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 
