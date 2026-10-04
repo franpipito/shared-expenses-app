@@ -26,6 +26,7 @@ import { Boton } from '../../../componentes/Boton';
 import { IconoCategoria } from '../../../componentes/IconoCategoria';
 import { useSesion } from '../../auth/sesion';
 import { hoyLocal, traerCategorias, traerGrupo } from '../api';
+import { crearCategoria } from '../../categorias/api';
 import { nombreDeCategoria } from '../../../componentes/nombreDeCategoria';
 import { traerPozoActivo } from '../../vaquita/api';
 import { colores } from '../../../tema/colores';
@@ -56,6 +57,15 @@ import { fuentes, numerosTabulares } from '../../../tema/tipografia';
  * que abre el calendario nativo de iOS) y no un campo de texto: arranca en
  * HOY sola, sin ningun tap, asi que el camino rapido de siempre no se mueve
  * un pixel. Tocarla es la excepcion, no el paso de todos los gastos.
+ *
+ * LAS CATEGORIAS SE CREAN ACA TAMBIEN (seccion 2.7): despues de sacar la
+ * pantalla `app/categorias.tsx` y el sembrado default, este formulario es el
+ * UNICO lugar de la app donde se puede dar de alta una categoria nueva -- el
+ * chip "+ Agregar" al final de la fila abre un mini-formulario (nombre +
+ * emoji) sin salir de la pantalla. Mismo criterio que la fecha: no le cuesta
+ * nada a quien no lo toca, y evita mandar a alguien a otra pantalla en medio
+ * de cargar un gasto, que es exactamente el tipo de friccion que este
+ * formulario existe para evitar.
  *
  * Lo de compartido -- el reparto y quien pago -- existe pero **arranca cerrado**
  * y aparece recien al prender el switch. Es revelacion progresiva: el camino
@@ -205,6 +215,15 @@ export function FormularioDeGasto({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  // El mini-formulario de "+ Agregar" (seccion 2.7): arranca cerrado, y es
+  // estado propio porque no tiene nada que ver con guardar el GASTO -- crear
+  // una categoria es una accion aparte, con su propio error.
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+  const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState('');
+  const [iconoNuevaCategoria, setIconoNuevaCategoria] = useState('');
+  const [guardandoCategoria, setGuardandoCategoria] = useState(false);
+  const [errorCategoria, setErrorCategoria] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
@@ -215,6 +234,33 @@ export function FormularioDeGasto({
       }
     })();
   }, []);
+
+  /**
+   * Crea la categoria y la deja elegida de una: quien la esta creando la
+   * necesita justamente para ESTE gasto, asi que pedirle un segundo tap para
+   * elegirla despues de creada seria el mismo tipo de friccion que el "+
+   * Agregar" vino a evitar.
+   */
+  async function agregarCategoria() {
+    const nombre = nombreNuevaCategoria.trim();
+    const icono = iconoNuevaCategoria.trim();
+    if (!nombre || !icono) return;
+
+    setErrorCategoria(null);
+    setGuardandoCategoria(true);
+    try {
+      const nueva = await crearCategoria(nombre, icono);
+      setCategorias((actuales) => [...actuales, nueva]);
+      setCategoriaId(nueva.id);
+      setNombreNuevaCategoria('');
+      setIconoNuevaCategoria('');
+      setCreandoCategoria(false);
+    } catch (e) {
+      setErrorCategoria(e instanceof ErrorDeApi ? e.message : 'No se pudo crear la categoría.');
+    } finally {
+      setGuardandoCategoria(false);
+    }
+  }
 
   // El grupo se pide aparte y su fallo NO se muestra como error: sin el, el
   // formulario sigue sirviendo entero -- lo unico que se pierde es poder decir
@@ -463,7 +509,68 @@ export function FormularioDeGasto({
                 </Pressable>
               );
             })}
+
+            {/*
+              El chip que abre el mini-formulario. Mismo tamano y forma que
+              los demas chips, para que no se lea como un boton de otra
+              categoria de control -- es una categoria mas, hasta que se la crea.
+            */}
+            <Pressable
+              onPress={() => setCreandoCategoria((v) => !v)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: creandoCategoria }}
+              style={[estilos.chip, creandoCategoria && estilos.chipElegido]}
+            >
+              <Text style={[estilos.chipTexto, creandoCategoria && estilos.chipTextoElegido]}>
+                + Agregar
+              </Text>
+            </Pressable>
           </View>
+
+          {creandoCategoria ? (
+            <View style={estilos.nuevaCategoria}>
+              <TextInput
+                value={iconoNuevaCategoria}
+                onChangeText={setIconoNuevaCategoria}
+                placeholder="🏷️"
+                placeholderTextColor={colores.borde}
+                // Un solo emoji puede ocupar varias unidades UTF-16 (banderas,
+                // secuencias con ZWJ como 👨‍👩‍👧). El limite es generoso a
+                // proposito para no cortar uno a la mitad.
+                maxLength={8}
+                // Sin autocapitalize ni autocorrect: son del teclado de TEXTO,
+                // y este campo se llena con el teclado de EMOJIS (el globo de
+                // iOS para cambiar de teclado).
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={estilos.inputIcono}
+                accessibilityLabel="Icono de la categoría nueva: tocá el globo del teclado para elegir un emoji"
+              />
+              <TextInput
+                value={nombreNuevaCategoria}
+                onChangeText={setNombreNuevaCategoria}
+                placeholder="Nombre de la categoría"
+                placeholderTextColor={colores.textoSuave}
+                maxLength={40}
+                style={estilos.inputNombreCategoria}
+              />
+              <Pressable
+                onPress={agregarCategoria}
+                disabled={!nombreNuevaCategoria.trim() || !iconoNuevaCategoria.trim() || guardandoCategoria}
+                accessibilityRole="button"
+                style={[
+                  estilos.botonNuevaCategoria,
+                  (!nombreNuevaCategoria.trim() || !iconoNuevaCategoria.trim() || guardandoCategoria) &&
+                    estilos.botonNuevaCategoriaDeshabilitado,
+                ]}
+              >
+                <Text style={estilos.botonNuevaCategoriaTexto}>
+                  {guardandoCategoria ? '...' : 'Listo'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {errorCategoria ? <Text style={estilos.error}>{errorCategoria}</Text> : null}
         </View>
 
         <View style={estilos.bloque}>
@@ -768,6 +875,42 @@ const estilos = StyleSheet.create({
   chipElegido: { backgroundColor: colores.rioSuave, borderColor: colores.rio },
   chipTexto: { fontFamily: fuentes.cuerpo, fontSize: 15, color: colores.texto },
   chipTextoElegido: { fontFamily: fuentes.cuerpoSemi, color: colores.rioProfundo },
+
+  // El mini-formulario de "+ Agregar" (seccion 2.7): una fila con el emoji
+  // chico, el nombre que ocupa el resto, y "Listo" al final.
+  nuevaCategoria: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  inputIcono: {
+    backgroundColor: colores.tarjeta,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: 12,
+    width: 56,
+    minHeight: 44,
+    textAlign: 'center',
+    fontSize: 20,
+  },
+  inputNombreCategoria: {
+    flex: 1,
+    backgroundColor: colores.tarjeta,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    fontFamily: fuentes.cuerpo,
+    fontSize: 15,
+    color: colores.texto,
+  },
+  botonNuevaCategoria: {
+    backgroundColor: colores.rio,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  botonNuevaCategoriaDeshabilitado: { opacity: 0.4 },
+  botonNuevaCategoriaTexto: { fontFamily: fuentes.cuerpoSemi, fontSize: 15, color: colores.tarjeta },
 
   hormiga: {
     flexDirection: 'row',

@@ -9,48 +9,27 @@ import com.gastoscompartidos.repositorio.CategoriaRepositorio;
 import com.gastoscompartidos.seguridad.UsuarioActual;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Las categorias de gasto, 100% personalizables por grupo (v1.1, seccion 2.5).
+ * Las categorias de gasto, 100% personalizables por grupo (v1.1, seccion 2.5),
+ * y SIN ningun juego default (seccion 2.7): un grupo nuevo nace sin ninguna
+ * categoria propia.
  *
- * Hasta esta sesion eran globales: seis categorias compartidas por TODA la
- * base, sembradas una vez al arrancar. Con el registro abierto (v1.0) eso ya
- * era raro -- cualquiera que bajara la app desde el App Store heredaba las
- * mismas seis que Franco y Viole -- pero personalizarlas lo vuelve un bug de
- * verdad: si Franco agrega "Netflix", no tiene sentido que le aparezca a un
- * desconocido que se registro ayer, y viceversa.
+ * Hasta la seccion 2.5 eran globales: seis categorias compartidas por TODA la
+ * base, sembradas una vez al arrancar. La 2.5 las paso a ser por grupo, pero
+ * segui sembrando esas mismas seis para cada grupo nuevo -- Franco pidio ir
+ * mas lejos: nada de default, ni siquiera por grupo. Un grupo elige las
+ * suyas en el mini-onboarding despues de registrarse (`app/onboarding-
+ * categorias.tsx`), o las crea sobre la marcha con el "+ Agregar" del
+ * formulario de gasto. Las dos pegan contra el mismo `POST /categorias` de
+ * siempre -- no hay un camino de alta distinto para "la primera vez".
  *
- * Por eso cada grupo tiene su PROPIA copia, empezando por estas mismas seis
- * ({@link #sembrarParaGrupo}). Un grupo puede editarla como quiera -- agregar,
- * borrar, inclusive las seis originales -- sin tocarle nada a ningun otro.
+ * Un grupo puede editar su lista como quiera -- agregar, borrar -- sin
+ * tocarle nada a ningun otro.
  */
 @Service
 public class CategoriaServicio {
-
-    /**
-     * Las palabras que uso la usuaria en la entrevista, no las que suponiamos
-     * nosotros. Dijo "uber", no "transporte". Ver docs/entrevista-usuaria.md.
-     *
-     * "otros" no lo nombro ella, pero sin un cajon de sastre un gasto que no
-     * encaja en ninguna categoria no se puede cargar, y eso es friccion justo
-     * en el peor momento: parada en el mostrador con el pedido listo.
-     *
-     * El valor es el nombre del icono de Lucide, NO un emoji. Es el mismo
-     * mapa que vivia en el viejo `SembradorDeCategorias` global -- movido
-     * aca porque ahora se usa en DOS lugares (el registro y el sweep de
-     * arranque) y tenerlo en uno solo evita que se desincronicen.
-     */
-    private static final Map<String, String> DEFAULT = new LinkedHashMap<>(Map.of(
-            "cafe", "coffee",
-            "uber", "car",
-            "comida", "utensils",
-            "ropa", "shirt",
-            "regalos", "gift",
-            "otros", "ellipsis"
-    ));
 
     private final CategoriaRepositorio categorias;
     private final UsuarioActual usuarioActual;
@@ -114,24 +93,5 @@ public class CategoriaServicio {
         if (borradas == 0) {
             throw new RecursoNoEncontradoException("No existe la categoría " + id);
         }
-    }
-
-    /**
-     * Siembra las seis categorias default para un grupo que todavia no tiene
-     * ninguna propia. Idempotente por el `existsByGrupoId` de arriba, mismo
-     * espiritu que el viejo sembrador global: se puede llamar de mas sin
-     * riesgo.
-     *
-     * Dos llamadores: {@code AutenticacionServicio.grupoPropio()}, para que
-     * un grupo nuevo nazca con ellas de una, y el sweep de arranque en
-     * {@code SembradorDeCategorias}, que atrapa los grupos que ya existian
-     * antes de esta sesion (sin ninguna categoria propia todavia, porque
-     * hasta ahora las categorias eran globales).
-     */
-    public void sembrarParaGrupo(String grupoId) {
-        if (categorias.existsByGrupoId(grupoId)) {
-            return;
-        }
-        DEFAULT.forEach((nombre, icono) -> categorias.save(new Categoria(grupoId, nombre, icono)));
     }
 }

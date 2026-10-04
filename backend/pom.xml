@@ -71,9 +71,9 @@
 		     produccion, y te enteras cuando algo se rompe raro tres pantallas
 		     mas alla.
 
-		     Lo que se puede hacer y esta hecho: las categorias las siembra
-		     SembradorDeCategorias al arrancar, y los indices los declara
-		     @CompoundIndex en la entidad. Lo que NO se puede hacer es detectar
+		     Lo que se puede hacer y esta hecho: los indices se declaran
+		     @CompoundIndex en la entidad, y LimpiadorDeIndiceViejo dropea al
+		     arrancar los que quedaron viejos. Lo que NO se puede hacer es detectar
 		     documentos viejos con la forma vieja. Si algun dia hacen falta
 		     migraciones de datos de verdad, la herramienta del ecosistema es
 		     Mongock.

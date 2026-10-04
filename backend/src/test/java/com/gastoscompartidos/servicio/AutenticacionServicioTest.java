@@ -78,7 +78,6 @@ class AutenticacionServicioTest {
 
     private UsuarioRepositorio usuarios;
     private GrupoRepositorio grupos;
-    private CategoriaServicio categorias;
     private ServicioDeTokens tokens;
     private UsuarioActual usuarioActual;
     private AutenticacionServicio servicio;
@@ -88,7 +87,6 @@ class AutenticacionServicioTest {
     void preparar() {
         usuarios = mock(UsuarioRepositorio.class);
         grupos = mock(GrupoRepositorio.class);
-        categorias = mock(CategoriaServicio.class);
         tokens = mock(ServicioDeTokens.class);
         usuarioActual = mock(UsuarioActual.class);
         // SPY y no mock: por dentro es un BCryptPasswordEncoder de verdad, asi
@@ -122,7 +120,7 @@ class AutenticacionServicioTest {
             return g;
         });
 
-        servicio = new AutenticacionServicio(usuarios, grupos, categorias, codificador, tokens,
+        servicio = new AutenticacionServicio(usuarios, grupos, codificador, tokens,
                 limitador, usuarioActual, reloj, "Casa", MAX_REGISTROS);
     }
 
@@ -144,19 +142,6 @@ class AutenticacionServicioTest {
                     .extracting(Usuario::getGrupoId)
                     .doesNotHaveDuplicates()
                     .doesNotContainNull();
-        }
-
-        @Test
-        @DisplayName("el grupo nuevo sale sembrado con sus propias categorias (seccion 2.5)")
-        void elGrupoNuevoSaleSembrado() {
-            when(usuarios.findByEmail(anyString())).thenReturn(Optional.empty());
-
-            servicio.registrar(registro("Franco", "franco@local"), IP);
-
-            // No importa el id exacto (lo pone el mock de grupos.save), solo que
-            // CategoriaServicio.sembrarParaGrupo se llame con el grupo recien
-            // creado -- la logica de QUE siembra vive en CategoriaServicioTest.
-            verify(categorias).sembrarParaGrupo(anyString());
         }
 
         @Test

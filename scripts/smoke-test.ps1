@@ -7,7 +7,12 @@
 #       $env:REGISTRO_MAX_POR_IP = "100"; .\mvnw.cmd spring-boot:run
 #     El default es 5 registros por IP cada 15 minutos (el valor de produccion),
 #     y este script registra varios usuarios seguidos desde 127.0.0.1.
-#   - las categorias sembradas (las siembra la app sola al arrancar)
+#
+# Desde la seccion 2.7 NINGUNA categoria se siembra sola: un grupo nuevo nace
+# sin ninguna, y este script crea las que necesita para cada cuenta (ver
+# IdDeCategoriaPara mas abajo). Franco y Ella son la excepcion: son cuentas
+# viejas que ya tenian sus seis categorias de antes de esa seccion, y nada las
+# toca ni las migra -- siguen ahi, iguales, entre corridas.
 #
 # Correr desde la raiz del repo:
 #   .\scripts\smoke-test.ps1
@@ -52,10 +57,19 @@ function Crear($headers, $hash) {
 # descartables de mas abajo (Sola, Borra/Queda, Suma, Deudor/Acreedor,
 # Ahorrista) NO estan en el grupo de Franco, asi que no pueden usar $CAFE /
 # $UBER / $COMIDA: tienen que resolver sus PROPIAS categorias con esto.
-function IdDeCategoriaPara($headers, $nombre) {
+#
+# Y desde la seccion 2.7 YA NO HAY NINGUN DEFAULT: un grupo nuevo nace sin
+# ninguna categoria, asi que "resolver" ya no alcanza -- si no existe, esta
+# funcion la CREA. Es lo mismo que hace la app de verdad con el "+ Agregar"
+# del formulario de gasto o el mini-onboarding, asi que probarlo asi ejercita
+# el mismo camino. El icono por default es un emoji generico: a ninguno de
+# estos chequeos le importa CUAL icono tiene la categoria, solo que exista.
+function IdDeCategoriaPara($headers, $nombre, $icono = "🏷️") {
     $c = (Invoke-RestMethod -Uri "$base/categorias" -Headers $headers) | Where-Object { $_.nombre -eq $nombre }
-    if (-not $c) { throw "No aparecio la categoria '$nombre' para este usuario" }
-    return $c.id
+    if ($c) { return $c.id }
+    $nueva = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $headers `
+        -ContentType "application/json" -Body (@{ nombre = $nombre; icono = $icono } | ConvertTo-Json)
+    return $nueva.id
 }
 
 function EsperarCodigo($bloque, $esperado, $texto) {
@@ -310,22 +324,30 @@ EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos?mes=2026-09" `
 # El resto del script sigue con el token nuevo.
 $franco = @{ Authorization = "Bearer $($sesionNueva.token)" }
 $categorias = Invoke-RestMethod -Uri "$base/categorias" -Headers $franco
-Chequear (($categorias | Measure-Object).Count -eq 6) "el token nuevo funciona"
+# Sin contar cuantas son: eso ya no es un numero fijo desde la seccion 2.7 (ni
+# siquiera para Franco, si esto corriera alguna vez contra una base realmente
+# nueva). Lo que prueba esta linea es que el token nuevo autentica -- un 401
+# haria que Invoke-RestMethod tirara antes de llegar aca.
+Chequear ($null -ne $categorias) "el token nuevo funciona"
 
-# Resolver los ids por nombre, ahora que son ObjectId y no numeros.
+# Resolver (o crear, si hace falta) los ids por nombre. Franco y Ella son
+# cuentas viejas de antes de la seccion 2.7 y ya tienen sus seis categorias en
+# esta base local, asi que en la practica esto las encuentra y no crea nada
+# -- pero delega en IdDeCategoriaPara (mas arriba) para no asumirlo: si
+# alguna vez faltaran, las crea igual que a cualquier cuenta descartable.
 function IdDeCategoria($nombre) {
-    $c = $categorias | Where-Object { $_.nombre -eq $nombre }
-    if (-not $c) { throw "No aparecio la categoria '$nombre' en GET /categorias" }
-    return $c.id
+    return IdDeCategoriaPara $franco $nombre
 }
 $CAFE   = IdDeCategoria "cafe"
 $UBER   = IdDeCategoria "uber"
 $COMIDA = IdDeCategoria "comida"
 Chequear ($CAFE -is [string] -and $CAFE.Length -eq 24) "los ids de categoria son ObjectId de 24 caracteres"
 
-# Y el de Ella no se toca: cerrar sesiones es por usuario, no global.
+# Y el de Ella no se toca: cerrar sesiones es por usuario, no global. Mismo
+# motivo que arriba para no contar cuantas hay: lo que importa es que el
+# llamado no haya dado 401.
 $catsElla = Invoke-RestMethod -Uri "$base/categorias" -Headers $ella
-Chequear (($catsElla | Measure-Object).Count -eq 6) "la sesion de Ella no se vio afectada"
+Chequear ($null -ne $catsElla) "la sesion de Ella no se vio afectada"
 
 # ---------------------------------------------------------------------------
 Titulo "0.1 El grupo y sus integrantes"
@@ -1296,41 +1318,54 @@ Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $ahorris
     -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
 
 # ---------------------------------------------------------------------------
-Titulo "17. Categorias personalizadas (seccion 2.5)"
+Titulo "17. Categorias personalizadas, sin ningun default (secciones 2.5 y 2.7)"
 
-# Hasta esta seccion las categorias eran GLOBALES: una sola lista de seis,
-# compartida por cualquiera que se registrara. Pasan a ser POR GRUPO, asi que
-# se reusa a Sola (su propio grupo, de la seccion 0.2) para probar aislamiento
-# sin tocarle nada a Franco y Ella.
+# Hasta la seccion 2.5 las categorias eran GLOBALES: una sola lista de seis,
+# compartida por cualquiera que se registrara. Pasaron a ser POR GRUPO, y la
+# 2.7 fue mas lejos: ya NO HAY NINGUN DEFAULT, ni siquiera por grupo. Un
+# grupo nuevo nace sin ninguna categoria propia -- en la app de verdad la
+# elige en el mini-onboarding o la crea sobre la marcha con el "+ Agregar"
+# del formulario de gasto. Se reusa a Sola (su propio grupo, de la seccion
+# 0.2) para probar aislamiento sin tocarle nada a Franco y Ella, que
+# conservan intactas las seis que ya tenian de antes de este cambio: nada
+# migra categorias viejas ("Schema: no hay. Es MongoDB.", en CLAUDE.md).
 
+# Sola ya tiene categorias propias por la seccion 0.2 (como minimo "cafe":
+# IdDeCategoriaPara la crea ahi si todavia no existia). YA NO es un numero
+# fijo como "6": depende de lo que haya quedado de corridas anteriores, asi
+# que esta seccion compara contra esa base dinamica, nunca contra una
+# constante.
 $categoriasSolaAntes = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
-Chequear (($categoriasSolaAntes | Measure-Object).Count -eq 6) `
-    "Sola arranca con 6 categorias, igual que Franco"
+$baseSola = ($categoriasSolaAntes | Measure-Object).Count
+Chequear ($baseSola -ge 1) "Sola ya tiene categorias propias (al menos 'cafe', de la seccion 0.2)"
 
-# --- crear ------------------------------------------------------------------
+# --- crear, con un emoji como icono (seccion 2.7) ---------------------------
+# Nombre unico por corrida (sufijo al azar): si una corrida anterior dejo
+# algo sin limpiar, no choca contra esto.
+$nombreNuevo = "Netflix-$(Get-Random -Maximum 999999)"
 $nueva = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
-    -ContentType "application/json" -Body (@{ nombre = "Netflix"; icono = "smartphone" } | ConvertTo-Json)
-Chequear ($nueva.nombre -eq "Netflix" -and $nueva.icono -eq "smartphone") `
-    "se puede crear una categoria personalizada"
+    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo; icono = "📺" } | ConvertTo-Json)
+Chequear ($nueva.nombre -eq $nombreNuevo -and $nueva.icono -eq "📺") `
+    "se puede crear una categoria personalizada, con un emoji libre como icono"
 Chequear ($nueva.id -is [string] -and $nueva.id.Length -eq 24) "y tiene un id de ObjectId como las demas"
 
 $categoriasSolaConNueva = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
-Chequear (($categoriasSolaConNueva | Measure-Object).Count -eq 7) "ahora Sola tiene 7"
+Chequear ((($categoriasSolaConNueva | Measure-Object).Count) -eq ($baseSola + 1)) "ahora Sola tiene una mas"
 
 $categoriasFrancoSinTocar = Invoke-RestMethod -Uri "$base/categorias" -Headers $franco
 Chequear (($categoriasFrancoSinTocar | Measure-Object).Count -eq 6) `
-    "y las de Franco no se movieron: son POR GRUPO, no globales"
+    "y las de Franco no se movieron: son POR GRUPO, no globales (las seis que ya tenia, intactas)"
 
 # --- duplicado, sin importar mayusculas/minusculas --------------------------
 EsperarRegla { Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
-    -ContentType "application/json" -Body (@{ nombre = "NETFLIX"; icono = "wallet" } | ConvertTo-Json) } `
+    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo.ToUpper(); icono = "💰" } | ConvertTo-Json) } `
     "con ese nombre" "el nombre repetido se rechaza sin importar mayusculas/minusculas"
 
 # --- el mismo nombre en OTRO grupo no choca: el indice unico es (grupo, nombre) --
-$netflixDeFranco = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $franco `
-    -ContentType "application/json" -Body (@{ nombre = "Netflix"; icono = "smartphone" } | ConvertTo-Json)
-Chequear ($netflixDeFranco.nombre -eq "Netflix") "el mismo nombre no choca en el grupo de otra persona"
-Invoke-RestMethod -Uri "$base/categorias/$($netflixDeFranco.id)" -Method Delete -Headers $franco | Out-Null
+$mismoNombreDeFranco = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo; icono = "📺" } | ConvertTo-Json)
+Chequear ($mismoNombreDeFranco.nombre -eq $nombreNuevo) "el mismo nombre no choca en el grupo de otra persona"
+Invoke-RestMethod -Uri "$base/categorias/$($mismoNombreDeFranco.id)" -Method Delete -Headers $franco | Out-Null
 
 # --- una categoria ajena no se puede borrar ni referenciar -------------------
 EsperarCodigo { Invoke-RestMethod -Uri "$base/categorias/$($nueva.id)" -Method Delete -Headers $franco } `
@@ -1341,36 +1376,44 @@ EsperarRegla { Crear $franco @{
     descripcion = "intento cruzado"; tipo = "PERSONAL" } } `
     "No existe la categor" "un gasto no puede referenciar la categoria de otro grupo"
 
-# --- borrar funciona, y no es exclusivo de la que se acaba de crear ---------
-Invoke-RestMethod -Uri "$base/categorias/$($nueva.id)" -Method Delete -Headers $sola | Out-Null
-$categoriasSolaFinal = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
-Chequear (($categoriasSolaFinal | Measure-Object).Count -eq 6) "borrar la categoria la sacó de la lista"
+# --- 100% personalizable de verdad: tambien se puede borrar "cafe". Ninguna
+# categoria esta protegida por ser una de las originales -- lo unico que se
+# protege es no dejar el grupo sin NINGUNA (ver mas abajo). Es seguro borrar
+# "cafe" aca porque $nombreNuevo sigue existiendo como colchon: nunca se
+# llega a cero.
+$cafeDeSola = ($categoriasSolaConNueva | Where-Object { $_.nombre -eq "cafe" }).id
+if ($cafeDeSola) {
+    Invoke-RestMethod -Uri "$base/categorias/$cafeDeSola" -Method Delete -Headers $sola | Out-Null
+    $sinCafe = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
+    Chequear (-not ($sinCafe | Where-Object { $_.nombre -eq "cafe" })) `
+        "se puede borrar 'cafe': ninguna categoria esta protegida por ser una original"
+} else {
+    # No deberia pasar nunca -- la seccion 0.2 siempre la deja -- pero si
+    # algun dia pasa, mejor un chequeo en rojo que una excepcion sin contexto.
+    Chequear $false "Sola no tenia 'cafe' para probar que no esta protegida"
+}
 
-# --- 100% personalizable de verdad: tambien se puede borrar una de las seis
-# originales. Ninguna esta protegida en si misma -- lo unico que se protege es
-# no dejar el grupo sin NINGUNA (ver mas abajo).
-$cafeDeSola = ($categoriasSolaFinal | Where-Object { $_.nombre -eq "cafe" }).id
-Invoke-RestMethod -Uri "$base/categorias/$cafeDeSola" -Method Delete -Headers $sola | Out-Null
-$sinCafe = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
-Chequear (-not ($sinCafe | Where-Object { $_.nombre -eq "cafe" })) `
-    "se puede borrar incluso una de las seis originales"
-
-# La repone: la seccion "0.2" de la PROXIMA corrida vuelve a crear un gasto de
-# Sola con su propio "cafe" (via IdDeCategoriaPara), y el conteo de 6 de arriba
-# tiene que seguir siendo cierto la proxima vez que este script arranque.
-Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
-    -ContentType "application/json" -Body (@{ nombre = "cafe"; icono = "coffee" } | ConvertTo-Json) | Out-Null
-Chequear ((Invoke-RestMethod -Uri "$base/categorias" -Headers $sola | Measure-Object).Count -eq 6) `
-    "se repuso el cafe de Sola, para que la proxima corrida arranque igual"
+# $nombreNuevo NO se borra ni "cafe" se repone: como el nombre es unico por
+# corrida, no hay riesgo de chocar la proxima vez, y la proxima corrida
+# simplemente vuelve a crear "cafe" sola (seccion 0.2, via IdDeCategoriaPara,
+# que ahora crea si no encuentra -- ver mas arriba).
 
 # --- lo unico protegido: no dejar un grupo sin ninguna categoria -----------
-# Una cuenta nueva y descartable, para no tener que dejar a SOLA en una sola
-# categoria: esta se borra entera al final (y con ella su grupo y sus
-# categorias -- ver el fix de CuentaServicio en CLAUDE.md), asi que no hace
-# falta reponer nada despues.
+# Cuenta nueva y descartable (se borra entera al final, grupo y categorias
+# incluidos -- ver el fix de CuentaServicio en CLAUDE.md). Arranca sin NINGUNA
+# categoria propia (seccion 2.7): se le crean dos a proposito, para poder
+# borrar la primera y probar la proteccion contra la segunda.
 $sesionUnica = RegistrarOEntrar "Unica" "unica@local" $PASSWORD
 $unica = @{ Authorization = "Bearer $($sesionUnica.token)" }
+Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $unica `
+    -ContentType "application/json" -Body (@{ nombre = "cafe"; icono = "☕" } | ConvertTo-Json) | Out-Null
+Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $unica `
+    -ContentType "application/json" -Body (@{ nombre = "otros"; icono = "🏷️" } | ConvertTo-Json) | Out-Null
+
 $categoriasUnica = Invoke-RestMethod -Uri "$base/categorias" -Headers $unica
+Chequear (($categoriasUnica | Measure-Object).Count -eq 2) `
+    "Unica arranca sin ninguna categoria, y se le crean dos para esta prueba"
+
 ($categoriasUnica | Select-Object -Skip 1) | ForEach-Object {
     Invoke-RestMethod -Uri "$base/categorias/$($_.id)" -Method Delete -Headers $unica | Out-Null
 }

@@ -64,7 +64,10 @@ export default function Registro() {
         email: email.trim(),
         password,
       });
-      router.replace('/resumen');
+      // Y NO a /resumen directo: un grupo recien creado no tiene ninguna
+      // categoria propia (seccion 2.7, ya no se siembra ningun default), asi
+      // que primero pasa por el mini-onboarding para elegir las suyas.
+      router.replace('/onboarding-categorias');
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'Algo salió mal. Probá de nuevo.');
     } finally {

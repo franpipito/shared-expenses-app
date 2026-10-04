@@ -1658,6 +1658,149 @@ mas importa para un picker nativo**: que el calendario de iOS se abra y
 cierre bien, y que la fecha elegida sea la que despues se ve en la lista,
 son cosas que ni `tsc` ni `expo export` pueden probar.
 
+### Categorias sin ningun default, creadas desde el formulario o un mini-onboarding (v1.1, seccion 2.7)
+
+Pedido de Franco, revirtiendo una parte de lo que la sesion 2.5 acababa de
+construir: sacar la pantalla `app/categorias.tsx`, que la unica forma de
+crear una categoria sea el formulario de gasto mismo, y que ningun grupo
+nazca con un default -- ni seis fijas, ni seis por grupo. En su lugar, un
+mini-onboarding despues de registrarse, donde la persona elige las suyas.
+
+**Por que la 2.5 ya no alcanzaba.** Esa sesion resolvio el problema de
+fondo (categorias GLOBALES compartidas por toda la base) pero conservo el
+reflejo de sembrar un default -- paso de sembrar una vez para toda la base a
+sembrar las mismas seis para cada grupo nuevo. Franco pidio ir mas lejos:
+ni siquiera esas seis son universales. Si alguien no toma café, por que
+tiene que borrar "cafe" antes de poder usar la app con las categorias que
+sí usa.
+
+**El icono pasa de Lucide a emoji libre**, porque sin un selector curado que
+mantener (`app/categorias.tsx` y sus doce iconos elegidos a mano
+desaparecen con la pantalla), hacia falta otra forma de elegir un icono sin
+agregar una libreria ni una pantalla nueva. El teclado de emojis de iOS (el
+globo, al lado de la barra espaciadora) ya resuelve "elegir un icono" sin
+que la app tenga que dibujar nada propio.
+
+**`IconoCategoria.tsx` prueba Lucide primero y cae a texto despues.** Las
+categorias de Franco y Viole, cargadas en sesiones anteriores, siguen
+guardando nombres de Lucide ("coffee", "car", "utensils") -- nada migra
+datos viejos (ver "Schema: no hay. Es MongoDB." mas abajo). Si el
+componente asumiera que todo es emoji, esas seis se verian como texto
+suelto en vez de un icono. El mapa se achico a los seis Lucide que esas
+categorias de verdad usan (se sacaron los doce curados de la 2.5, que ya no
+los usa nadie) y lo que no matchea ninguna clave se dibuja tal cual en un
+`<Text>`, que es exactamente lo que hace falta para que un emoji se vea
+como un emoji.
+
+**El "+ Agregar" vive adentro de `FormularioDeGasto.tsx`, no en una pantalla
+aparte.** Un chip mas al final de la fila de categorias, con el mismo alto y
+forma que los demas, abre un mini-formulario inline (un input angosto para
+el emoji, uno ancho para el nombre, un boton "Listo") sin salir de la
+pantalla. Crear una categoria nueva y seguir cargando el gasto es un solo
+flujo, no dos pantallas. Al crearla, queda elegida de una -- quien la esta
+creando la necesita para ESTE gasto, pedirle un segundo tap para elegirla
+despues de creada seria la misma friccion que el botón vino a evitar.
+
+**El mini-onboarding (`app/onboarding-categorias.tsx`) resuelve el problema
+que el sembrado resolvia sin querer**: un grupo recien creado necesita AL
+MENOS una categoria para poder cargar el primer gasto, o el formulario
+nunca habilita Guardar. Se discutio como mostrar las opciones (regla 3) y
+Franco elegio la mas simple: **las seis de siempre, sugeridas y
+preseleccionadas**, como chips que se pueden destildar o a las que se les
+puede sumar una propia con el mismo "+ Agregar" que usa el formulario de
+gasto. Tocar "Continuar" sin cambiar nada sigue siendo UN tap, igual que
+antes de sacar el sembrado -- la diferencia es que ahora es una eleccion
+explicita y no un dato que aparece solo.
+
+**Por que solo despues de REGISTRARSE, y no en cada login.** Es el unico
+momento en que un grupo con certeza no tiene ninguna categoria propia
+todavia. Instrumentar "chequear categorias en cada apertura de la app" para
+cubrir una cuenta vieja que de alguna forma rara quedo en cero hubiera sido
+mas maquinaria para un caso que el "+ Agregar" del formulario ya cubre como
+red de seguridad: si alguna vez una cuenta llega al formulario sin
+categorias, puede crear una ahi mismo. `login.tsx` y `index.tsx` no se
+tocaron.
+
+**`continuar()` es tolerante a "ya existe", por la misma razon que el
+registro es tolerante a reintentos en otros lugares de esta app**: si la
+persona toca "Continuar" dos veces (una respuesta lenta y un segundo tap), o
+si una categoria fallo por otro motivo a mitad de la creacion de las seis,
+reintentar no tiene que chocar contra las que ya se crearon la primera vez.
+Cada categoria se crea con su propio POST, y un 400 de "Ya tenés una
+categoría con ese nombre" se trata como exito, no como falla.
+
+**Lo que se borro, porque dejo de tener un llamador:**
+- `app/categorias.tsx` entero, su entrada en `menu.tsx` (vivia fuera del
+  gate de `tienePareja`, porque las categorias hacen falta con o sin pareja)
+  y su registro en `_layout.tsx`.
+- `CategoriaServicio.sembrarParaGrupo` y, con el,
+  `CategoriaRepositorio.existsByGrupoId` (su unico llamador).
+  `AutenticacionServicio.grupoPropio()` vuelve a escribir DOS documentos
+  (grupo + usuario) como antes de la 2.5, no tres.
+- `SembradorDeCategorias` se renombro a `LimpiadorDeIndiceViejo` y perdio la
+  mitad de su trabajo: sigue dropeando el indice global viejo de
+  `categoria.nombre` (ese chequeo no es opcional, ver la 2.5), pero ya no
+  recorre los grupos sembrando nada.
+- Los doce iconos curados de Lucide y `ICONOS_PARA_ELEGIR` en
+  `IconoCategoria.tsx`.
+- `borrarCategoria` en `features/categorias/api.ts`: sin
+  `app/categorias.tsx`, no quedo ningun llamador. El backend SIGUE teniendo
+  `DELETE /categorias/{id}` (no se tocó, y sigue protegiendo la ultima
+  categoria del grupo) -- simplemente ningun lugar de la app lo llama por
+  ahora. Si hiciera falta borrar desde la app de nuevo, es un wrapper tan
+  chico como `crearCategoria`.
+
+**Lo que NO se tocó, a proposito.** Las seis categorias de Franco y Viole
+en la base real (y en esta base local de desarrollo) siguen ahi, con sus
+nombres de Lucide de siempre -- esta sesion no migra ni borra nada de lo
+que ya existia, solo cambia que pasa de aca en adelante. La "migracion
+pendiente" de la seccion 2.5 (reasignar las seis categorias GLOBALES
+huerfanas al grupo real de Franco y Viole) sigue siendo un tema aparte, sin
+relacion con este cambio.
+
+**`scripts/smoke-test.ps1` necesito un ajuste de fondo, no solo nuevos
+chequeos.** Casi toda cuenta descartable del script (Sola, Borra/Queda,
+Suma, Deudor/Acreedor, Ahorrista) resolvia su categoria con
+`IdDeCategoriaPara`, que hasta ahora asumia que la categoria YA EXISTIA --
+cierto bajo el sembrado de la 2.5, falso ahora que un grupo nuevo no tiene
+ninguna. La funcion paso a CREAR la categoria si no la encuentra, en vez de
+tirar una excepcion -- el mismo camino que recorre la app de verdad con el
+"+ Agregar" o el onboarding, asi que probarlo asi ejercita el mismo
+mecanismo. `IdDeCategoria` (la version de Franco) ahora delega en
+`IdDeCategoriaPara $franco $nombre`, por la misma razon.
+
+La seccion 17 del script tambien se reescribio: asumia que cualquier cuenta
+nueva arrancaba con 6 categorias ("Sola arranca con 6, igual que Franco"),
+que ya no es cierto. Pasa a comparar contra una base dinamica
+(`$baseSola`, lo que Sola YA tenia entrando a la seccion) en vez de la
+constante "6" -- Franco y Ella siguen comparandose contra 6 porque esa
+SI sigue siendo una constante real para ELLOS (son cuentas viejas que
+nunca pierden sus categorias). Un detalle que vale la pena nombrar: borrar
+"cafe" para probar que ninguna categoria original esta protegida solo es
+seguro si ya existe otra categoria de colchon (la recien creada en esa
+misma seccion) -- con un grupo que puede arrancar con una sola categoria,
+borrar dos cosas seguidas sin reponer nada pisa la proteccion de "no dejar
+el grupo sin ninguna" a mitad de la prueba. El nombre de la categoria de
+prueba tambien paso a ser unico por corrida (sufijo al azar), porque ya no
+se la borra al final -- sin eso, correr el script una segunda vez
+chocaria contra el nombre que dejo la primera.
+
+Verificado: 179 tests en el backend (182 - 2 de `SembrarParaGrupo` en
+`CategoriaServicioTest` - 1 de `elGrupoNuevoSaleSembrado` en
+`AutenticacionServicioTest`), todos en verde incluido `contextLoads` (Mongo
+real); `tsc --noEmit --noUnusedLocals` y `expo export --platform ios` en
+mobile, limpios. Contra Mongo real con `curl` (no con el smoke test, que
+esta sandbox no puede correr sin PowerShell): un registro nuevo da
+`GET /categorias` = `[]`; crear una categoria con emoji funciona igual que
+con un nombre de Lucide, y el gasto que la referencia la muestra bien;
+el nombre repetido se rechaza sin importar mayusculas/minusculas; borrar la
+unica categoria que le queda a un grupo se rechaza; y Franco (cuenta vieja
+de esta misma base local) sigue viendo sus seis categorias de siempre, con
+sus iconos de Lucide intactos. Sin telefono esta vuelta: falta ver el
+mini-onboarding y el "+ Agregar" en un dispositivo real, y correr
+`scripts/smoke-test.ps1` de punta a punta (necesita PowerShell, que esta
+sandbox no tiene).
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

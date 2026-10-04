@@ -83,13 +83,13 @@ export default function LayoutRaiz() {
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
           <Stack.Screen name="registro" />
+          <Stack.Screen name="onboarding-categorias" />
           <Stack.Screen name="recuperar" />
           <Stack.Screen name="resumen" />
           <Stack.Screen name="gastos" />
           <Stack.Screen name="saldo" />
           <Stack.Screen name="vaquita" />
           <Stack.Screen name="mi-plata" />
-          <Stack.Screen name="categorias" />
           <Stack.Screen name="menu" />
           <Stack.Screen name="borrar-cuenta" />
           <Stack.Screen name="viaje/[id]" />

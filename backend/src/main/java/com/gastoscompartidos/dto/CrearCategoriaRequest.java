@@ -4,13 +4,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * Agregar una categoria propia (seccion 2.5).
+ * Agregar una categoria propia (seccion 2.5), sin ningun default (seccion 2.7).
  *
- * `icono` no se valida contra una lista fija de nombres de Lucide a
- * proposito: acoplar el backend al catalogo de iconos de la app mobile es
- * mas maquinaria que regla, y `IconoCategoria` ya tiene un fallback (el de
- * "otros") para cualquier nombre que no reconozca. La app solo deja elegir
- * entre un puñado curado, asi que en la practica siempre llega uno valido.
+ * `icono` no se valida contra ninguna lista a proposito: desde la seccion 2.7
+ * la app deja elegir un EMOJI libre con el teclado del sistema, asi que no hay
+ * un catalogo cerrado contra el que validar. `IconoCategoria` (mobile) ya
+ * sabe mostrar cualquier string -- un nombre de Lucide, para las categorias
+ * historicas de Franco y Viole, o un emoji para todo lo demas.
  */
 public record CrearCategoriaRequest(
         @NotBlank(message = "el nombre es obligatorio")

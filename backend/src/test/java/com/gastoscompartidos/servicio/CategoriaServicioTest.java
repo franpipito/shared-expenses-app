@@ -22,7 +22,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -142,31 +141,6 @@ class CategoriaServicioTest {
 
             assertThatThrownBy(() -> servicio.borrar("cat-ajena"))
                     .isInstanceOf(RecursoNoEncontradoException.class);
-        }
-    }
-
-    @Nested
-    @DisplayName("Sembrar para un grupo")
-    class SembrarParaGrupo {
-
-        @Test
-        @DisplayName("un grupo sin categorias propias recibe las seis default")
-        void grupoVacioRecibeLasSeis() {
-            when(categorias.existsByGrupoId(GRUPO)).thenReturn(false);
-
-            servicio.sembrarParaGrupo(GRUPO);
-
-            verify(categorias, times(6)).save(any(Categoria.class));
-        }
-
-        @Test
-        @DisplayName("un grupo que ya tiene categorias propias no se vuelve a sembrar")
-        void grupoYaSembradoNoSeToca() {
-            when(categorias.existsByGrupoId(GRUPO)).thenReturn(true);
-
-            servicio.sembrarParaGrupo(GRUPO);
-
-            verify(categorias, never()).save(any());
         }
     }
 

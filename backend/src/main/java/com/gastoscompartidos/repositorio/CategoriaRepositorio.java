@@ -28,9 +28,6 @@ public interface CategoriaRepositorio extends MongoRepository<Categoria, String>
      */
     Optional<Categoria> findByIdAndGrupoId(String id, String grupoId);
 
-    /** El sembrador lo usa para saber si un grupo ya tiene las suyas (no pisa). */
-    boolean existsByGrupoId(String grupoId);
-
     /** Para no dejar un grupo sin ninguna categoria al borrar la ultima. */
     long countByGrupoId(String grupoId);
 

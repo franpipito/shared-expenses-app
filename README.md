@@ -27,8 +27,10 @@ cd backend && ./mvnw spring-boot:run
 La API queda en `http://localhost:8080`. La base en `localhost:27017`
 (db `gastos`, usuario `gastos`, password `gastos_local`).
 
-Las categorias las siembra `SembradorDeCategorias` al arrancar; los usuarios
-se crean con `POST /auth/registro`. No hay script de seed que correr.
+Las categorias no tienen ningun default: cada grupo nace sin ninguna, y las
+crea desde la app (mini-onboarding al registrarse, o el "+ Agregar" del
+formulario de gasto) o con `POST /categorias`. Los usuarios se crean con
+`POST /auth/registro`. No hay script de seed que correr.
 
 ## Configuracion
 

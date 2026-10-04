@@ -233,12 +233,14 @@ Invoke-RestMethod -Uri "https://TU-DOMINIO.onrender.com/auth/registro" `
 
 **Qué mirar en los logs de Render:** ya no hay Flyway aplicando migraciones —eso
 se perdió con Postgres y es la pérdida más seria del cambio de base. Lo que sí
-tiene que verse es `SembradorDeCategorias` sembrando las seis categorías, y la
-creación de los índices declarados con `@Indexed` y `@CompoundIndex`.
+tiene que verse es la creación de los índices declarados con `@Indexed` y
+`@CompoundIndex`.
 
-Y en **Atlas → Browse Collections**: tienen que aparecer `categoria` con seis
-documentos, más `grupo` y `usuario` con uno cada uno. Si la base que ves se llama
-`test`, volvé a la trampa 1 del paso 4.
+Y en **Atlas → Browse Collections**: tienen que aparecer `grupo` y `usuario`
+con un documento cada uno. `categoria` arranca **vacía** (seccion 2.7: ningún
+grupo nace con categorías default) — se llena recién cuando esa cuenta pasa
+por el mini-onboarding de la app, o crea una a mano con `POST /categorias`.
+Si la base que ves se llama `test`, volvé a la trampa 1 del paso 4.
 
 ### Sobre los horarios en los logs
 

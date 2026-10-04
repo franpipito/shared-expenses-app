@@ -25,14 +25,15 @@ import type { CategoriaRespuesta, GrupoRespuesta, PozoRespuesta } from '../api/t
  *
  * Se pisa entero en cada lectura exitosa, sin TTL.
  *
- * ESE "ALGUN DIA" DE ARRIBA YA LLEGO (seccion 2.5): las categorias se pueden
- * agregar y borrar desde `app/categorias.tsx`, asi que ya no son fijas. El
+ * ESE "ALGUN DIA" DE ARRIBA YA LLEGO (seccion 2.5, y de nuevo en la 2.7): las
+ * categorias se crean sobre la marcha, con el "+ Agregar" del formulario de
+ * gasto o eligiendolas en el mini-onboarding, asi que ya no son fijas. El
  * riesgo que eso abre es ACOTADO y ya aceptado en otro lado de este mismo
- * archivo: si Viole borra una categoria desde su telefono justo cuando
- * Franco esta sin señal, el cache de Franco puede ofrecerle esa categoria un
- * rato mas al cargar un gasto offline. No rompe nada -- el gasto se encola
- * igual, con el snapshot que tenia -- es la misma clase de desactualizacion
- * entre dispositivos que ya tolera `vigente` de la vaquita (ver mas abajo).
+ * archivo: si Viole agrega una categoria desde su telefono justo cuando
+ * Franco esta sin señal, el cache de Franco no la va a ofrecer hasta la
+ * proxima vez que haya red. No rompe nada -- Franco simplemente no ve esa
+ * categoria todavia -- es la misma clase de desactualizacion entre
+ * dispositivos que ya tolera `vigente` de la vaquita (ver mas abajo).
  * Arreglarlo de raiz pediria invalidar el cache de un telefono desde el
  * otro, que es mas maquinaria de la que esto necesita para dos personas.
  */

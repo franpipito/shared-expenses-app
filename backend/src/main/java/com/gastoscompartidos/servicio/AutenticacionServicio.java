@@ -29,7 +29,6 @@ public class AutenticacionServicio {
 
     private final UsuarioRepositorio usuarios;
     private final GrupoRepositorio grupos;
-    private final CategoriaServicio categorias;
     private final PasswordEncoder codificador;
     private final ServicioDeTokens tokens;
     private final LimitadorDeIntentos limitador;
@@ -59,7 +58,6 @@ public class AutenticacionServicio {
 
     public AutenticacionServicio(UsuarioRepositorio usuarios,
                                  GrupoRepositorio grupos,
-                                 CategoriaServicio categorias,
                                  PasswordEncoder codificador,
                                  ServicioDeTokens tokens,
                                  LimitadorDeIntentos limitador,
@@ -69,7 +67,6 @@ public class AutenticacionServicio {
                                  @Value("${app.registro.max-por-ip:5}") int maxRegistrosPorIp) {
         this.usuarios = usuarios;
         this.grupos = grupos;
-        this.categorias = categorias;
         this.codificador = codificador;
         this.tokens = tokens;
         this.limitador = limitador;
@@ -196,19 +193,13 @@ public class AutenticacionServicio {
      * orden seria peor, porque dejaria un usuario apuntando a un grupo que no
      * existe, y eso si se nota (`GET /grupo` daria 404).
      *
-     * Desde la seccion 2.5 ahora escribe TRES, contando las categorias: el
-     * grupo nace con su propia copia de las seis default
-     * ({@code CategoriaServicio.sembrarParaGrupo}), para que el formulario de
-     * alta tenga de que elegir de una, sin esperar al sweep de arranque de
-     * {@code SembradorDeCategorias} (que de todos modos solo hace falta para
-     * los grupos de ANTES de esta sesion). Si esto fallara entre crear el
-     * grupo y sembrar, el grupo huerfano de siempre queda igual, y el sweep de
-     * arranque lo termina de sembrar la proxima vez que el backend levante.
+     * Ya no siembra categorias (seccion 2.7): el grupo nace sin ninguna, y
+     * quien se registra las elige en el mini-onboarding
+     * (`app/onboarding-categorias.tsx`) o las crea sobre la marcha con el
+     * "+ Agregar" del formulario de gasto.
      */
     private Grupo grupoPropio() {
-        Grupo grupo = grupos.save(new Grupo(nombreGrupoPorDefecto));
-        categorias.sembrarParaGrupo(grupo.getId());
-        return grupo;
+        return grupos.save(new Grupo(nombreGrupoPorDefecto));
     }
 
     private TokenRespuesta tokenPara(Usuario usuario) {

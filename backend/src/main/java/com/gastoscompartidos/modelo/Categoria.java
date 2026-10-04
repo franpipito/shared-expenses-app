@@ -15,11 +15,12 @@ import org.springframework.data.mongodb.core.mapping.Field;
  * Franco agrega "Netflix", no tiene sentido que le aparezca a cualquier otra
  * persona que se registre desde la App Store, y viceversa.
  *
- * Ahora CADA GRUPO tiene su propia coleccion de categorias, empezando por una
- * copia de esas mismas seis (`CategoriaServicio.sembrarParaGrupo`, llamado al
- * crear el grupo en el registro). Un grupo puede editar esa copia como quiera
- * -- agregar, borrar, inclusive las seis originales -- sin que le toque nada
- * a ningun otro grupo.
+ * Ahora CADA GRUPO tiene su propia coleccion de categorias. Hasta la seccion
+ * 2.7 un grupo nuevo seguia recibiendo esas mismas seis de arranque; ahora
+ * nace SIN NINGUNA (ver `CategoriaServicio`): las elige en el mini-onboarding
+ * despues de registrarse, o las crea sobre la marcha con el "+ Agregar" del
+ * formulario de gasto. Un grupo puede editar su lista como quiera -- agregar,
+ * borrar -- sin que le toque nada a ningun otro grupo.
  *
  * Sigue siendo un documento chico y de referencia, igual que antes. Lo que
  * cambio es el ALCANCE, no la forma.
@@ -41,7 +42,14 @@ public class Categoria {
      */
     private String nombre;
 
-    /** Nombre del icono de Lucide: "coffee", "car", "utensils". No es un emoji. */
+    /**
+     * El nombre de un icono de Lucide ("coffee", "car", "utensils") para las
+     * seis categorias historicas de Franco y Viole, o un emoji suelto ("🍕")
+     * para cualquier categoria creada desde la seccion 2.7 en adelante -- ver
+     * `IconoCategoria.tsx`, que intenta Lucide primero y cae a texto/emoji si
+     * el nombre no es uno conocido. El backend no valida el contenido: lo que
+     * el cliente manda es lo que se guarda.
+     */
     private String icono;
 
     protected Categoria() {
