@@ -2,6 +2,7 @@ package com.gastoscompartidos.servicio;
 
 import com.gastoscompartidos.dto.ResumenRespuesta;
 import com.gastoscompartidos.dto.SaldoRespuesta;
+import com.gastoscompartidos.dto.TotalPorCategoria;
 import com.gastoscompartidos.modelo.AnimoNutria;
 import com.gastoscompartidos.modelo.Gasto;
 import com.gastoscompartidos.modelo.ReferenciaCategoria;
@@ -169,6 +170,38 @@ class ResumenServicioTest {
         }
 
         @Test
+        @DisplayName("dos categorias con el mismo nombre y distinto id salen en UNA fila")
+        void mismoNombreDistintoIdSeJuntan() {
+            // El caso real: un gasto viejo apunta a la categoria global de antes
+            // de la 2.5, y uno nuevo a la del grupo. Mismo nombre, otro id.
+            when(gastos.buscarVisibles(anyString(), anyString(), any(), any(), any(), any()))
+                    .thenReturn(List.of(
+                            gasto("cat-global", "cafe", "coffee", LocalDate.of(2026, 9, 1), "500.00", true),
+                            gasto("cat-grupo", "Café", "☕", LocalDate.of(2026, 9, 4), "700.00", false)));
+
+            ResumenRespuesta r = servicio.resumen(YearMonth.of(2026, 9));
+
+            assertThat(r.porCategoria()).hasSize(1);
+            TotalPorCategoria fila = r.porCategoria().get(0);
+            assertThat(fila.total()).isEqualByComparingTo("1200.00");
+            assertThat(fila.totalHormiga()).isEqualByComparingTo("500.00");
+            // Los dos ids: es lo que la app usa para abrir el detalle de la fila.
+            assertThat(fila.categoriaIds()).containsExactlyInAnyOrder("cat-global", "cat-grupo");
+            // Nombre e icono, los del gasto mas nuevo.
+            assertThat(fila.nombre()).isEqualTo("Café");
+            assertThat(fila.icono()).isEqualTo("☕");
+        }
+
+        @Test
+        @DisplayName("la clave ignora mayusculas, tildes y espacios en los bordes")
+        void claveDeNombre() {
+            assertThat(ResumenServicio.claveDeNombre(" CAFÉ "))
+                    .isEqualTo(ResumenServicio.claveDeNombre("cafe"));
+            assertThat(ResumenServicio.claveDeNombre("Uber"))
+                    .isNotEqualTo(ResumenServicio.claveDeNombre("Comida"));
+        }
+
+        @Test
         @DisplayName("sin gastos, todo en cero y la nutria no juzga")
         void mesVacio() {
             when(gastos.buscarVisibles(anyString(), anyString(), any(), any(), any(), any()))
@@ -266,6 +299,15 @@ class ResumenServicioTest {
                 new ReferenciaCategoria("cat-" + categoria.toLowerCase(), categoria, "coffee"),
                 new BigDecimal(monto), new BigDecimal(montoPagador),
                 tipo, LocalDate.of(2026, 9, 3), "lo que sea", esHormiga, null, null);
+    }
+
+    /** Un PERSONAL de Franco con la categoria y la fecha a mano. */
+    private Gasto gasto(String categoriaId, String nombre, String icono,
+                        LocalDate fecha, String monto, boolean esHormiga) {
+        return new Gasto(GRUPO, franco.comoReferencia(),
+                new ReferenciaCategoria(categoriaId, nombre, icono),
+                new BigDecimal(monto), new BigDecimal(monto),
+                TipoGasto.PERSONAL, fecha, null, esHormiga, null, null);
     }
 
     private Usuario usuario(String id, String nombre) {

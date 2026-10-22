@@ -1,10 +1,12 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
+import { nombreDelMes } from '../src/api/periodo';
 import { Boton } from '../src/componentes/Boton';
+import { nombreDeCategoria } from '../src/componentes/nombreDeCategoria';
 import { Nutria } from '../src/componentes/Nutria';
 import { useSesion } from '../src/features/auth/sesion';
 import { FilaGasto } from '../src/features/gastos/componentes/FilaGasto';
@@ -28,12 +30,28 @@ import { Cargando } from './_layout';
  * tiene un mes las dos andarian igual, pero FlatList virtualiza (dibuja solo lo
  * visible) y trae de fabrica el estado vacio, el separador y el pull to refresh.
  * Es el componente que React Native tiene para esto.
+ *
+ * TAMBIEN ES EL DETALLE DE UNA CATEGORIA. Tocando una fila de "Por categoria"
+ * en el resumen se llega aca con `?categorias=id1,id2&nombre=cafe`, y la lista
+ * se filtra a esos gastos. Son varios ids porque el resumen junta en una fila
+ * las categorias que se llaman igual (`ResumenServicio.agruparPorCategoria`), y
+ * filtrar por esos ids -- en vez de volver a comparar nombres aca -- deja la
+ * regla de que nombres son "el mismo" en un solo lugar, el backend.
+ *
+ * Se filtra en el cliente y no con `?categoriaId=` del endpoint: el mes ya viene
+ * entero, y el endpoint acepta un solo id.
+ *
+ * En ese modo no hay selector de mes: los ids salen de la fila del resumen DE
+ * ESE MES, y otro mes podria tener la misma categoria con otro id.
  */
 export default function Gastos() {
   const { usuario } = useSesion();
-  const { gastos, cargando, error, recargar } = useGastos();
-  const { esElMesActual } = useMes();
+  const { gastos: delMes, cargando, error, recargar } = useGastos();
+  const { mes, esElMesActual } = useMes();
   const router = useRouter();
+  const { categorias, nombre } = useLocalSearchParams<{ categorias?: string; nombre?: string }>();
+  const filtro = categorias ? new Set(categorias.split(',')) : null;
+  const gastos = filtro && delMes ? delMes.filter((g) => filtro.has(g.categoria.id)) : delMes;
   const insets = useSafeAreaInsets();
 
   // Igual que el resumen: recargar al tomar foco es lo que hace que al cerrar el
@@ -88,7 +106,11 @@ export default function Gastos() {
                 {/* Dice "del mes" y no el nombre del mes porque el selector de
                     abajo ya lo dice, y decirlo dos veces en cuatro centimetros
                     es ruido. */}
-                <Text style={estilos.seccion}>Gastos del mes</Text>
+                <Text style={estilos.seccion}>
+                  {/* En el detalle de una categoria SI va el nombre del mes:
+                      no hay selector abajo que lo diga. */}
+                  {nombre ? `${nombreDeCategoria(nombre)} · ${nombreDelMes(mes)}` : 'Gastos del mes'}
+                </Text>
                 <Text style={estilos.titulo}>
                   {cuantos === 0
                     ? 'Nada cargado'
@@ -105,7 +127,7 @@ export default function Gastos() {
               </Pressable>
             </View>
 
-            <SelectorDeMes />
+            {filtro ? null : <SelectorDeMes />}
           </View>
           {/*
             El aviso va DENTRO del header de la lista y no flotando arriba: si
@@ -122,7 +144,13 @@ export default function Gastos() {
             <View style={estilos.vacio}>
               <Nutria animo="TRANQUILA" tamano={120} />
               <Text style={estilos.vacioTitulo}>
-                {esElMesActual ? 'Todavía no cargaste nada este mes' : 'No cargaste nada ese mes'}
+                {/* Con filtro se llega vacio si, por ejemplo, se edito el
+                    unico gasto de la categoria y se lo paso a otra. */}
+                {filtro
+                  ? 'No quedan gastos de esta categoría'
+                  : esElMesActual
+                    ? 'Todavía no cargaste nada este mes'
+                    : 'No cargaste nada ese mes'}
               </Text>
               <Text style={estilos.vacioBajada}>
                 Los gastos que cargues van a aparecer acá, con los evitables marcados.

@@ -238,7 +238,23 @@ export default function Resumen() {
               <View style={estilos.categorias}>
                 <Text style={estilos.rotuloSeccion}>Por categoría</Text>
                 {resumen.porCategoria.map((c) => (
-                  <View key={c.categoriaId} style={estilos.categoria}>
+                  // Tocar la fila abre la lista del mes filtrada a esa
+                  // categoria. Viajan TODOS los ids de la fila, no uno: una
+                  // fila puede juntar varias categorias que se llaman igual.
+                  <Pressable
+                    key={c.categoriaId}
+                    style={({ pressed }) => [estilos.categoria, pressed && estilos.categoriaTocada]}
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/gastos',
+                        params: {
+                          categorias: (c.categoriaIds ?? [c.categoriaId]).join(','),
+                          nombre: c.nombre,
+                        },
+                      })
+                    }
+                  >
                     <IconoCategoria nombre={c.icono} />
                     <Text style={estilos.nombreCategoria}>{nombreDeCategoria(c.nombre)}</Text>
                     <View style={estilos.montosCategoria}>
@@ -250,7 +266,7 @@ export default function Resumen() {
                         </Text>
                       ) : null}
                     </View>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             ) : (
@@ -394,6 +410,8 @@ const estilos = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
   },
+  // Mismo feedback que una fila de la lista de gastos (`FilaGasto`).
+  categoriaTocada: { opacity: 0.6 },
   nombreCategoria: { flex: 1, fontFamily: fuentes.cuerpo, fontSize: 16, color: colores.texto },
   montosCategoria: { alignItems: 'flex-end' },
   totalCategoria: {

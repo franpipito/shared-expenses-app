@@ -14,12 +14,14 @@ import com.gastoscompartidos.seguridad.UsuarioActual;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -140,20 +142,42 @@ public class ResumenServicio {
 
     // ---------------------------------------------------------------- helpers
 
+    /**
+     * Agrupa por NOMBRE (normalizado), no por id.
+     *
+     * Para quien mira el resumen, una categoria es su nombre: "Cafe" es una sola
+     * cosa. En la base no siempre: los gastos cargados antes de la 2.5 apuntan a
+     * las categorias globales viejas, y los de despues a las del grupo, con
+     * otros ids y el mismo nombre. Agrupando por id salian dos filas de "Cafe".
+     * Pasa lo mismo si alguien borra una categoria y la vuelve a crear.
+     *
+     * Juntarlas no puede mezclar dos categorias distintas, porque el backend ya
+     * rechaza dos nombres iguales dentro de un grupo (sin importar mayusculas).
+     */
     private List<TotalPorCategoria> agruparPorCategoria(List<Gasto> delMes, String yo) {
         Map<String, List<Gasto>> agrupados = delMes.stream()
                 .collect(Collectors.groupingBy(
-                        g -> g.getCategoria().categoriaId(),
+                        g -> claveDeNombre(g.getCategoria().nombre()),
                         LinkedHashMap::new,
                         Collectors.toList()));
 
         return agrupados.values().stream()
                 .map(deLaCategoria -> {
                     // El snapshot embebido en el gasto, no la categoria de su
-                    // coleccion: no hace falta ir a buscarla.
-                    ReferenciaCategoria categoria = deLaCategoria.get(0).getCategoria();
+                    // coleccion: no hace falta ir a buscarla. De los que se
+                    // juntaron, el del gasto mas nuevo: si el icono cambio
+                    // entre la categoria vieja y la nueva, se ve el de hoy.
+                    ReferenciaCategoria categoria = deLaCategoria.stream()
+                            .max(Comparator.comparing(Gasto::getFecha))
+                            .orElseThrow()
+                            .getCategoria();
+                    List<String> ids = deLaCategoria.stream()
+                            .map(g -> g.getCategoria().categoriaId())
+                            .distinct()
+                            .toList();
                     return new TotalPorCategoria(
                             categoria.categoriaId(),
+                            ids,
                             categoria.nombre(),
                             categoria.icono(),
                             sumar(deLaCategoria.stream().map(g -> g.parteDe(yo)).toList()),
@@ -164,6 +188,17 @@ public class ResumenServicio {
                 })
                 .sorted(Comparator.comparing(TotalPorCategoria::total).reversed())
                 .toList();
+    }
+
+    /**
+     * "Café", "cafe" y " CAFE " son la misma clave: sin mayusculas, sin tildes
+     * y sin espacios en los bordes. NFD separa la "é" en "e" + el acento, y el
+     * acento suelto (`\p{M}`, marca diacritica) se borra.
+     */
+    static String claveDeNombre(String nombre) {
+        return Normalizer.normalize(nombre.trim(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT);
     }
 
     /** Arranca en CERO con escala 2 para que un mes vacio devuelva 0.00 y no 0. */

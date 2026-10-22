@@ -1801,6 +1801,45 @@ mini-onboarding y el "+ Agregar" en un dispositivo real, y correr
 `scripts/smoke-test.ps1` de punta a punta (necesita PowerShell, que esta
 sandbox no tiene).
 
+### "Por categoria" agrupa por nombre, y cada fila abre su detalle (v1.1, seccion 2.8)
+
+Dos observaciones de Viole probando la app: no se podia entrar a una categoria
+del resumen para ver que gastos la componen, y algunas categorias aparecian
+DUPLICADAS en "Por categoria".
+
+**Por que habia duplicados.** `ResumenServicio.agruparPorCategoria` agrupaba
+por `categoria.categoriaId` del snapshot. La migracion pendiente de la 2.5
+nunca se corrio, asi que los gastos viejos de Franco y Viole siguen apuntando a
+las seis categorias GLOBALES, y los nuevos a las seis que el sweep le creo al
+grupo: mismo nombre, otro id, dos filas de "Cafe". Nada fallo -- es "Schema: no
+hay. Es MongoDB." otra vez.
+
+**Discutido antes de programar (regla 3): agrupar por nombre, o migrar los
+datos.** Gano agrupar por nombre normalizado (`claveDeNombre`: sin mayusculas,
+sin tildes, sin espacios en los bordes). No toca la base de produccion, y cubre
+tambien el caso que la migracion no cubre: borrar una categoria y volver a
+crearla con el mismo nombre. No puede mezclar dos categorias distintas porque
+el backend ya rechaza nombres repetidos dentro de un grupo. La migracion de la
+2.5 sigue siendo opcional y cosmetica.
+
+**`TotalPorCategoria.categoriaIds`**: todos los ids que se juntaron en la fila.
+Nombre e icono salen del gasto mas nuevo del grupo (si cambio el icono, se ve el
+de hoy). `categoriaId` se conserva, porque la app vieja lo usa como `key` de la
+fila; la app nueva lee `categoriaIds ?? [categoriaId]` contra un backend viejo.
+
+**El detalle es `gastos.tsx` filtrada, no una pantalla nueva.** Tocar la fila
+navega a `/gastos?categorias=id1,id2&nombre=cafe` y la lista filtra EN EL CLIENTE
+por esos ids. Filtrar por ids -- y no volver a comparar nombres en TypeScript --
+deja la regla de "que nombres son el mismo" en un solo lugar, el backend. En ese
+modo se oculta el selector de mes (los ids son de la fila de ESE mes; otro mes
+podria tener la misma categoria con otro id) y el encabezado dice
+"Cafe · octubre".
+
+Verificado: `ResumenServicioTest` con dos tests nuevos (dos ids con el mismo
+nombre salen en una fila, y la clave de normalizacion), todo en verde salvo
+`contextLoads` (Docker apagado); `tsc --noEmit --noUnusedLocals` y `expo export
+--platform ios` limpios. Sin telefono todavia.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

@@ -114,6 +114,12 @@ export type GuardarGastoRequest = {
 
 export type TotalPorCategoria = {
   categoriaId: string;
+  /**
+   * Todas las categorias que el backend junto en esta fila por llamarse igual
+   * (ver `ResumenServicio.agruparPorCategoria`). Es lo que filtra el detalle.
+   * Opcional porque un backend anterior no lo manda.
+   */
+  categoriaIds?: string[];
   nombre: string;
   /** Nombre de un icono de Lucide, NO un emoji. */
   icono: string;
