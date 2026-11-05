@@ -914,9 +914,10 @@ genera rendimientos) y necesita poder cargar todos, no resetear un numero.
      es plata" (respuesta 11 de la entrevista) ademas de gastos/metas
      fuera de alcance del MVP. Se construyo el minimo que resuelve lo que
      Viole pidio, con un patron que ya existia y ya estaba probado.
-   - **Solo resta gastos PERSONAL**, nunca la parte de un COMPARTIDO: eso
-     ya lo trackea `saldo`/`Liquidacion` aparte, y mezclarlos seria doble
-     contabilidad de la misma plata.
+   - ~~Solo resta gastos PERSONAL, nunca la parte de un COMPARTIDO~~:
+     **corregido en la 2.3d**, ahora resta tambien tu parte de cada
+     COMPARTIDO. El argumento de la "doble contabilidad" estaba mal; ver
+     "Mi Plata descuenta tu parte de los compartidos" mas abajo.
    - **No se llama "Saldo"**: ya lo usa la seccion de pareja. "Mi Plata" es
      copy de la UI unicamente -- el nombre tecnico es `BalancePersonal`
      (servicio) y `/balance-personal` (ruta), mismo criterio que "Saldar
@@ -938,9 +939,8 @@ genera rendimientos) y necesita poder cargar todos, no resetear un numero.
 falta decir de quien es). Sin `@Version` en `Usuario`, el `$push` atomico de
 `UsuarioConsultasImpl.agregarIngreso` no necesita el `.inc` manual que si
 hace falta en `PozoConsultasImpl.agregarAporte`. `GastoConsultas.
-totalPersonalDe` es el lado de los debitos: mismo `sumar()` que ya usan
-`saldoDe`/`sumarDelPozo`, sin `$cond` porque un PERSONAL siempre lo paga
-entero quien lo carga.
+parteHistoricaDe` (antes `totalPersonalDe`) es el lado de los debitos: mismo
+`sumar()` y mismo `$cond` que `sumarHormigaDe`, sin periodo.
 
 **`BalancePersonalServicio` es propio**, no una lectura mas de
 `ResumenServicio` -- mismo criterio que separo `PozoServicio` de
@@ -1106,7 +1106,7 @@ eso sí funcionaba.
 y eso sin avisarlo se lee como un error.** Con $10.000 de gastos en octubre,
 Mi Plata decía "gastaste $23.000" -- numero correcto (suma TODOS los gastos
 PERSONAL desde siempre, a propósito: ver "El modelo" más arriba, `GastoConsultas.
-totalPersonalDe` es `saldoHistoricoDe` sin el recorte de fechas), pero sin
+parteHistoricaDe` no tiene recorte de fechas), pero sin
 contexto parece roto al lado de "Gastaste este mes" en Resumen, que sí es solo
 del mes. El arreglo no es de lógica -- la lógica ya hacía lo que Franco quería,
 que de hecho pidió de nuevo sin darse cuenta ("que no se borre cada cambio de
@@ -1139,6 +1139,71 @@ así que sacarlas no perdía ninguna funcionalidad, solo números de prueba.
 Verificado de nuevo: `tsc --noEmit --noUnusedLocals` y `expo export
 --platform ios` limpios. Sin cambios de backend en esta vuelta, así que no
 hizo falta volver a correr `mvnw test`.
+
+### Mi Plata descuenta tu parte de los compartidos (v1.1, seccion 2.3d)
+
+Hallazgo de Franco usando la app: cargo un COMPARTIDO de $20.000 al 50/50, y
+su parte ($10.000) aparecia en "Gastaste este mes" del resumen pero NO bajaba
+"Mi Plata". Dos numeros de la misma pantalla con criterios distintos.
+
+**La decision de la 2.3b ("solo resta PERSONAL, si no es doble
+contabilidad") estaba mal razonada, y conviene poder explicar por que.** El
+saldo y Mi Plata miden cosas distintas: el saldo es la DEUDA entre los dos,
+Mi Plata es el COSTO para uno. Contar tu parte de un compartido en Mi Plata
+no duplica nada; lo que si duplicaria es restar ADEMAS las liquidaciones.
+
+**Dos modelos, discutidos antes de programar (regla 3):**
+- **Lo que te toca (elegido).** Se resta tu parte de cada gasto, sin
+  importar quien pago en la caja. Las liquidaciones no tocan Mi Plata: pagar
+  una deuda no cambia cuanto te costo el gasto. Es el mismo criterio que
+  "Gastaste este mes", y es UNA consulta.
+- **Lo que salio de tu bolsillo (descartado).** Restar el monto entero si
+  pagaste vos, cero si pago el otro, y mover Mi Plata con cada liquidacion.
+  Se parece mas al banco, pero el numero salta segun quien pago en la caja y
+  obliga a meter `Liquidacion` en Mi Plata: un pago mal cargado moveria dos
+  numeros.
+
+**El cambio es una sola consulta.** `totalPersonalDe` paso a
+`parteHistoricaDe`: `visiblesPara()` + `sinPozo()` + el mismo `$cond` que
+`sumarHormigaDe` (montoPagador si pagaste vos, monto - montoPagador si pago
+el otro). Un PERSONAL cae solo en la primera rama y suma entero, sin caso
+aparte. Cero cambios en la app: el campo `gastado` sigue siendo el mismo, solo
+cambia lo que suma, asi que no hizo falta pasar por la App Store.
+
+**El corte: solo cuentan los compartidos creados desde el deploy.** Sin el,
+Mi Plata les bajaba de golpe a Franco y a Viole con la parte de TODOS los
+compartidos de la historia: correcto en los papeles, leido como "se rompio".
+Se evaluaron tres salidas (regla 3): dejar que baje; compensar a mano con un
+ingreso de ajuste en cada cuenta (ensucia el historial con plata que no
+entro); o un corte. Gano el corte, porque nadie tiene que hacer nada y no se
+toca la base. `BalancePersonalServicio.COMPARTIDOS_DESDE` es una constante y
+no una property: es un hecho historico, no configuracion.
+
+**El corte va por el `_id`, no por `fecha`.** Los primeros 4 bytes de un
+ObjectId son el instante en que se creo el documento, asi que `_id >=
+ObjectId(corte)` es "creado despues del corte" sin agregar ningun campo.
+`fecha` no sirve: la elige la persona (seccion 2.6), y un compartido cargado
+manana con fecha de octubre quedaria afuera sin explicacion.
+
+**Lo que sigue afuera, a proposito o como limite conocido:**
+- **La vaquita.** Los gastos del pozo siguen sin contar (`sinPozo()`), y los
+  aportes tampoco descuentan de Mi Plata. Es un tema aparte, sin decidir.
+- **Cambiar de grupo.** Se suma sobre el grupo ACTUAL. Si alguien sale del
+  grupo, sus COMPARTIDO quedan atras (seccion 2.1) y dejan de restar: Mi
+  Plata le sube de golpe. Un compartido que pago la otra persona no guarda
+  el id de quien no pago, asi que no hay forma barata de seguirlo. Aceptado
+  por ahora.
+
+Verificado: 181 tests en verde incluido `contextLoads` (Mongo real), y a
+mano con `curl` contra Mongo real con dos cuentas emparejadas: un compartido
+de $20.000 al 50/50 resta $10.000 a cada uno, uno de $10.000 al 70/30 que
+pago la otra persona resta $7.000 a quien pago y $3.000 al otro, una
+liquidacion no mueve nada, y borrar el gasto lo devuelve. El corte, con el
+mismo escenario corrido dos veces cambiando la constante: con el corte en el
+pasado el compartido resta, con el corte en el futuro no resta nada y el
+PERSONAL sigue restando entero. Chequeo nuevo en la
+seccion 16 de `scripts/smoke-test.ps1`, sin correr (sin PowerShell en esta
+sandbox).
 
 ### La vaquita: quién gastó cuánto, informativo
 
