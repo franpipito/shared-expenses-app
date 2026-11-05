@@ -4,6 +4,7 @@ import com.gastoscompartidos.dto.TotalPorPersona;
 import com.gastoscompartidos.modelo.Gasto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -87,17 +88,28 @@ public interface GastoConsultas {
     BigDecimal saldoHistoricoDe(String grupoId, String usuarioId);
 
     /**
-     * Cuanto gasto en total en gastos PERSONAL, sin recorte por mes: es el
+     * Cuanto le costaron a este usuario sus gastos, sin recorte por mes: es el
      * lado de los debitos de "Mi Plata" (sección 2.3b), {@code restante =
-     * ingresado - gastado}, mismo invariante que la vaquita pero para una
-     * sola persona.
+     * ingresado - gastado}.
      *
-     * Sin {@code $cond}: un PERSONAL siempre lo paga entero quien lo carga,
-     * a diferencia de un COMPARTIDO. Y {@code sinPozo()} igual que los demas
-     * agregados personales, por si algun dia existiera un PERSONAL con
-     * pozoId -- esa plata ya la cuenta la vaquita, no "Mi Plata".
+     * Suma SU PARTE de cada gasto: un PERSONAL entero, y de un COMPARTIDO lo
+     * que le toca (montoPagador si pago el, monto - montoPagador si pago el
+     * otro) -- la misma cuenta que el total del resumen y {@code Gasto.parteDe}.
+     * Hasta noviembre de 2026 sumaba solo los PERSONAL, con el argumento de que
+     * contar los COMPARTIDO seria "doble contabilidad" con el saldo. No lo es:
+     * el saldo mide la DEUDA entre los dos, esto mide el COSTO para uno. Lo
+     * que si seria doble es restar ademas las liquidaciones, y eso no se hace:
+     * pagar una deuda no cambia cuanto te costo el gasto.
+     *
+     * {@code sinPozo()} igual que los demas agregados: los gastos del viaje
+     * los cuenta la vaquita, no "Mi Plata".
+     *
+     * @param compartidosDesde los COMPARTIDO CREADOS antes de este instante no
+     *        cuentan (los PERSONAL si, todos). Es para que el cambio no le
+     *        bajara Mi Plata de golpe a nadie el dia del deploy: ver
+     *        {@code BalancePersonalServicio.COMPARTIDOS_DESDE}.
      */
-    BigDecimal totalPersonalDe(String grupoId, String usuarioId);
+    BigDecimal parteHistoricaDe(String grupoId, String usuarioId, Instant compartidosDesde);
 
     /** Todos los gastos de un pozo, sin recorte por mes: un viaje puede cruzarlo. */
     List<Gasto> buscarDelPozo(String pozoId, String grupoId);

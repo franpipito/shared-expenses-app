@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -37,6 +38,22 @@ public class BalancePersonalServicio {
 
     private static final int ESCALA_DINERO = 2;
     private static final RoundingMode REDONDEO = RoundingMode.HALF_UP;
+
+    /**
+     * Desde cuando los gastos COMPARTIDO descuentan de Mi Plata (seccion 2.3d).
+     *
+     * Hasta este momento Mi Plata restaba solo los PERSONAL. Contar tambien los
+     * compartidos viejos le hubiera bajado el numero de golpe a Franco y a
+     * Viole el dia del deploy, con la parte de toda la historia: correcto en
+     * los papeles, pero leido como "la app se rompio". Con el corte, nadie ve
+     * moverse su numero al deployar, y de aca en adelante cada compartido
+     * descuenta lo que le toca a cada uno.
+     *
+     * Es un dato historico y no configuracion, por eso es una constante y no
+     * una property: no hay ningun motivo para que valga distinto en otro
+     * entorno.
+     */
+    static final Instant COMPARTIDOS_DESDE = Instant.parse("2026-11-05T23:15:00Z");
 
     private final UsuarioRepositorio usuarios;
     private final GastoRepositorio gastos;
@@ -106,7 +123,7 @@ public class BalancePersonalServicio {
 
     private BalancePersonalRespuesta respuesta(Usuario usuario) {
         BigDecimal ingresado = usuario.totalIngresado();
-        BigDecimal gastado = gastos.totalPersonalDe(usuario.getGrupoId(), usuario.getId());
+        BigDecimal gastado = gastos.parteHistoricaDe(usuario.getGrupoId(), usuario.getId(), COMPARTIDOS_DESDE);
 
         return new BalancePersonalRespuesta(
                 ingresado,

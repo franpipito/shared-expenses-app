@@ -5,6 +5,7 @@ import com.gastoscompartidos.modelo.Gasto;
 import com.gastoscompartidos.modelo.TipoGasto;
 import org.bson.Document;
 import org.bson.types.Decimal128;
+import org.bson.types.ObjectId;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
@@ -15,7 +16,9 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -201,14 +204,27 @@ public class GastoConsultasImpl implements GastoConsultas {
     }
 
     @Override
-    public BigDecimal totalPersonalDe(String grupoId, String usuarioId) {
+    public BigDecimal parteHistoricaDe(String grupoId, String usuarioId, Instant compartidosDesde) {
+        // Misma forma que sumarHormigaDe, sin el periodo ni el es_hormiga:
+        // visiblesPara() trae los PERSONAL propios y todos los COMPARTIDO del
+        // grupo, y el $cond se queda con la parte de este usuario. Un PERSONAL
+        // tiene montoPagador == monto y siempre lo pago quien lo ve, asi que
+        // cae en la primera rama y suma entero, sin un caso aparte.
+        //
+        // El corte de los COMPARTIDO va por el _id y no por `fecha`: los
+        // primeros 4 bytes de un ObjectId son el instante en que se CREO el
+        // documento. `fecha` es la que elige la persona (seccion 2.6), y un
+        // compartido cargado manana con fecha de octubre quedaria afuera sin
+        // que nadie entienda por que.
         Criteria filtro = new Criteria().andOperator(
-                Criteria.where("grupo_id").is(grupoId),
-                Criteria.where("tipo").is(TipoGasto.PERSONAL),
-                Criteria.where("pagadoPor.usuarioId").is(usuarioId),
-                sinPozo()
+                visiblesPara(grupoId, usuarioId),
+                sinPozo(),
+                new Criteria().orOperator(
+                        Criteria.where("tipo").is(TipoGasto.PERSONAL),
+                        Criteria.where("_id").gte(new ObjectId(Date.from(compartidosDesde))))
         );
-        return sumar(filtro, "$monto");
+        return sumar(filtro, condicional(usuarioId, "$monto_pagador",
+                new Document("$subtract", List.of("$monto", "$monto_pagador"))));
     }
 
     @Override

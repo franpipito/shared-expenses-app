@@ -78,7 +78,7 @@ class BalancePersonalServicioTest {
         void restaBien() {
             escribirCampo(viole, "ingresos", new ArrayList<>(List.of(
                     new Ingreso("ing-1", new BigDecimal("80000.00"), java.time.LocalDate.of(2026, 9, 1)))));
-            when(gastos.totalPersonalDe(GRUPO, "u-viole")).thenReturn(new BigDecimal("25000.00"));
+            when(gastos.parteHistoricaDe(GRUPO, "u-viole", BalancePersonalServicio.COMPARTIDOS_DESDE)).thenReturn(new BigDecimal("25000.00"));
 
             BalancePersonalRespuesta r = servicio.ver();
 
@@ -92,7 +92,7 @@ class BalancePersonalServicioTest {
         void restanteNegativoNoExplota() {
             escribirCampo(viole, "ingresos", new ArrayList<>(List.of(
                     new Ingreso("ing-1", new BigDecimal("10000.00"), java.time.LocalDate.of(2026, 9, 1)))));
-            when(gastos.totalPersonalDe(GRUPO, "u-viole")).thenReturn(new BigDecimal("40000.00"));
+            when(gastos.parteHistoricaDe(GRUPO, "u-viole", BalancePersonalServicio.COMPARTIDOS_DESDE)).thenReturn(new BigDecimal("40000.00"));
 
             BalancePersonalRespuesta r = servicio.ver();
 
@@ -107,7 +107,7 @@ class BalancePersonalServicioTest {
         @Test
         @DisplayName("se agrega con la fecha de hoy y se relee el usuario para responder")
         void seAgregaYRelee() {
-            when(gastos.totalPersonalDe(anyString(), anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+            when(gastos.parteHistoricaDe(anyString(), anyString(), any())).thenReturn(BigDecimal.ZERO.setScale(2));
             when(usuarios.findById("u-viole")).thenReturn(Optional.of(viole));
 
             servicio.agregarIngreso(new RegistrarIngresoRequest(new BigDecimal("50000.00")));
@@ -137,7 +137,7 @@ class BalancePersonalServicioTest {
             escribirCampo(actualizado, "ingresos", new ArrayList<>(List.of(
                     new Ingreso("ing-1", new BigDecimal("60000.00"), java.time.LocalDate.of(2026, 9, 1)))));
             when(usuarios.findById("u-viole")).thenReturn(Optional.of(actualizado));
-            when(gastos.totalPersonalDe(anyString(), anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+            when(gastos.parteHistoricaDe(anyString(), anyString(), any())).thenReturn(BigDecimal.ZERO.setScale(2));
 
             BalancePersonalRespuesta r = servicio.editarIngreso("ing-1", new EditarIngresoRequest(new BigDecimal("60000.00")));
 
@@ -165,7 +165,7 @@ class BalancePersonalServicioTest {
         void borraYRelee() {
             when(usuarios.borrarIngreso("u-viole", "ing-1")).thenReturn(true);
             when(usuarios.findById("u-viole")).thenReturn(Optional.of(viole));
-            when(gastos.totalPersonalDe(anyString(), anyString())).thenReturn(BigDecimal.ZERO.setScale(2));
+            when(gastos.parteHistoricaDe(anyString(), anyString(), any())).thenReturn(BigDecimal.ZERO.setScale(2));
 
             servicio.borrarIngreso("ing-1");
 

@@ -1317,6 +1317,23 @@ Invoke-RestMethod -Uri "$base/gastos/$($gastoPersonal.id)" -Method Delete -Heade
 Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $ahorrista -UseBasicParsing `
     -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
 
+# Un COMPARTIDO descuenta de Mi Plata la PARTE de cada uno (noviembre 2026),
+# no el monto entero ni nada. Con Franco y Ella, la unica pareja del script, y
+# comparando contra lo que ya tenian (arrastran gastos de otras secciones).
+$francoAntes = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $franco
+$ellaAntes   = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ella
+$compartido = Crear $franco @{
+    monto = 20000; categoriaId = $CAFE; fecha = "2026-09-06"
+    tipo = "COMPARTIDO"; porcentajePagador = 70
+}
+$francoDespues = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $franco
+$ellaDespues   = Invoke-RestMethod -Uri "$base/balance-personal" -Headers $ella
+Chequear (($francoDespues.gastado - $francoAntes.gastado) -eq 14000) `
+    "un compartido 70/30 que pago Franco le descuenta a Franco su 70% (14000), no los 20000"
+Chequear (($ellaDespues.gastado - $ellaAntes.gastado) -eq 6000) `
+    "y a Ella su 30% (6000), aunque no lo haya pagado ella"
+Invoke-RestMethod -Uri "$base/gastos/$($compartido.id)" -Method Delete -Headers $franco | Out-Null
+
 # ---------------------------------------------------------------------------
 Titulo "17. Categorias personalizadas, sin ningun default (secciones 2.5 y 2.7)"
 
