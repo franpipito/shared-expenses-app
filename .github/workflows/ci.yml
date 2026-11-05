@@ -28,7 +28,13 @@ concurrency:
 jobs:
   backend:
     name: Backend (tests)
-    runs-on: ubuntu-latest
+    # ubuntu-22.04 y no ubuntu-latest: en noviembre de 2026 la imagen latest
+    # paso a un kernel 6.19+, y mongo:8 se niega a arrancar ahi ("Linux kernel
+    # versions 6.19 and newer has a known incompatibility", SERVER-121912). El
+    # contenedor moria antes de correr un solo test. Volver a latest cuando
+    # salga una imagen de mongo:8 con el arreglo. Produccion (Atlas) no tiene
+    # nada que ver con esto: es solo la Mongo de juguete del CI.
+    runs-on: ubuntu-22.04
 
     # UNA MONGO DE VERDAD, y no es un lujo.
     #
