@@ -2,6 +2,7 @@ package com.gastoscompartidos.repositorio;
 
 import com.gastoscompartidos.dto.TotalPorPersona;
 import com.gastoscompartidos.modelo.Gasto;
+import com.gastoscompartidos.modelo.ReferenciaCategoria;
 import com.gastoscompartidos.modelo.TipoGasto;
 import org.bson.Document;
 import org.bson.types.Decimal128;
@@ -394,6 +395,41 @@ public class GastoConsultasImpl implements GastoConsultas {
         // su PUT tiene que dar 409 y no pisar el anonimizado con el nombre viejo.
         Update update = new Update()
                 .set("pagadoPor.nombre", nombre)
+                .inc("version", 1);
+        return mongoTemplate.updateMulti(query, update, Gasto.class).getModifiedCount();
+    }
+
+    // -------------------------------------------------- edicion de categoria
+
+    @Override
+    public long actualizarCategoria(String grupoId, String usuarioId, String nombreViejo,
+                                    ReferenciaCategoria nueva) {
+        String id = nueva.categoriaId();
+
+        // Dos formas de "este gasto usaba mi categoria". Ver el javadoc de la
+        // interfaz para el por que de cada una.
+        Criteria losQuePague = new Criteria().andOperator(
+                Criteria.where("pagadoPor.usuarioId").is(usuarioId),
+                new Criteria().orOperator(
+                        Criteria.where("categoria.categoriaId").is(id),
+                        Criteria.where("categoria.nombre").is(nombreViejo)));
+        Criteria compartidosConMiCategoria = new Criteria().andOperator(
+                Criteria.where("tipo").is(TipoGasto.COMPARTIDO),
+                Criteria.where("categoria.categoriaId").is(id));
+
+        Query query = Query.query(new Criteria().andOperator(
+                Criteria.where("grupo_id").is(grupoId),
+                new Criteria().orOperator(losQuePague, compartidosConMiCategoria)));
+
+        // El id tambien se escribe: a los gastos que matchearon por nombre los
+        // deja apuntando a la categoria de hoy, y la proxima edicion ya los
+        // encuentra por id. La version sube por lo mismo que en
+        // anonimizarPagador: un PUT armado sobre el snapshot viejo tiene que dar
+        // 409 y no pisar el nombre nuevo.
+        Update update = new Update()
+                .set("categoria.categoriaId", id)
+                .set("categoria.nombre", nueva.nombre())
+                .set("categoria.icono", nueva.icono())
                 .inc("version", 1);
         return mongoTemplate.updateMulti(query, update, Gasto.class).getModifiedCount();
     }

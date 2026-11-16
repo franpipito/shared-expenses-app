@@ -1905,6 +1905,97 @@ nombre salen en una fila, y la clave de normalizacion), todo en verde salvo
 `contextLoads` (Docker apagado); `tsc --noEmit --noUnusedLocals` y `expo export
 --platform ios` limpios. Sin telefono todavia.
 
+### Las categorias son de cada persona, y vuelven a tener pantalla (v1.1, seccion 2.9)
+
+Dos pedidos de Franco usando la app: poder editar y borrar categorias, y que
+las que crea Viole dejen de aparecerle a el. El segundo es un cambio de modelo:
+`Categoria` pasa de `grupo_id` a `usuario_id`. Es el TERCER alcance que tiene
+(global -> por grupo -> por usuario), y cada uno salio de usarla.
+
+**Por que no rompe lo compartido**: un gasto no referencia a la categoria, lleva
+un snapshot. Un COMPARTIDO que cargo Viole con su "super" Franco lo ve con ese
+nombre aunque no tenga esa categoria, y "Por categoria" ya agrupaba por nombre
+normalizado (2.8). Las categorias siguen a la persona al sumarse o salir de un
+grupo: `GrupoServicio` no tuvo que cambiar.
+
+**Decisiones, discutidas antes de programar (regla 3):**
+
+1. **La gestion va en una pantalla del menu (`app/categorias.tsx`), y el
+   "+ Agregar" del formulario se queda.** Se descartaron mantener presionado un
+   chip (nadie lo descubre, y pone un borrado en la pantalla que se usa parada)
+   y un chip "Editar" en la fila (un control mas en la fila mas sensible, para
+   algo que se usa una vez por mes). No es dar marcha atras con la 2.7: lo que
+   molestaba de la pantalla vieja era que fuera la UNICA forma de crear.
+2. **Las que ya existian se copian a cada integrante** y cada uno borra las que
+   no usa. No se puede hacer mas fino: nunca se guardo quien creo cada una.
+3. **Editar propaga a los gastos ya cargados; borrar no.** Renombrar casi
+   siempre es corregir, y sin propagar "Por categoria" partiria la misma
+   categoria en dos filas. Al borrar, los gastos conservan el snapshot: se
+   evaluo pasarlos a "otros", pero desde la 2.7 nadie tiene garantizada una
+   categoria "otros".
+
+**Lo que arrastro:**
+
+- **`GastoServicio.resolverCategoriaAlEditar`**: si la categoria del gasto no
+  cambio, se conserva el snapshot sin buscar nada -- mismo criterio que
+  `resolverPagadorAlEditar`. Sin esto Franco no podria corregirle el monto a un
+  compartido que cargo Viole (la categoria es de ella), y de paso arregla algo
+  que ya estaba roto: un gasto cuya categoria se borro no se podia editar.
+  Un gasto NUEVO siempre se carga con una categoria propia.
+- **`GastoConsultas.actualizarCategoria`** decide que gastos "usaban" la
+  categoria: los que pague yo con ese id O ese nombre viejo, mas los
+  COMPARTIDO del grupo con ese id. El match por nombre existe por la migracion
+  (ver abajo). Nunca toca un PERSONAL ajeno. Borde aceptado: un compartido que
+  cargo ella con su "cafe" pero pague yo tambien se renombra, porque no se
+  guarda quien CARGO un gasto.
+- **El orden en `CategoriaServicio.editar`: gastos primero, categoria despues.**
+  Sin transaccion, si falla en el medio la categoria conserva el nombre viejo y
+  reintentar vuelve a matchear todo. Al reves el reintento ya no sabria cual
+  era el nombre viejo.
+- **El indice unico `{usuario_id, nombre}` es PARCIAL** (`usuario_id` existe).
+  Spring crea los indices antes de que corra cualquier `ApplicationRunner`, y
+  los documentos sin migrar valdrian todos `{null, "cafe"}`: con un unico comun
+  la app no arrancaria.
+- **`MigracionDeCategorias`** (ex `LimpiadorDeIndiceViejo`) corre al arrancar:
+  dropea `idx_categoria_grupo_nombre` y reparte cada categoria de grupo. El
+  original pasa al primer integrante (conserva el id) y el otro recibe una
+  copia con id nuevo; las copias se escriben ANTES de reclamar el original, asi
+  un corte en el medio se cura en el arranque siguiente. Los gastos viejos del
+  segundo integrante siguen llevando el id original: por eso el match por
+  nombre de arriba, y por eso el formulario, al editar, elige la categoria
+  propia que se llama igual en vez de mostrar dos chips con el mismo nombre.
+- **`CuentaServicio`** borra las categorias de quien se va siempre, no solo
+  cuando era el ultimo del grupo.
+- **En mobile**, la pantalla pisa el cache del catalogo despues de cada cambio:
+  si no, el formulario sin señal seguiria ofreciendo una categoria borrada y
+  ese gasto volveria rechazado de la cola.
+
+**Backend antes que app**, como siempre. Y un riesgo del deploy: un gasto que
+este en la cola offline de quien recibio COPIAS lleva el id viejo, y va a
+volver rechazado ("No existe la categoría"). Se ve en `AvisoDeCola` y se
+recarga.
+
+Verificado: 188 tests del backend en verde, incluido `contextLoads`; `tsc
+--noEmit --noUnusedLocals` y `expo export --platform ios` limpios. **Contra
+Mongo local**: al arrancar dropeo el indice viejo y creo el parcial con las
+seis globales huerfanas presentes, sin chocar; dos categorias sembradas a mano
+con la forma vieja (`grupo_id`, sin `usuario_id`) quedaron repartidas -- el
+original para Franco con su id, una copia para Ella -- y
+`scripts/smoke-test.ps1` dio "TODO OK" de punta a punta (228 chequeos,
+incluida la seccion 18 nueva, con la propagacion del renombre). Sin telefono.
+
+Tres cosas que salieron de correr el smoke test por primera vez en PowerShell
+despues de varias sesiones en la nube, y que eran del SCRIPT, no del backend:
+- **Un emoji escrito en el `.ps1` llega al backend como "???"**: Windows
+  PowerShell 5.1 lee el archivo como ANSI y manda el cuerpo en ISO-8859-1. Los
+  iconos del script pasaron a ASCII.
+- **"Franco tiene 6 categorias" era cierto solo en produccion.** En una base
+  local nueva tiene las que le crea `IdDeCategoriaPara`. Ahora compara contra
+  una base dinamica, igual que Sola.
+- **Si el script se corta a mitad de camino deja gastos de septiembre 2026
+  sin borrar**, y la corrida siguiente da rojo en las secciones 5, 7, 9 y 11,
+  que cuentan gastos de ese mes. No es un bug de la API: hay que borrarlos.
+
 ### El animo de la nutria: tendencia, tres estados
 `CONTENTA` / `TRANQUILA` / `PREOCUPADA`, calculado en el backend.
 

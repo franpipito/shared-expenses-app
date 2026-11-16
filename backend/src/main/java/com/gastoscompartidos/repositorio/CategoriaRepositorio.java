@@ -9,41 +9,37 @@ import java.util.Optional;
 /**
  * Repositorio de categorias.
  *
- * Todo quedo escopeado por grupo (seccion 2.5): ya no hay un "listar todas".
- * El chequeo de nombre repetido es case-insensitive (ver `CategoriaServicio.
- * crear`), asi que no hay un `findByGrupoIdAndNombre` -- una consulta derivada
- * de Spring Data ahi seria exacta, no alcanzaria.
+ * Todo esta escopeado por USUARIO (seccion 2.9): no hay un "listar todas" ni un
+ * "las del grupo". El chequeo de nombre repetido es case-insensitive (ver
+ * `CategoriaServicio`), asi que no hay un `findByUsuarioIdAndNombre` -- una
+ * consulta derivada de Spring Data ahi seria exacta, no alcanzaria.
  */
 public interface CategoriaRepositorio extends MongoRepository<Categoria, String> {
 
-    List<Categoria> findByGrupoIdOrderByNombreAsc(String grupoId);
+    List<Categoria> findByUsuarioIdOrderByNombreAsc(String usuarioId);
 
     /**
-     * Usado por `GastoServicio` al cargar o editar un gasto: con categorias
-     * por grupo, ya NO alcanza un `findById` a secas -- sin este filtro,
-     * cualquiera podria cargar un gasto propio referenciando el id de una
-     * categoria de OTRO grupo (algo que esta sesion encontro revisando el
-     * smoke test, no una duda teorica), y el snapshot embebido terminaria
-     * mostrando el nombre e icono de una categoria ajena.
+     * Usado por `GastoServicio` al cargar un gasto y por `CategoriaServicio` al
+     * editar: NO alcanza un `findById` a secas. Sin el filtro por duenio,
+     * cualquiera podria usar (o renombrar) la categoria de otra persona
+     * conociendo su id.
      */
-    Optional<Categoria> findByIdAndGrupoId(String id, String grupoId);
+    Optional<Categoria> findByIdAndUsuarioId(String id, String usuarioId);
 
-    /** Para no dejar un grupo sin ninguna categoria al borrar la ultima. */
-    long countByGrupoId(String grupoId);
+    /** Para no dejar a alguien sin ninguna categoria al borrar la ultima. */
+    long countByUsuarioId(String usuarioId);
 
     /**
-     * Borra solo si es DE ESE GRUPO. El filtro por grupo en la misma operacion
-     * es lo que hace que tocar el id de otro grupo de 404 y no 204 -- mismo
-     * patron que `LiquidacionRepositorio.deleteByIdAndGrupoId`.
+     * Borra solo si es DE ESA PERSONA. El filtro en la misma operacion es lo que
+     * hace que tocar el id de otro de 404 y no 204 -- mismo patron que
+     * `LiquidacionRepositorio.deleteByIdAndGrupoId`.
      */
-    long deleteByIdAndGrupoId(String id, String grupoId);
+    long deleteByIdAndUsuarioId(String id, String usuarioId);
 
     /**
-     * Usado por `CuentaServicio` cuando se va el ULTIMO integrante de un grupo:
-     * si el grupo entero se borra, sus categorias quedan sin duenio -- mismo
-     * motivo por el que ese mismo caso ya borraba `gastos` y `pozos` del grupo.
-     * Antes de la seccion 2.5 esto no hacia falta porque las categorias eran
-     * globales, nadie era su "dueno".
+     * Usado por `CuentaServicio`: al borrar la cuenta se van sus categorias,
+     * siempre. Cuando eran del grupo solo se borraban si se iba el ultimo
+     * integrante; ahora no hay nadie mas a quien le sirvan.
      */
-    long deleteByGrupoId(String grupoId);
+    long deleteByUsuarioId(String usuarioId);
 }

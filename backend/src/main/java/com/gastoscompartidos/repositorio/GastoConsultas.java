@@ -2,6 +2,7 @@ package com.gastoscompartidos.repositorio;
 
 import com.gastoscompartidos.dto.TotalPorPersona;
 import com.gastoscompartidos.modelo.Gasto;
+import com.gastoscompartidos.modelo.ReferenciaCategoria;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -145,4 +146,31 @@ public interface GastoConsultas {
      * su nombre. Devuelve cuantos toco.
      */
     long anonimizarPagador(String grupoId, String usuarioId, String nombre);
+
+    /**
+     * Editar una categoria: reescribe el snapshot en los gastos que la usaban.
+     * Devuelve cuantos toco.
+     *
+     * CUALES son "los que la usaban" es la parte delicada, porque las
+     * categorias son de una persona pero los gastos compartidos no:
+     *
+     *  - Los que pago {@code usuarioId}, si llevan el id de la categoria O su
+     *    nombre viejo. El nombre hace falta por los gastos anteriores a la
+     *    seccion 2.9: al repartir las categorias del grupo, uno de los dos
+     *    recibio una copia con id nuevo, y sus gastos viejos siguen llevando el
+     *    id original. Sin matchear por nombre, a esa persona no se le
+     *    propagaria nada.
+     *  - Los COMPARTIDO del grupo que llevan el id, aunque los haya pagado la
+     *    otra persona: es el caso "lo cargue yo, con mi categoria, y pago ella".
+     *
+     * Lo que NO toca nunca: un PERSONAL de la otra persona (la condicion por
+     * pagador lo excluye), ni un compartido que ella pago y cargo con SU
+     * categoria del mismo nombre. Renombrar mi "cafe" no le renombra el suyo.
+     *
+     * El borde que queda, aceptado: un compartido que cargo ella con su "cafe"
+     * pero pague yo tambien se renombra, porque no se guarda quien CARGO un
+     * gasto, solo quien lo pago.
+     */
+    long actualizarCategoria(String grupoId, String usuarioId, String nombreViejo,
+                             ReferenciaCategoria nueva);
 }

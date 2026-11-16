@@ -81,7 +81,7 @@ public class GastoServicio {
         if (req.tipo() == TipoGasto.COMPARTIDO) {
             exigirPareja(actual);
         }
-        Categoria categoria = buscarCategoria(req.categoriaId(), actual.getGrupoId());
+        Categoria categoria = buscarCategoria(req.categoriaId(), actual);
         Usuario pagador = resolverPagador(req, actual);
 
         BigDecimal monto = normalizar(req.monto());
@@ -164,7 +164,7 @@ public class GastoServicio {
 
         BigDecimal monto = normalizar(req.monto());
 
-        gasto.setCategoria(referencia(buscarCategoria(req.categoriaId(), actual.getGrupoId())));
+        gasto.setCategoria(resolverCategoriaAlEditar(req, actual, gasto));
         gasto.setPagadoPor(resolverPagadorAlEditar(req, actual, gasto));
         gasto.setMonto(monto);
         gasto.setMontoPagador(montoPagadorDe(req, monto));
@@ -227,16 +227,40 @@ public class GastoServicio {
     }
 
     /**
-     * Desde la seccion 2.5 las categorias son por grupo, asi que esto NO
-     * puede ser un `findById` a secas: sin el filtro por grupo, cualquiera
-     * podria cargar un gasto propio referenciando el id de la categoria de
-     * OTRO grupo, y el snapshot que queda embebido mostraria un nombre e
-     * icono que nunca le pertenecieron. Mismo motivo por el que
-     * `GastoConsultas.buscarVisible` filtra por grupo antes que por id.
+     * Las categorias son de cada persona (seccion 2.9), asi que esto NO puede
+     * ser un `findById` a secas: sin el filtro por duenio, cualquiera podria
+     * cargar un gasto referenciando el id de una categoria ajena, y el snapshot
+     * embebido mostraria un nombre e icono que nunca eligio.
+     *
+     * Vale tambien adentro de la pareja: un gasto nuevo se carga con una
+     * categoria PROPIA, aunque sea compartido y lo haya pagado la otra persona.
      */
-    private Categoria buscarCategoria(String id, String grupoId) {
-        return categorias.findByIdAndGrupoId(id, grupoId)
+    private Categoria buscarCategoria(String id, Usuario actual) {
+        return categorias.findByIdAndUsuarioId(id, actual.getId())
                 .orElseThrow(() -> new ReglaDeNegocioException("No existe la categoría " + id));
+    }
+
+    /**
+     * La categoria, al EDITAR. Mismo criterio que {@link #resolverPagadorAlEditar}:
+     * si no cambio, se conserva el snapshot que ya tenia, sin ir a buscar nada.
+     *
+     * No es una optimizacion, son dos casos que sin esto no se podrian editar:
+     *
+     *  - Un COMPARTIDO que cargo la otra persona. Su categoria es de ella, asi
+     *    que buscarla entre las mias daria "No existe la categoría", y yo no
+     *    podria corregirle ni el monto a un gasto que comparto.
+     *  - Un gasto cuya categoria ya se borro. El snapshot sigue ahi; la
+     *    categoria no. Antes de esto, borrar una categoria dejaba sus gastos
+     *    viejos sin poder corregirse.
+     *
+     * Si la categoria SI cambio, tiene que ser una de las mias.
+     */
+    private ReferenciaCategoria resolverCategoriaAlEditar(GuardarGastoRequest req, Usuario actual, Gasto gasto) {
+        ReferenciaCategoria actualDelGasto = gasto.getCategoria();
+        if (actualDelGasto != null && req.categoriaId().equals(actualDelGasto.categoriaId())) {
+            return actualDelGasto;
+        }
+        return referencia(buscarCategoria(req.categoriaId(), actual));
     }
 
     private static ReferenciaCategoria referencia(Categoria categoria) {

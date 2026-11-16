@@ -58,11 +58,10 @@ import { fuentes, numerosTabulares } from '../../../tema/tipografia';
  * HOY sola, sin ningun tap, asi que el camino rapido de siempre no se mueve
  * un pixel. Tocarla es la excepcion, no el paso de todos los gastos.
  *
- * LAS CATEGORIAS SE CREAN ACA TAMBIEN (seccion 2.7): despues de sacar la
- * pantalla `app/categorias.tsx` y el sembrado default, este formulario es el
- * UNICO lugar de la app donde se puede dar de alta una categoria nueva -- el
- * chip "+ Agregar" al final de la fila abre un mini-formulario (nombre +
- * emoji) sin salir de la pantalla. Mismo criterio que la fecha: no le cuesta
+ * LAS CATEGORIAS SE CREAN ACA TAMBIEN (seccion 2.7): el chip "+ Agregar" al
+ * final de la fila abre un mini-formulario (nombre + emoji) sin salir de la
+ * pantalla. Editarlas y borrarlas es otra cosa y vive en `app/categorias.tsx`
+ * (seccion 2.9), fuera de este camino. Mismo criterio que la fecha: no le cuesta
  * nada a quien no lo toca, y evita mandar a alguien a otra pantalla en medio
  * de cargar un gasto, que es exactamente el tipo de friccion que este
  * formulario existe para evitar.
@@ -228,7 +227,35 @@ export function FormularioDeGasto({
     (async () => {
       try {
         const { dato } = await traerCategorias();
-        setCategorias(dato ?? []);
+        const mias = dato ?? [];
+
+        // EDITANDO, LA CATEGORIA DEL GASTO PUEDE NO ESTAR ENTRE LAS MIAS
+        // (seccion 2.9). Pasa en tres casos: un compartido que cargo la otra
+        // persona con una categoria suya, una categoria que ya borre, y los
+        // gastos viejos de cuando las categorias eran del grupo.
+        //
+        // Sin esto ningun chip apareceria elegido, y la persona no sabria que
+        // categoria tiene el gasto que esta corrigiendo.
+        const delGasto = inicial?.categoria;
+        if (delGasto && !mias.some((c) => c.id === delGasto.id)) {
+          const mismaPorNombre = mias.find(
+            (c) => c.nombre.toLowerCase() === delGasto.nombre.toLowerCase(),
+          );
+          if (mismaPorNombre) {
+            // Tengo una que se llama igual: es la misma para quien mira, asi
+            // que se elige esa en vez de mostrar dos chips con el mismo nombre.
+            setCategorias(mias);
+            setCategoriaId(mismaPorNombre.id);
+          } else {
+            // No tengo ninguna asi: se suma como un chip mas, sacado del
+            // snapshot del gasto. El backend acepta guardar con ese id porque
+            // la categoria no cambio; no se vuelve mia ni aparece en mi lista.
+            setCategorias([...mias, delGasto]);
+          }
+          return;
+        }
+
+        setCategorias(mias);
       } catch (e) {
         setError(e instanceof ErrorDeApi ? e.message : 'No se pudieron traer las categorías.');
       }

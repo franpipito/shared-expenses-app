@@ -91,7 +91,8 @@ class CuentaServicioTest {
         // Lo que NO puede pasar: llevarse el historial de la otra persona.
         verify(gastos, never()).deleteByGrupoId(anyString());
         verify(pozos, never()).deleteByGrupoId(anyString());
-        verify(categorias, never()).deleteByGrupoId(anyString());
+        // Sus categorias si se van: son suyas, a la otra persona no le aparecen.
+        verify(categorias).deleteByUsuarioId("u-franco");
         verify(grupos, never()).deleteById(anyString());
     }
 
@@ -104,7 +105,7 @@ class CuentaServicioTest {
 
         verify(gastos).deleteByGrupoId(GRUPO);
         verify(pozos).deleteByGrupoId(GRUPO);
-        verify(categorias).deleteByGrupoId(GRUPO);
+        verify(categorias).deleteByUsuarioId("u-franco");
         verify(grupos).deleteById(GRUPO);
         verify(usuarios).delete(franco);
         // No queda nadie para quien anonimizar.

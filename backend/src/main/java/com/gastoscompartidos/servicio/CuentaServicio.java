@@ -26,8 +26,9 @@ import org.springframework.stereotype.Service;
  *    "Cuenta eliminada". La descripcion queda: es parte del registro comun.
  *  - Sus aportes a una vaquita, igual: quedan, con el nombre reemplazado. Si se
  *    borraran, el pozo dejaria de cerrar.
+ *  - Sus categorias se borran: son suyas y de nadie mas (seccion 2.9).
  *  - Si era el ULTIMO integrante del grupo, no queda nadie cuyo historial
- *    cuidar: se va todo (gastos, vaquitas, categorias y el grupo).
+ *    cuidar: se va todo (gastos, vaquitas y el grupo).
  *
  * EL ORDEN IMPORTA, porque son varias escrituras sin transaccion: primero los
  * datos, el usuario al final. Si algo falla en el medio, la cuenta sigue
@@ -94,13 +95,17 @@ public class CuentaServicio {
         if (usuarios.countByGrupoId(grupoId) <= 1) {
             gastos.deleteByGrupoId(grupoId);
             pozos.deleteByGrupoId(grupoId);
-            categorias.deleteByGrupoId(grupoId);
             grupos.deleteById(grupoId);
         } else {
             gastos.borrarPersonalesDe(grupoId, yo);
             gastos.anonimizarPagador(grupoId, yo, NOMBRE_ANONIMO);
             pozos.anonimizarAportante(grupoId, yo, NOMBRE_ANONIMO);
         }
+
+        // Sus categorias se van siempre, haya o no otra persona en el grupo:
+        // desde la seccion 2.9 son de cada uno, y a nadie mas le aparecen. Los
+        // gastos compartidos que quedan no las necesitan, llevan su snapshot.
+        categorias.deleteByUsuarioId(yo);
 
         // Al final, siempre. Ver el javadoc de la clase.
         usuarios.delete(actual);

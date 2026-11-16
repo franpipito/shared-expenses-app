@@ -94,7 +94,7 @@ class GastoServicioTest {
         viole = usuario("u-viole", "Viole", GRUPO);
 
         when(usuarioActual.requerido()).thenReturn(franco);
-        when(categorias.findByIdAndGrupoId(CAT, GRUPO)).thenReturn(Optional.of(categoria(CAT, "Cafe", "coffee")));
+        when(categorias.findByIdAndUsuarioId(CAT, "u-franco")).thenReturn(Optional.of(categoria(CAT, "Cafe", "coffee")));
         // save() devuelve lo que le pasaron, que es lo que hace Mongo salvo por
         // el id. Asi el test puede mirar el gasto que el servicio construyo.
         when(gastos.save(any(Gasto.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -205,26 +205,57 @@ class GastoServicioTest {
     }
 
     @Nested
-    @DisplayName("La categoria tiene que ser del grupo (seccion 2.5)")
-    class CategoriaDelGrupo {
+    @DisplayName("La categoria es de cada persona (seccion 2.9)")
+    class CategoriaPropia {
 
         /**
          * El mismo riesgo que ya cubre "pagadorDeOtroGrupo", pero del lado de
-         * la categoria: desde que son por grupo, un `categoriaId` de otro
-         * grupo tiene que rechazarse igual que un id que no existe -- sin
-         * esto, el snapshot embebido terminaria mostrando el nombre y el
-         * icono de una categoria ajena.
+         * la categoria: un `categoriaId` ajeno tiene que rechazarse igual que
+         * uno que no existe. Y "ajeno" incluye a la otra persona del grupo.
          */
         @Test
-        @DisplayName("un categoriaId de otro grupo da el mismo error que uno inexistente")
-        void categoriaDeOtroGrupoSeRechaza() {
-            GuardarGastoRequest conCategoriaAjena = new GuardarGastoRequest(
-                    new BigDecimal("100.00"), "cat-de-otro-grupo", LocalDate.of(2026, 9, 6),
-                    "algo", TipoGasto.PERSONAL, null, null, false, null, null, null);
-
-            assertThatThrownBy(() -> servicio.crear(conCategoriaAjena))
+        @DisplayName("al crear, un categoriaId que no es mio da el mismo error que uno inexistente")
+        void categoriaAjenaSeRechazaAlCrear() {
+            assertThatThrownBy(() -> servicio.crear(conCategoria("cat-de-viole", TipoGasto.PERSONAL)))
                     .isInstanceOf(ReglaDeNegocioException.class)
                     .hasMessageContaining("No existe la categoría");
+        }
+
+        @Test
+        @DisplayName("al editar sin cambiar la categoria, se conserva el snapshot aunque sea ajena")
+        void editarConservaLaCategoriaAjena() {
+            // Viole cargo un compartido con SU categoria. Franco le corrige
+            // algo: el formulario reenvia el mismo categoriaId, que no esta
+            // entre las categorias de Franco. Tiene que poder guardarse.
+            Gasto deViole = gastoExistente(viole, TipoGasto.COMPARTIDO, "20000.00", null);
+            deViole.setCategoria(new com.gastoscompartidos.modelo.ReferenciaCategoria(
+                    "cat-de-viole", "Super", "🛒"));
+            when(gastos.buscarVisiblePorId(anyString(), anyString(), anyString()))
+                    .thenReturn(Optional.of(deViole));
+
+            servicio.actualizar("g-1", conCategoria("cat-de-viole", TipoGasto.COMPARTIDO));
+
+            assertThat(deViole.getCategoria().nombre()).isEqualTo("Super");
+            verify(gastos).save(deViole);
+        }
+
+        @Test
+        @DisplayName("al editar CAMBIANDO la categoria, la nueva tiene que ser mia")
+        void editarACategoriaAjenaSeRechaza() {
+            Gasto mio = gastoExistente(franco, TipoGasto.PERSONAL, "100.00", null);
+            when(gastos.buscarVisiblePorId(anyString(), anyString(), anyString()))
+                    .thenReturn(Optional.of(mio));
+
+            assertThatThrownBy(() -> servicio.actualizar("g-1",
+                    conCategoria("cat-de-viole", TipoGasto.PERSONAL)))
+                    .isInstanceOf(ReglaDeNegocioException.class)
+                    .hasMessageContaining("No existe la categoría");
+        }
+
+        private GuardarGastoRequest conCategoria(String categoriaId, TipoGasto tipo) {
+            return new GuardarGastoRequest(
+                    new BigDecimal("100.00"), categoriaId, LocalDate.of(2026, 9, 6),
+                    "algo", tipo, null, null, false, null, null, null);
         }
     }
 
@@ -586,10 +617,8 @@ class GastoServicioTest {
     }
 
     private Categoria categoria(String id, String nombre, String icono) {
-        // El grupoId de la categoria no importa para estos tests: lo que se
-        // ejercita es Gasto, y lo unico que usa de aca es el snapshot
-        // (id/nombre/icono) que queda embebido en ReferenciaCategoria.
-        Categoria c = new Categoria(GRUPO, nombre, icono);
+        // De Franco, que es quien carga en casi todos los tests.
+        Categoria c = new Categoria("u-franco", nombre, icono);
         fijarId(c, id);
         return c;
     }

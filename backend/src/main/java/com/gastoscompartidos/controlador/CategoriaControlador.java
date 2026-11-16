@@ -1,7 +1,7 @@
 package com.gastoscompartidos.controlador;
 
 import com.gastoscompartidos.dto.CategoriaRespuesta;
-import com.gastoscompartidos.dto.CrearCategoriaRequest;
+import com.gastoscompartidos.dto.GuardarCategoriaRequest;
 import com.gastoscompartidos.servicio.CategoriaServicio;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -38,7 +39,7 @@ public class CategoriaControlador {
         this.servicio = servicio;
     }
 
-    /** GET /categorias: las del grupo de quien pregunta, no todas. */
+    /** GET /categorias: las de quien pregunta, no las del grupo. */
     @GetMapping
     public List<CategoriaRespuesta> listar() {
         return servicio.listar();
@@ -47,8 +48,15 @@ public class CategoriaControlador {
     /** POST /categorias */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CategoriaRespuesta crear(@Valid @RequestBody CrearCategoriaRequest req) {
+    public CategoriaRespuesta crear(@Valid @RequestBody GuardarCategoriaRequest req) {
         return servicio.crear(req);
+    }
+
+    /** PUT /categorias/{id}: nombre e icono. Se propaga a los gastos ya cargados. */
+    @PutMapping("/{id}")
+    public CategoriaRespuesta editar(@PathVariable String id,
+                                     @Valid @RequestBody GuardarCategoriaRequest req) {
+        return servicio.editar(id, req);
     }
 
     /** DELETE /categorias/{id} */

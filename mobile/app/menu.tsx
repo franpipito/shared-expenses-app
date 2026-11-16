@@ -53,7 +53,14 @@ export default function Menu() {
   }, [usuario?.id]);
 
   function irA(
-    ruta: '/gastos' | '/saldo' | '/vaquita' | '/grupo' | '/salir-del-grupo' | '/borrar-cuenta',
+    ruta:
+      | '/gastos'
+      | '/saldo'
+      | '/vaquita'
+      | '/categorias'
+      | '/grupo'
+      | '/salir-del-grupo'
+      | '/borrar-cuenta',
   ) {
     router.push(ruta);
   }
@@ -125,6 +132,20 @@ export default function Menu() {
             sesion" al final -- que es ademas la unica fila sin flecha, porque
             no navega a ningun lado, solo actua.
           */}
+          {/*
+            Primera de "Tu cuenta" y no en "Navegación": las categorias son de
+            cada persona (seccion 2.9), no del grupo, y por eso tampoco depende
+            de `tienePareja`.
+          */}
+          <Pressable
+            onPress={() => irA('/categorias')}
+            accessibilityRole="button"
+            style={({ pressed }) => [estilos.fila, pressed && estilos.filaPresionada]}
+          >
+            <Text style={estilos.filaTexto}>Tus categorías</Text>
+            <Text style={estilos.flecha}>›</Text>
+          </Pressable>
+
           <Pressable
             onPress={() => void Linking.openURL(POLITICA_DE_PRIVACIDAD)}
             accessibilityRole="link"

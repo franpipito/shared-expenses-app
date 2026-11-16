@@ -6,39 +6,50 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 /**
- * Una categoria de gasto.
+ * Una categoria de gasto. ES DE UNA PERSONA, no de un grupo.
  *
- * HASTA LA v1.1 (seccion 2.5) ERAN GLOBALES: un unico documento por nombre,
- * compartido por TODA la base -- las seis que uso la usuaria en la entrevista
- * (cafe, uber, comida, ropa, regalos, otros), sembradas una sola vez al
- * arrancar. Con las categorias 100% personalizables eso dejo de alcanzar: si
- * Franco agrega "Netflix", no tiene sentido que le aparezca a cualquier otra
- * persona que se registre desde la App Store, y viceversa.
+ * Tercer alcance que tiene este documento, y cada cambio salio de usar la app:
  *
- * Ahora CADA GRUPO tiene su propia coleccion de categorias. Hasta la seccion
- * 2.7 un grupo nuevo seguia recibiendo esas mismas seis de arranque; ahora
- * nace SIN NINGUNA (ver `CategoriaServicio`): las elige en el mini-onboarding
- * despues de registrarse, o las crea sobre la marcha con el "+ Agregar" del
- * formulario de gasto. Un grupo puede editar su lista como quiera -- agregar,
- * borrar -- sin que le toque nada a ningun otro grupo.
+ *  1. GLOBALES (hasta la seccion 2.5): seis documentos para toda la base.
+ *  2. POR GRUPO (2.5 a 2.8): cada grupo con su lista. Resolvio que un
+ *     desconocido heredara las categorias de Franco y Viole, pero dejo un
+ *     problema adentro de la pareja: lo que creaba Viole le aparecia a Franco
+ *     en su formulario, y borrar una se la borraba a los dos.
+ *  3. POR USUARIO (seccion 2.9, esta): cada persona arma su lista y la edita
+ *     sin tocarle nada a la otra, aunque compartan grupo.
  *
- * Sigue siendo un documento chico y de referencia, igual que antes. Lo que
- * cambio es el ALCANCE, no la forma.
+ * Por que funciona sin romper lo compartido: un gasto NO referencia a la
+ * categoria, lleva un snapshot embebido (`ReferenciaCategoria`). Un COMPARTIDO
+ * que cargo Viole con su "super" lo ve Franco con ese nombre e icono aunque el
+ * no tenga ninguna categoria "super". Y "Por categoria" del resumen agrupa por
+ * nombre normalizado (seccion 2.8), asi que el "cafe" de cada uno cae en la
+ * misma fila.
+ *
+ * Como ya no cuelga del grupo, la categoria sigue a la persona cuando se suma a
+ * un grupo o sale de uno: `GrupoServicio` no tiene nada que mover.
+ *
+ * EL INDICE ES PARCIAL, y no por prolijidad. Los documentos anteriores a esta
+ * seccion no tienen `usuario_id` hasta que corre `MigracionDeCategorias`, y
+ * Spring crea los indices ANTES de que corra cualquier `ApplicationRunner`. Con
+ * un unico comun, el "cafe" sin duenio de un grupo y el "cafe" sin duenio de
+ * otro serian dos veces la clave {null, "cafe"}: la creacion del indice
+ * fallaria y la app no arrancaria. El filtro deja afuera del indice a los que
+ * todavia no tienen duenio.
  */
-@CompoundIndex(name = "idx_categoria_grupo_nombre", def = "{'grupo_id': 1, 'nombre': 1}", unique = true)
+@CompoundIndex(name = "idx_categoria_usuario_nombre", def = "{'usuario_id': 1, 'nombre': 1}",
+        unique = true, partialFilter = "{'usuario_id': {$exists: true}}")
 @Document(collection = "categoria")
 public class Categoria {
 
     @Id
     private String id;
 
-    @Field("grupo_id")
-    private String grupoId;
+    @Field("usuario_id")
+    private String usuarioId;
 
     /**
-     * Unico DENTRO DEL GRUPO (ver el indice compuesto de la clase), ya no en
-     * toda la base: dos grupos distintos pueden tener cada uno su propio
-     * "cafe" sin chocar entre si.
+     * Unico POR PERSONA (ver el indice de la clase): Franco y Viole pueden tener
+     * cada uno su "cafe" sin chocar.
      */
     private String nombre;
 
@@ -55,8 +66,8 @@ public class Categoria {
     protected Categoria() {
     }
 
-    public Categoria(String grupoId, String nombre, String icono) {
-        this.grupoId = grupoId;
+    public Categoria(String usuarioId, String nombre, String icono) {
+        this.usuarioId = usuarioId;
         this.nombre = nombre;
         this.icono = icono;
     }
@@ -65,15 +76,23 @@ public class Categoria {
         return id;
     }
 
-    public String getGrupoId() {
-        return grupoId;
+    public String getUsuarioId() {
+        return usuarioId;
     }
 
     public String getNombre() {
         return nombre;
     }
 
+    public void setNombre(String nombre) {
+        this.nombre = nombre;
+    }
+
     public String getIcono() {
         return icono;
+    }
+
+    public void setIcono(String icono) {
+        this.icono = icono;
     }
 }

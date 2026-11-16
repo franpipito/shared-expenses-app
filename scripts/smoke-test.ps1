@@ -454,7 +454,9 @@ Titulo "1. Ella carga un gasto PERSONAL marcado como hormiga"
 
 $personalDeElla = Crear $ella @{
     monto       = 3008
-    categoriaId = $COMIDA
+    # La de ELLA, no $COMIDA: desde la seccion 2.9 las categorias son de cada
+    # persona, y la de Franco le daria "No existe la categoria".
+    categoriaId = (IdDeCategoriaPara $ella "comida")
     fecha       = "2026-09-06"
     descripcion = "desayuno facultad"
     tipo        = "PERSONAL"
@@ -711,7 +713,8 @@ Chequear ($suelto1.id -ne $suelto2.id) "sin clienteId, dos envios iguales son do
 # La clave es unica POR GRUPO, no global. Ella esta en el mismo grupo que Franco,
 # asi que su reintento con la misma clave tiene que resolver al mismo gasto.
 $deElla = Crear $ella @{
-    monto = 3500.00; categoriaId = $CAFE; fecha = "2026-09-06"
+    # Su propio "cafe": la categoria se valida antes de mirar la clave.
+    monto = 3500.00; categoriaId = (IdDeCategoriaPara $ella "cafe"); fecha = "2026-09-06"
     descripcion = "otra cosa"; tipo = "COMPARTIDO"; clienteId = $clave
 }
 Chequear ($deElla.id -eq $primero.id) `
@@ -1111,8 +1114,10 @@ Chequear ((Invoke-RestMethod -Uri "$base/gastos/$($personalDeSumaAntes.id)" -Hea
 EsperarCodigo { Invoke-RestMethod -Uri "$base/gastos/$($personalDeSumaAntes.id)" -Headers $invita } `
     404 "pero Invita NO lo ve: mudarse de grupo no vuelve publico un PERSONAL"
 
-# Ya junta con Invita: el grupo (y sus categorias) paso a ser el de Invita.
-$CAFE_JUNTO = IdDeCategoriaPara $invita "cafe"
+# Ya junta con Invita. El grupo cambio, pero sus categorias NO: desde la
+# seccion 2.9 son de cada persona y la siguen a donde vaya.
+$CAFE_JUNTO = IdDeCategoriaPara $suma "cafe"
+Chequear ($CAFE_JUNTO -eq $CAFE_SUMA_SOLA) "las categorias de Suma la siguieron al grupo nuevo"
 
 # Un COMPARTIDO que paga Suma mientras estan juntas, para probar que salir NO
 # anonimiza: a diferencia de borrar-cuenta, la cuenta de Suma sigue existiendo.
@@ -1163,7 +1168,8 @@ JuntarEnGrupo "deudor@local" "acreedor@local"
 $deudor   = @{ Authorization = "Bearer $($sesionDeudor.token)" }
 $acreedor = @{ Authorization = "Bearer $($sesionAcreedor.token)" }
 # El grupo de Deudor/Acreedor, no el de Franco: ver IdDeCategoriaPara mas arriba.
-$CAFE_DA = IdDeCategoriaPara $deudor "cafe"
+# De Acreedor, que es quien carga el gasto: las categorias son por persona.
+$CAFE_DA = IdDeCategoriaPara $acreedor "cafe"
 
 # Acreedor paga $1000 al 50/50: Deudor le queda debiendo 500.
 Crear $acreedor @{ monto = 1000; categoriaId = $CAFE_DA; fecha = "2026-09-06"
@@ -1356,31 +1362,40 @@ $categoriasSolaAntes = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
 $baseSola = ($categoriasSolaAntes | Measure-Object).Count
 Chequear ($baseSola -ge 1) "Sola ya tiene categorias propias (al menos 'cafe', de la seccion 0.2)"
 
-# --- crear, con un emoji como icono (seccion 2.7) ---------------------------
+# Lo mismo para Franco: cuantas tiene depende de la base (en produccion son
+# seis; en una base local nueva, las que le haya creado IdDeCategoriaPara).
+$baseFranco = ((Invoke-RestMethod -Uri "$base/categorias" -Headers $franco) | Measure-Object).Count
+
+# --- crear, con un icono libre (seccion 2.7) --------------------------------
+# El icono va en ASCII y NO como emoji, aunque la app mande emojis: Windows
+# PowerShell 5.1 lee este .ps1 como ANSI y manda el cuerpo en ISO-8859-1, asi
+# que un emoji escrito aca llega al backend como "???" y la comparacion falla
+# por culpa del script, no de la API. Que un emoji se guarda bien se probo con
+# curl en la 2.7.
 # Nombre unico por corrida (sufijo al azar): si una corrida anterior dejo
 # algo sin limpiar, no choca contra esto.
 $nombreNuevo = "Netflix-$(Get-Random -Maximum 999999)"
 $nueva = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
-    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo; icono = "📺" } | ConvertTo-Json)
-Chequear ($nueva.nombre -eq $nombreNuevo -and $nueva.icono -eq "📺") `
-    "se puede crear una categoria personalizada, con un emoji libre como icono"
+    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo; icono = "tv" } | ConvertTo-Json)
+Chequear ($nueva.nombre -eq $nombreNuevo -and $nueva.icono -eq "tv") `
+    "se puede crear una categoria personalizada, con un icono de texto libre"
 Chequear ($nueva.id -is [string] -and $nueva.id.Length -eq 24) "y tiene un id de ObjectId como las demas"
 
 $categoriasSolaConNueva = Invoke-RestMethod -Uri "$base/categorias" -Headers $sola
 Chequear ((($categoriasSolaConNueva | Measure-Object).Count) -eq ($baseSola + 1)) "ahora Sola tiene una mas"
 
 $categoriasFrancoSinTocar = Invoke-RestMethod -Uri "$base/categorias" -Headers $franco
-Chequear (($categoriasFrancoSinTocar | Measure-Object).Count -eq 6) `
-    "y las de Franco no se movieron: son POR GRUPO, no globales (las seis que ya tenia, intactas)"
+Chequear (($categoriasFrancoSinTocar | Measure-Object).Count -eq $baseFranco) `
+    "y las de Franco no se movieron: lo que crea Sola no le aparece a nadie mas"
 
 # --- duplicado, sin importar mayusculas/minusculas --------------------------
 EsperarRegla { Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $sola `
-    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo.ToUpper(); icono = "💰" } | ConvertTo-Json) } `
+    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo.ToUpper(); icono = "money" } | ConvertTo-Json) } `
     "con ese nombre" "el nombre repetido se rechaza sin importar mayusculas/minusculas"
 
 # --- el mismo nombre en OTRO grupo no choca: el indice unico es (grupo, nombre) --
 $mismoNombreDeFranco = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $franco `
-    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo; icono = "📺" } | ConvertTo-Json)
+    -ContentType "application/json" -Body (@{ nombre = $nombreNuevo; icono = "tv" } | ConvertTo-Json)
 Chequear ($mismoNombreDeFranco.nombre -eq $nombreNuevo) "el mismo nombre no choca en el grupo de otra persona"
 Invoke-RestMethod -Uri "$base/categorias/$($mismoNombreDeFranco.id)" -Method Delete -Headers $franco | Out-Null
 
@@ -1442,6 +1457,88 @@ EsperarRegla { Invoke-RestMethod -Uri "$base/categorias/$($leQueda[0].id)" -Meth
 
 Invoke-WebRequest -Uri "$base/auth/borrar-cuenta" -Method Post -Headers $unica -UseBasicParsing `
     -ContentType "application/json" -Body (@{ password = $PASSWORD } | ConvertTo-Json) | Out-Null
+
+# ---------------------------------------------------------------------------
+Titulo "18. Las categorias son de cada persona, no del grupo (seccion 2.9)"
+
+# Franco y Ella comparten grupo, y es justo el caso que importa: antes de la
+# 2.9 lo que creaba una le aparecia a la otra. Los nombres llevan un sufijo al
+# azar para no chocar con lo que haya dejado una corrida anterior.
+$sufijo = Get-Random -Maximum 999999
+$nombreDeElla = "Super-$sufijo"
+$deElla = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $ella `
+    -ContentType "application/json" -Body (@{ nombre = $nombreDeElla; icono = "cart" } | ConvertTo-Json)
+
+$listaDeFranco = Invoke-RestMethod -Uri "$base/categorias" -Headers $franco
+Chequear (-not ($listaDeFranco | Where-Object { $_.id -eq $deElla.id })) `
+    "la categoria que crea Ella NO le aparece a Franco, aunque esten en el mismo grupo"
+
+# El mismo nombre para los dos no choca: el indice unico es (usuario, nombre).
+$mismaDeFranco = Invoke-RestMethod -Uri "$base/categorias" -Method Post -Headers $franco `
+    -ContentType "application/json" -Body (@{ nombre = $nombreDeElla; icono = "bag" } | ConvertTo-Json)
+Chequear ($mismaDeFranco.id -ne $deElla.id) "Franco puede tener una con el mismo nombre: son dos categorias distintas"
+Invoke-RestMethod -Uri "$base/categorias/$($mismaDeFranco.id)" -Method Delete -Headers $franco | Out-Null
+
+EsperarRegla { Crear $franco @{
+    monto = 500; categoriaId = $deElla.id; fecha = "2026-09-06"; tipo = "PERSONAL" } } `
+    "No existe la categor" "Franco no puede CARGAR un gasto con la categoria de Ella"
+
+EsperarCodigo { Invoke-RestMethod -Uri "$base/categorias/$($deElla.id)" -Method Put -Headers $franco `
+    -ContentType "application/json" -Body (@{ nombre = "hackeada"; icono = "x" } | ConvertTo-Json) } `
+    404 "ni editarla"
+EsperarCodigo { Invoke-RestMethod -Uri "$base/categorias/$($deElla.id)" -Method Delete -Headers $franco } `
+    404 "ni borrarla"
+
+# --- pero SI puede corregir un compartido que ella cargo con esa categoria ---
+$compartidoDeElla = Crear $ella @{
+    monto = 9000; categoriaId = $deElla.id; fecha = "2026-09-06"
+    descripcion = "compra de las dos"; tipo = "COMPARTIDO"; porcentajePagador = 50 }
+
+$corregidoPorFranco = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeElla.id)" -Method Put -Headers $franco `
+    -ContentType "application/json" -Body (@{
+        monto = 9500; categoriaId = $deElla.id; fecha = "2026-09-06"
+        descripcion = "compra de las dos"; tipo = "COMPARTIDO"; porcentajePagador = 50
+        version = $compartidoDeElla.version } | ConvertTo-Json)
+Chequear ($corregidoPorFranco.monto -eq 9500 -and $corregidoPorFranco.categoria.nombre -eq $nombreDeElla) `
+    "Franco corrige el monto de un compartido de Ella y la categoria (ajena) se conserva"
+
+# --- editar propaga a los gastos ya cargados --------------------------------
+$nombreRenombrado = "Supermercado-$sufijo"
+$renombrada = Invoke-RestMethod -Uri "$base/categorias/$($deElla.id)" -Method Put -Headers $ella `
+    -ContentType "application/json" -Body (@{ nombre = $nombreRenombrado; icono = "basket" } | ConvertTo-Json)
+Chequear ($renombrada.nombre -eq $nombreRenombrado -and $renombrada.icono -eq "basket") "Ella renombra su categoria"
+
+$vistoPorFranco = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeElla.id)" -Headers $franco
+Chequear ($vistoPorFranco.categoria.nombre -eq $nombreRenombrado -and $vistoPorFranco.categoria.icono -eq "basket") `
+    "y el gasto que ya estaba cargado muestra el nombre y el icono nuevos, tambien para Franco"
+
+# Un gasto de Franco con SU cafe no se entera del cambio de Ella.
+$cafeDeFranco = Crear $franco @{ monto = 100; categoriaId = $CAFE; fecha = "2026-09-06"; tipo = "PERSONAL" }
+Chequear ((Invoke-RestMethod -Uri "$base/gastos/$($cafeDeFranco.id)" -Headers $franco).categoria.id -eq $CAFE) `
+    "los gastos de Franco con sus propias categorias no se tocaron"
+
+# El mismo nombre que otra categoria propia se rechaza tambien al editar.
+$otraDeElla = IdDeCategoriaPara $ella "comida"
+EsperarRegla { Invoke-RestMethod -Uri "$base/categorias/$($deElla.id)" -Method Put -Headers $ella `
+    -ContentType "application/json" -Body (@{ nombre = "COMIDA"; icono = "basket" } | ConvertTo-Json) } `
+    "con ese nombre" "no se puede renombrar al nombre de otra categoria propia"
+
+# --- borrar NO toca los gastos: conservan el snapshot -----------------------
+Invoke-RestMethod -Uri "$base/categorias/$($deElla.id)" -Method Delete -Headers $ella | Out-Null
+$despuesDeBorrar = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeElla.id)" -Headers $ella
+Chequear ($despuesDeBorrar.categoria.nombre -eq $nombreRenombrado) `
+    "borrar la categoria deja el gasto como estaba: conserva nombre e icono"
+
+# Y un gasto cuya categoria ya no existe se tiene que poder seguir corrigiendo.
+$editadoSinCategoria = Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeElla.id)" -Method Put -Headers $ella `
+    -ContentType "application/json" -Body (@{
+        monto = 9600; categoriaId = $deElla.id; fecha = "2026-09-06"
+        descripcion = "compra de las dos"; tipo = "COMPARTIDO"; porcentajePagador = 50
+        version = $despuesDeBorrar.version } | ConvertTo-Json)
+Chequear ($editadoSinCategoria.monto -eq 9600) "se puede editar un gasto cuya categoria ya se borro"
+
+Invoke-RestMethod -Uri "$base/gastos/$($compartidoDeElla.id)" -Method Delete -Headers $ella | Out-Null
+Invoke-RestMethod -Uri "$base/gastos/$($cafeDeFranco.id)" -Method Delete -Headers $franco | Out-Null
 
 # ---------------------------------------------------------------------------
 Write-Host ""
